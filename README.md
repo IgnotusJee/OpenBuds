@@ -32,6 +32,8 @@ keeps color mode separate from the visual theme style:
 - Theme style controls the Material or MIUIX-like surface treatment.
 - The resolved color mode drives the Material color scheme, MIUIX mode, and
   system bar icon contrast.
+- About page acrylic and haze effects follow the global UI effects setting and
+  render-effect support, independent of whether glass card rendering is active.
 
 Text and icon colors in shared surfaces should be derived from
 `MaterialTheme.colorScheme`, especially for headers, cards, and nested settings

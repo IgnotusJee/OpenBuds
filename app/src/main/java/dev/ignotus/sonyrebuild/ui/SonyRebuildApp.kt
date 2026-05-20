@@ -1603,7 +1603,7 @@ private fun AboutRootScreen(
     val density = LocalDensity.current
     val renderCapabilities = LocalUiRenderCapabilities.current
     val renderEffectsSupported = remember { isRenderEffectSupported() }
-    val acrylicEnabled = renderCapabilities.glassCardsEnabled && renderEffectsSupported
+    val acrylicEnabled = renderCapabilities.effectsEnabled && renderEffectsSupported
     val hazeState = rememberAboutHazeState()
     val hazeStyle = rememberAboutHazeStyle()
     val visualTokens = rememberGlassVisualTokens()
