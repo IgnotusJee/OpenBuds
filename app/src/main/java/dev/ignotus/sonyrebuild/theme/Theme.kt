@@ -36,13 +36,15 @@ private val DarkColors = darkColorScheme(
     outline = Color(0xFF7E8A97),
 )
 
+fun sonyRebuildColorScheme(darkTheme: Boolean): ColorScheme = if (darkTheme) DarkColors else LightColors
+
 @Composable
 fun SonyRebuildTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     configureSystemBars: Boolean = true,
     content: @Composable () -> Unit,
 ) {
-    val colorScheme = if (darkTheme) DarkColors else LightColors
+    val colorScheme = sonyRebuildColorScheme(darkTheme)
     if (configureSystemBars) {
         ConfigureSystemBars(colorScheme, darkTheme)
     }

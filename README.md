@@ -20,7 +20,22 @@ SonyRebuild is an Android application project built with Kotlin, Jetpack Compose
 ```powershell
 .\gradlew.bat assembleDebug
 .\gradlew.bat test
+.\gradlew.bat testDebugUnitTest assembleDebug :app:compileDebugAndroidTestKotlin
 ```
+
+## Appearance Settings
+
+The app persists UI appearance settings through DataStore. The Appearance screen
+keeps color mode separate from the visual theme style:
+
+- Color mode controls whether the app renders as Light, Dark, or Follow system.
+- Theme style controls the Material or MIUIX-like surface treatment.
+- The resolved color mode drives the Material color scheme, MIUIX mode, and
+  system bar icon contrast.
+
+Text and icon colors in shared surfaces should be derived from
+`MaterialTheme.colorScheme`, especially for headers, cards, and nested settings
+pages, so dark mode does not inherit stale light-theme content colors.
 
 ## Notes
 

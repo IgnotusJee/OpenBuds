@@ -28,6 +28,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -79,6 +80,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -143,6 +145,7 @@ import com.kyant.backdrop.highlight.Highlight
 import com.kyant.backdrop.shadow.InnerShadow
 import com.kyant.backdrop.shadow.Shadow
 import com.kyant.capsule.ContinuousCapsule
+import dev.ignotus.sonyrebuild.theme.sonyRebuildColorScheme
 import top.yukonga.miuix.kmp.blur.BlurColors
 import top.yukonga.miuix.kmp.blur.LayerBackdrop as TextureLayerBackdrop
 import top.yukonga.miuix.kmp.blur.isRenderEffectSupported
@@ -231,7 +234,6 @@ private enum class NavigationQuickAction(
     Modules("Modules", SettingsRoute.Modules, Icons.Rounded.Info),
 }
 
-private val LocalAppBackdrop = staticCompositionLocalOf<Backdrop?> { null }
 private val LocalTextureBackdrop = staticCompositionLocalOf<TextureLayerBackdrop?> { null }
 private val LocalUiRenderCapabilities = staticCompositionLocalOf {
     UiRenderCapabilities(
@@ -277,7 +279,7 @@ fun SonyRebuildApp(
     val appUiSettings by settingsStore.settings.collectAsState(initial = null)
     val loadedAppUiSettings = appUiSettings
     if (loadedAppUiSettings == null) {
-        ApplyAppSystemBars(MaterialTheme.colorScheme)
+        ApplyAppSystemBars(MaterialTheme.colorScheme, isSystemInDarkTheme())
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -296,8 +298,12 @@ fun SonyRebuildApp(
     val themeStyle = remember(loadedAppUiSettings.themeStyle) {
         enumValueOrDefault(loadedAppUiSettings.themeStyle, ThemeStyle.Material)
     }
-    val baseColorScheme = MaterialTheme.colorScheme
-    val darkTheme = baseColorScheme.background.luminance() < 0.5f
+    val colorMode = remember(loadedAppUiSettings.colorMode) {
+        enumValueOrDefault(loadedAppUiSettings.colorMode, AppColorMode.System)
+    }
+    val systemDarkTheme = isSystemInDarkTheme()
+    val darkTheme = resolveDarkTheme(colorMode, systemDarkTheme)
+    val baseColorScheme = sonyRebuildColorScheme(darkTheme)
     val appColorScheme = remember(themeStyle, baseColorScheme, darkTheme) {
         if (themeStyle == ThemeStyle.Miuix) {
             miuixLikeColorScheme(baseColorScheme, darkTheme)
@@ -340,7 +346,6 @@ fun SonyRebuildApp(
                     .background(appColorScheme.background),
             )
             CompositionLocalProvider(
-                LocalAppBackdrop provides backdrop,
                 LocalTextureBackdrop provides if (renderCapabilities.glassCardsEnabled) textureBackdrop else null,
                 LocalUiRenderCapabilities provides renderCapabilities,
             ) {
@@ -407,6 +412,7 @@ fun SonyRebuildApp(
                                     bottomInnerPadding = stableBottomInset,
                                     renderCapabilities = renderCapabilities,
                                     themeStyle = themeStyle,
+                                    colorMode = colorMode,
                                     routeStack = settingsRouteStack,
                                     quickTarget = pendingSettingsTarget,
                                     onQuickTargetConsumed = { pendingSettingsTarget = null },
@@ -417,6 +423,9 @@ fun SonyRebuildApp(
                                     },
                                     onEffectsEnabledChanged = {
                                         scope.launch { settingsStore.setEffectsEnabled(it) }
+                                    },
+                                    onColorModeChanged = {
+                                        scope.launch { settingsStore.setColorMode(it) }
                                     },
                                     onThemeStyleChanged = {
                                         scope.launch { settingsStore.setThemeStyle(it) }
@@ -461,7 +470,7 @@ fun SonyRebuildApp(
         }
     }
     MaterialTheme(colorScheme = appColorScheme) {
-        ApplyAppSystemBars(appColorScheme)
+        ApplyAppSystemBars(appColorScheme, darkTheme)
         if (themeStyle == ThemeStyle.Miuix) {
             MiuixTheme(top.yukonga.miuix.kmp.theme.ThemeController(if (darkTheme) ColorSchemeMode.Dark else ColorSchemeMode.Light)) {
                 appContent()
@@ -994,10 +1003,9 @@ private fun miuixLikeColorScheme(base: ColorScheme, darkTheme: Boolean): ColorSc
     }
 
 @Composable
-private fun ApplyAppSystemBars(colorScheme: ColorScheme) {
+private fun ApplyAppSystemBars(colorScheme: ColorScheme, darkTheme: Boolean) {
     val view = LocalView.current
     if (!view.isInEditMode) {
-        val darkTheme = colorScheme.background.luminance() < 0.5f
         SideEffect {
             val window = (view.context as Activity).window
             window.statusBarColor = Color.Transparent.toArgb()
@@ -1161,6 +1169,7 @@ private fun SettingsScreen(
     bottomInnerPadding: Dp,
     renderCapabilities: UiRenderCapabilities,
     themeStyle: ThemeStyle,
+    colorMode: AppColorMode,
     routeStack: List<SettingsRoute>,
     quickTarget: SettingsRoute?,
     onQuickTargetConsumed: () -> Unit,
@@ -1168,6 +1177,7 @@ private fun SettingsScreen(
     onOverlayModeChanged: (Boolean) -> Unit,
     onNavigationBarModeChanged: (ReareyeNavigationBarMode) -> Unit,
     onEffectsEnabledChanged: (Boolean) -> Unit,
+    onColorModeChanged: (AppColorMode) -> Unit,
     onThemeStyleChanged: (ThemeStyle) -> Unit,
     onDebugLoggingChanged: (Boolean) -> Unit,
     onAutoReconnectChanged: (Boolean) -> Unit,
@@ -1218,15 +1228,18 @@ private fun SettingsScreen(
                 bottomInnerPadding = bottomInnerPadding,
                 renderCapabilities = renderCapabilities,
                 themeStyle = themeStyle,
+                colorMode = colorMode,
                 onOpenRoute = ::openRoute,
             )
             SettingsRoute.Appearance -> SettingsAppearanceScreen(
                 bottomInnerPadding = bottomInnerPadding,
                 renderCapabilities = renderCapabilities,
                 themeStyle = themeStyle,
+                colorMode = colorMode,
                 onBack = ::closeRoute,
                 onNavigationBarModeChanged = onNavigationBarModeChanged,
                 onEffectsEnabledChanged = onEffectsEnabledChanged,
+                onColorModeChanged = onColorModeChanged,
                 onThemeStyleChanged = onThemeStyleChanged,
             )
             SettingsRoute.Protocol -> SettingsProtocolScreen(
@@ -1256,6 +1269,7 @@ private fun SettingsRootScreen(
     bottomInnerPadding: Dp,
     renderCapabilities: UiRenderCapabilities,
     themeStyle: ThemeStyle,
+    colorMode: AppColorMode,
     onOpenRoute: (SettingsRoute) -> Unit,
 ) {
     PageColumn(bottomInnerPadding = bottomInnerPadding) {
@@ -1270,7 +1284,7 @@ private fun SettingsRootScreen(
                     renderCapabilities.effectsEnabled -> "effects on"
                     else -> "effects off"
                 }
-            } / ${themeStyle.title}",
+            } / ${colorMode.title} / ${themeStyle.title}",
             icon = SettingsRoute.Appearance.icon,
             onClick = { onOpenRoute(SettingsRoute.Appearance) },
         )
@@ -1300,9 +1314,11 @@ private fun SettingsAppearanceScreen(
     bottomInnerPadding: Dp,
     renderCapabilities: UiRenderCapabilities,
     themeStyle: ThemeStyle,
+    colorMode: AppColorMode,
     onBack: () -> Unit,
     onNavigationBarModeChanged: (ReareyeNavigationBarMode) -> Unit,
     onEffectsEnabledChanged: (Boolean) -> Unit,
+    onColorModeChanged: (AppColorMode) -> Unit,
     onThemeStyleChanged: (ThemeStyle) -> Unit,
 ) {
     PageColumn(bottomInnerPadding = bottomInnerPadding) {
@@ -1351,6 +1367,18 @@ private fun SettingsAppearanceScreen(
             )
         }
         SectionCard(title = "Theme") {
+            SettingRow(
+                title = "颜色模式",
+                subtitle = "选择浅色、深色，或跟随系统外观",
+                trailing = {
+                    SegmentedChoice(
+                        selected = colorMode,
+                        values = AppColorMode.entries,
+                        label = { it.title },
+                        onSelected = onColorModeChanged,
+                    )
+                },
+            )
             SettingRow(
                 title = "Theme style",
                 subtitle = "MIUIX-like keeps Material controls but softens surfaces",
@@ -1490,13 +1518,18 @@ private fun RouteHeader(route: SettingsRoute, onBack: () -> Unit) {
                 .clip(CircleShape)
                 .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)),
         ) {
-            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+            Icon(
+                Icons.AutoMirrored.Rounded.ArrowBack,
+                contentDescription = "Back",
+                tint = MaterialTheme.colorScheme.onSurface,
+            )
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = route.title,
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
                 text = route.subtitle,
@@ -1570,7 +1603,7 @@ private fun AboutRootScreen(
     val density = LocalDensity.current
     val renderCapabilities = LocalUiRenderCapabilities.current
     val renderEffectsSupported = remember { isRenderEffectSupported() }
-    val acrylicEnabled = renderCapabilities.effectsEnabled && renderEffectsSupported
+    val acrylicEnabled = renderCapabilities.glassCardsEnabled && renderEffectsSupported
     val hazeState = rememberAboutHazeState()
     val hazeStyle = rememberAboutHazeStyle()
     val visualTokens = rememberGlassVisualTokens()
@@ -1673,13 +1706,18 @@ private fun AboutDetailScreen(
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)),
             ) {
-                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                Icon(
+                    Icons.AutoMirrored.Rounded.ArrowBack,
+                    contentDescription = "Back",
+                    tint = MaterialTheme.colorScheme.onSurface,
+                )
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = route.title,
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
                     text = route.subtitle,
@@ -2531,7 +2569,10 @@ private fun GlassCard(
     Card(
         shape = shape,
         border = if (glassEnabled) null else BorderStroke(1.dp, borderColor),
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        colors = CardDefaults.cardColors(
+            containerColor = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+        ),
         modifier = modifier.then(
             if (glassEnabled) {
                 Modifier.textureBlur(
@@ -2555,7 +2596,9 @@ private fun GlassCard(
             }
         ),
     ) {
-        content()
+        CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
+            content()
+        }
     }
 }
 

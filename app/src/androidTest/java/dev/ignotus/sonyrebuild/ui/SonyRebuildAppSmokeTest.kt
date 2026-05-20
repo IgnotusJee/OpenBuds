@@ -51,10 +51,11 @@ class SonyRebuildAppSmokeTest {
     }
 
     @Test
-    fun themeStyleSwitch_keepsAppearanceRouteVisible() {
+    fun colorModeSwitch_keepsAppearanceRouteVisible() {
         runBlocking {
             val settingsStore = AppUiSettingsStore(ApplicationProvider.getApplicationContext())
             settingsStore.setThemeStyle(ThemeStyle.Material)
+            settingsStore.setColorMode(AppColorMode.System)
         }
 
         composeTestRule.setContent {
@@ -65,10 +66,12 @@ class SonyRebuildAppSmokeTest {
 
         composeTestRule.onNodeWithText("Settings").performClick()
         composeTestRule.onNodeWithText("Appearance").performClick()
+        composeTestRule.onNodeWithText("颜色模式").assertIsDisplayed()
         composeTestRule.onNodeWithText("Theme style").assertIsDisplayed()
-        composeTestRule.onNodeWithText("MIUIX").performClick()
+        composeTestRule.onNodeWithText("深色").performClick()
 
         composeTestRule.waitForIdle()
+        composeTestRule.onNodeWithText("颜色模式").assertIsDisplayed()
         composeTestRule.onNodeWithText("Theme style").assertIsDisplayed()
     }
 }
