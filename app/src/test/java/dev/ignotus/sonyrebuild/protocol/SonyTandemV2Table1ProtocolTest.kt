@@ -422,4 +422,86 @@ class SonyTandemV2Table1ProtocolTest {
         assertEquals(null, parsed.preset)
         assertEquals(listOf(9, 10, 11), parsed.bandSteps)
     }
+
+    // ── LEA ────────────────────────────────────────────────────────────────
+
+    @Test
+    fun leaGetStatus_matchesTandemV2Shape() {
+        assertArrayEquals(
+            byteArrayOf(0x0E, 0x42, 0x00),
+            SonyTandemV2Table1Protocol.buildGetLeaStatus(LeaInquiredType.TWS_SUPPORTS_A2DP_LEA_UNI_LEA_BROAD_WITH_CTKD),
+        )
+    }
+
+    @Test
+    fun parser_leaRetStatus_extractsConnectionAndStreaming() {
+        val raw = byteArrayOf(0x0E, 0x43, 0x00, 0x01, 0x02)
+        val parsed = SonyTandemV2Table1Protocol.parse(raw)
+
+        assertTrue(parsed is ParsedTandemResponse.LeaStatus)
+        parsed as ParsedTandemResponse.LeaStatus
+        assertEquals(LeaConnectionType.BLE_GATT, parsed.connectionType)
+        assertEquals(LeaStreamingStatus.VIA_A2DP, parsed.streamingStatus)
+    }
+
+    @Test
+    fun parser_unknownLeaPayload_doesNotCrash() {
+        val raw = byteArrayOf(0x0E, 0x43, 0x7F)
+        val parsed = SonyTandemV2Table1Protocol.parse(raw)
+
+        assertTrue(parsed is ParsedTandemResponse.LeaStatus)
+        parsed as ParsedTandemResponse.LeaStatus
+        assertEquals(null, parsed.connectionType)
+        assertEquals(null, parsed.streamingStatus)
+    }
+
+    // ── Quick Access ───────────────────────────────────────────────────────
+
+    @Test
+    fun quickAccessGetParam_matchesTandemV2Shape() {
+        assertArrayEquals(
+            byteArrayOf(0x0E, 0x36, 0x0D),
+            SonyTandemV2Table1Protocol.buildGetQuickAccess(),
+        )
+    }
+
+    @Test
+    fun parser_quickAccessRetParam_extractsKeyAndFunction() {
+        val raw = byteArrayOf(0x0E, 0x37, 0x0D, 0x00, 0x02)
+        val parsed = SonyTandemV2Table1Protocol.parse(raw)
+
+        assertTrue(parsed is ParsedTandemResponse.QuickAccess)
+        parsed as ParsedTandemResponse.QuickAccess
+        assertEquals(QuickAccessKey.L_R_KEY, parsed.key)
+        assertEquals(QuickAccessFunction.NC_ASM, parsed.function)
+    }
+
+    // ── Wearing Detection ──────────────────────────────────────────────────
+
+    @Test
+    fun wearingGetStatus_matchesTandemV2Shape() {
+        assertArrayEquals(
+            byteArrayOf(0x0E, 0x36, 0x06),
+            SonyTandemV2Table1Protocol.buildGetWearingStatus(),
+        )
+    }
+
+    @Test
+    fun parser_wearingStatusRet_extractsStatusAndResult() {
+        val raw = byteArrayOf(0x0E, 0x37, 0x06, 0x02, 0x00)
+        val parsed = SonyTandemV2Table1Protocol.parse(raw)
+
+        assertTrue(parsed is ParsedTandemResponse.WearingStatus)
+        parsed as ParsedTandemResponse.WearingStatus
+        assertEquals(WearingDetectionStatus.COMPLETED_SUCCESSFULLY, parsed.status)
+        assertEquals(WearingDetectionResult.GOOD, parsed.result)
+    }
+
+    @Test
+    fun parser_unknownSystemParam_doesNotCrash() {
+        val raw = byteArrayOf(0x0E, 0x37, 0x7F)
+        val parsed = SonyTandemV2Table1Protocol.parse(raw)
+
+        assertTrue(parsed is ParsedTandemResponse.Unknown)
+    }
 }
