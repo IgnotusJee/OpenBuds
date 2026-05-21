@@ -200,6 +200,7 @@ internal fun DeviceScreen(
             BatteryCard(state)
             LeaStatusCard(state)
             QuickAccessStatusCard(state)
+            WearingStatusCard(state)
             QuickControlCard(
                 state = state,
                 onSetNoiseControlMode = onSetNoiseControlMode,
@@ -433,6 +434,19 @@ internal fun QuickAccessStatusCard(state: SonyHeadphoneUiState) {
         qa.ncAmbKeyFunction?.let { InfoLine("NC/AMB Key", it) }
         if (qa.raw.isNotEmpty()) {
             InfoLine("Raw", qa.raw.joinToString(" "))
+        }
+    }
+}
+
+@Composable
+internal fun WearingStatusCard(state: SonyHeadphoneUiState) {
+    val w = state.wearingState
+    if (w.status == null && w.result == null) return
+    SectionCard(title = "Wearing detection", icon = Icons.Rounded.Headphones) {
+        w.status?.let { InfoLine("Status", it) }
+        w.result?.let { InfoLine("Fit result", it) }
+        if (w.raw.isNotEmpty()) {
+            InfoLine("Raw", w.raw.joinToString(" "))
         }
     }
 }

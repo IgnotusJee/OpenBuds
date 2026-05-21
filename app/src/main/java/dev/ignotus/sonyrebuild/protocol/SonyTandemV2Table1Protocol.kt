@@ -117,6 +117,7 @@ enum class LeaPairedHistory(val code: Byte) {
 }
 
 enum class SystemInquiredType(val code: Byte) {
+    WEARING_STATUS_DETECTOR(0x06),
     QUICK_ACCESS(0x0D),
 }
 
@@ -141,6 +142,20 @@ enum class QuickAccessFunction(val code: Byte) {
     VOICE_RECOGNITION(0x30),
     QUICK_ACCESS1(0x43),
     QUICK_ACCESS2(0x44),
+    OUT_OF_RANGE(0xFF.toByte()),
+}
+
+enum class WearingDetectionStatus(val code: Byte) {
+    NOT_STARTED(0x00),
+    STARTED(0x01),
+    COMPLETED_SUCCESSFULLY(0x02),
+    COMPLETED_UNSUCCESSFULLY(0x03),
+    OUT_OF_RANGE(0xFF.toByte()),
+}
+
+enum class WearingDetectionResult(val code: Byte) {
+    GOOD(0x00),
+    POOR(0x01),
     OUT_OF_RANGE(0xFF.toByte()),
 }
 
@@ -253,6 +268,13 @@ sealed interface ParsedTandemResponse {
     data class QuickAccess(
         val key: QuickAccessKey? = null,
         val function: QuickAccessFunction? = null,
+        val values: List<Int>,
+        override val raw: ByteArray,
+    ) : ParsedTandemResponse
+
+    data class WearingStatus(
+        val status: WearingDetectionStatus? = null,
+        val result: WearingDetectionResult? = null,
         val values: List<Int>,
         override val raw: ByteArray,
     ) : ParsedTandemResponse
@@ -421,6 +443,9 @@ object SonyTandemV2Table1Protocol {
     fun buildGetQuickAccess(): ByteArray =
         SonyTandemFrame.message(SYSTEM_GET_PARAM, byteArrayOf(SystemInquiredType.QUICK_ACCESS.code))
 
+    fun buildGetWearingStatus(): ByteArray =
+        SonyTandemFrame.message(SYSTEM_GET_PARAM, byteArrayOf(SystemInquiredType.WEARING_STATUS_DETECTOR.code))
+
     fun buildSetNcOnOff(enabled: Boolean): ByteArray =
         SonyTandemFrame.message(
             NCASM_SET_PARAM,
@@ -495,7 +520,7 @@ object SonyTandemV2Table1Protocol {
                 raw = raw,
             )
             LEA_RET_STATUS, LEA_NTFY_STATUS -> parseLeaStatus(payload, raw)
-            SYSTEM_RET_PARAM -> parseQuickAccess(payload, raw)
+            SYSTEM_RET_PARAM -> parseSystemRetParam(payload, raw)
             else -> ParsedTandemResponse.Unknown(dataType.unsigned, command.unsigned, payload, raw)
         }
     }
@@ -817,6 +842,13 @@ object SonyTandemV2Table1Protocol {
         )
     }
 
+    private fun parseSystemRetParam(payload: ByteArray, raw: ByteArray): ParsedTandemResponse =
+        when (payload.firstOrNull()) {
+            SystemInquiredType.QUICK_ACCESS.code -> parseQuickAccess(payload, raw)
+            SystemInquiredType.WEARING_STATUS_DETECTOR.code -> parseWearingStatus(payload, raw)
+            else -> ParsedTandemResponse.Unknown(null, SYSTEM_RET_PARAM.unsigned, payload, raw)
+        }
+
     private fun parseQuickAccess(payload: ByteArray, raw: ByteArray): ParsedTandemResponse {
         val key = payload.getOrNull(1)?.let { k ->
             QuickAccessKey.entries.firstOrNull { it.code == k }
@@ -827,6 +859,21 @@ object SonyTandemV2Table1Protocol {
         return ParsedTandemResponse.QuickAccess(
             key = key,
             function = function,
+            values = payload.unsignedList(),
+            raw = raw,
+        )
+    }
+
+    private fun parseWearingStatus(payload: ByteArray, raw: ByteArray): ParsedTandemResponse {
+        val status = payload.getOrNull(1)?.let { s ->
+            WearingDetectionStatus.entries.firstOrNull { it.code == s }
+        }
+        val result = payload.getOrNull(2)?.let { r ->
+            WearingDetectionResult.entries.firstOrNull { it.code == r }
+        }
+        return ParsedTandemResponse.WearingStatus(
+            status = status,
+            result = result,
             values = payload.unsignedList(),
             raw = raw,
         )

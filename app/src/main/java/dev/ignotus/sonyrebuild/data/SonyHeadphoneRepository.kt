@@ -91,6 +91,12 @@ data class QuickAccessState(
     val raw: List<Int> = emptyList(),
 )
 
+data class WearingState(
+    val status: String? = null,
+    val result: String? = null,
+    val raw: List<Int> = emptyList(),
+)
+
 data class EndpointDiagnosticState(
     val reason: String,
     val serviceLabels: List<String> = emptyList(),
@@ -121,6 +127,7 @@ data class SonyHeadphoneUiState(
     val eqState: EqState = EqState(),
     val leaState: LeaState = LeaState(),
     val quickAccessState: QuickAccessState = QuickAccessState(),
+    val wearingState: WearingState = WearingState(),
     val playbackStatus: PlaybackStatus = PlaybackStatus.UNKNOWN,
     val endpointDiagnostic: EndpointDiagnosticState? = null,
     val supportedFeatures: List<FeatureStatus> = featureStatusesFor(null),
@@ -567,6 +574,7 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
             is ParsedTandemResponse.PlaybackAck -> applyPlayback(parsed)
             is ParsedTandemResponse.LeaStatus -> applyLeaStatus(parsed)
             is ParsedTandemResponse.QuickAccess -> applyQuickAccess(parsed)
+            is ParsedTandemResponse.WearingStatus -> applyWearingStatus(parsed)
             is ParsedTandemResponse.Unknown -> applyKnownOrUnknown(parsed)
         }
     }
@@ -816,6 +824,17 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
         }
     }
 
+    private fun applyWearingStatus(response: ParsedTandemResponse.WearingStatus) {
+        appendLog("Wearing status=${response.status} result=${response.result}")
+        _state.update {
+            it.copy(wearingState = WearingState(
+                status = response.status?.name,
+                result = response.result?.name,
+                raw = response.values,
+            ))
+        }
+    }
+
     private fun applyKnownOrUnknown(response: ParsedTandemResponse.Unknown) {
         when (response.command) {
             PLAY_NTFY_PARAM -> appendLog(
@@ -993,7 +1012,6 @@ fun featureStatusesFor(profile: ConnectedHeadphoneProfile?): List<FeatureStatus>
     FeatureStatus("EQ / Clear Bass", "Preset EQ, custom EQ, and Clear Bass", profile.supports(HeadphoneFeature.EQ)),
     FeatureStatus("LE Audio 状态", "Connection type, streaming status, paired history", profile.supports(HeadphoneFeature.LEA_STATUS)),
     FeatureStatus("Quick Access", "Customizable button actions L/R and NC/AMB keys", profile.supports(HeadphoneFeature.QUICK_ACCESS)),
-    FeatureStatus("佩戴检测", "System feature placeholder", false),
-    FeatureStatus("Quick Access", "System feature placeholder", false),
+    FeatureStatus("佩戴检测", "Earpiece fitting and wearing detection status", profile.supports(HeadphoneFeature.WEARING_STATUS)),
     FeatureStatus("Sense / AutoPlay / Multipoint / FOTA", "Advanced modules reserved", false),
 )
