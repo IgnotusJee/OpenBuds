@@ -89,6 +89,33 @@ enum class PlayInquiredType(val code: Byte) {
     PLAY_MODE(0x40),
 }
 
+enum class LeaInquiredType(val code: Byte) {
+    TWS_SUPPORTS_A2DP_LEA_UNI_LEA_BROAD_WITH_CTKD(0x00),
+    HBS_SUPPORTS_A2DP_LEA_UNI_LEA_BROAD_WITH_CTKD(0x01),
+    TWS_SUPPORTS_LEA_UNI_LEA_BROAD(0x02),
+}
+
+enum class LeaConnectionType(val code: Byte) {
+    SPP(0x00),
+    BLE_GATT(0x01),
+    OUT_OF_RANGE(0xFF.toByte()),
+}
+
+enum class LeaStreamingStatus(val code: Byte) {
+    POWER_OFF(0x00),
+    NONE(0x01),
+    VIA_A2DP(0x02),
+    VIA_LE_AUDIO_UNICAST(0x03),
+    OUT_OF_RANGE(0xFF.toByte()),
+}
+
+enum class LeaPairedHistory(val code: Byte) {
+    BOTH_CLASSIC_BT_BLE(0x00),
+    ONLY_CLASSIC_BT(0x01),
+    ONLY_BLE(0x02),
+    OUT_OF_RANGE(0xFF.toByte()),
+}
+
 enum class AmbientSoundMode(val code: Byte) {
     NORMAL(0x00),
     VOICE(0x01),
@@ -186,6 +213,15 @@ sealed interface ParsedTandemResponse {
         override val raw: ByteArray,
     ) : ParsedTandemResponse
 
+    data class LeaStatus(
+        val type: LeaInquiredType?,
+        val values: List<Int>,
+        val connectionType: LeaConnectionType? = null,
+        val streamingStatus: LeaStreamingStatus? = null,
+        val pairedHistory: LeaPairedHistory? = null,
+        override val raw: ByteArray,
+    ) : ParsedTandemResponse
+
     data class Unknown(
         val dataType: Int?,
         val command: Int?,
@@ -224,6 +260,9 @@ object SonyTandemV2Table1Protocol {
     const val PLAY_RET_STATUS: Byte = 0xA3.toByte()
     const val PLAY_SET_STATUS: Byte = 0xA4.toByte()
     const val PLAY_NTFY_STATUS: Byte = 0xA5.toByte()
+    const val LEA_GET_STATUS: Byte = 0x42
+    const val LEA_RET_STATUS: Byte = 0x43
+    const val LEA_NTFY_STATUS: Byte = 0x45
 
     private const val PLAYBACK_CONTROL_WITH_FUNCTION_CHANGE: Byte = 0x03
     private const val ENABLE: Byte = 0x00
@@ -339,6 +378,9 @@ object SonyTandemV2Table1Protocol {
     ): ByteArray =
         SonyTandemFrame.message(PLAY_GET_STATUS, byteArrayOf(type.code))
 
+    fun buildGetLeaStatus(type: LeaInquiredType): ByteArray =
+        SonyTandemFrame.message(LEA_GET_STATUS, byteArrayOf(type.code))
+
     fun buildSetNcOnOff(enabled: Boolean): ByteArray =
         SonyTandemFrame.message(
             NCASM_SET_PARAM,
@@ -412,6 +454,7 @@ object SonyTandemV2Table1Protocol {
                 status = parsePlaybackStatus(payload),
                 raw = raw,
             )
+            LEA_RET_STATUS, LEA_NTFY_STATUS -> parseLeaStatus(payload, raw)
             else -> ParsedTandemResponse.Unknown(dataType.unsigned, command.unsigned, payload, raw)
         }
     }
@@ -709,6 +752,29 @@ object SonyTandemV2Table1Protocol {
             3 -> PlaybackStatus.STOPPED
             else -> PlaybackStatus.UNKNOWN
         }
+
+    private fun parseLeaStatus(payload: ByteArray, raw: ByteArray): ParsedTandemResponse {
+        val typeCode = payload.firstOrNull()
+        val type = LeaInquiredType.entries.firstOrNull { it.code == typeCode }
+        val values = payload.unsignedList()
+        val connectionType = payload.getOrNull(1)?.let { ct ->
+            LeaConnectionType.entries.firstOrNull { it.code == ct }
+        }
+        val streamingStatus = payload.getOrNull(2)?.let { ss ->
+            LeaStreamingStatus.entries.firstOrNull { it.code == ss }
+        }
+        val pairedHistory = payload.getOrNull(1)?.let { ph ->
+            LeaPairedHistory.entries.firstOrNull { it.code == ph }
+        }
+        return ParsedTandemResponse.LeaStatus(
+            type = type,
+            values = values,
+            connectionType = connectionType,
+            streamingStatus = streamingStatus,
+            pairedHistory = pairedHistory,
+            raw = raw,
+        )
+    }
 }
 
 val Byte.unsigned: Int

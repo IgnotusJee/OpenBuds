@@ -77,6 +77,13 @@ data class EqState(
     val raw: List<Int> = emptyList(),
 )
 
+data class LeaState(
+    val connectionType: String? = null,
+    val streamingStatus: String? = null,
+    val pairedHistory: String? = null,
+    val raw: List<Int> = emptyList(),
+)
+
 data class EndpointDiagnosticState(
     val reason: String,
     val serviceLabels: List<String> = emptyList(),
@@ -105,6 +112,7 @@ data class SonyHeadphoneUiState(
     val batteryState: BatteryState = BatteryState(),
     val noiseControlState: NoiseControlState = NoiseControlState(),
     val eqState: EqState = EqState(),
+    val leaState: LeaState = LeaState(),
     val playbackStatus: PlaybackStatus = PlaybackStatus.UNKNOWN,
     val endpointDiagnostic: EndpointDiagnosticState? = null,
     val supportedFeatures: List<FeatureStatus> = featureStatusesFor(null),
@@ -549,6 +557,7 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
             is ParsedTandemResponse.EqEbb -> applyEqEbb(parsed)
             is ParsedTandemResponse.NoiseControl -> applyNoise(parsed)
             is ParsedTandemResponse.PlaybackAck -> applyPlayback(parsed)
+            is ParsedTandemResponse.LeaStatus -> applyLeaStatus(parsed)
             is ParsedTandemResponse.Unknown -> applyKnownOrUnknown(parsed)
         }
     }
@@ -774,6 +783,18 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
         }
     }
 
+    private fun applyLeaStatus(response: ParsedTandemResponse.LeaStatus) {
+        appendLog("LEA status ${response.type} connectionType=${response.connectionType} streaming=${response.streamingStatus} paired=${response.pairedHistory}")
+        _state.update {
+            it.copy(leaState = LeaState(
+                connectionType = response.connectionType?.name,
+                streamingStatus = response.streamingStatus?.name,
+                pairedHistory = response.pairedHistory?.name,
+                raw = response.values,
+            ))
+        }
+    }
+
     private fun applyKnownOrUnknown(response: ParsedTandemResponse.Unknown) {
         when (response.command) {
             PLAY_NTFY_PARAM -> appendLog(
@@ -949,6 +970,7 @@ fun featureStatusesFor(profile: ConnectedHeadphoneProfile?): List<FeatureStatus>
     FeatureStatus("环境声等级", "ASM seamless level when confirmed writable", profile.supports(HeadphoneFeature.AMBIENT_LEVEL)),
     FeatureStatus("播放控制", "Play, pause, previous, next", profile.supports(HeadphoneFeature.PLAYBACK_CONTROL)),
     FeatureStatus("EQ / Clear Bass", "Preset EQ, custom EQ, and Clear Bass", profile.supports(HeadphoneFeature.EQ)),
+    FeatureStatus("LE Audio 状态", "Connection type, streaming status, paired history", profile.supports(HeadphoneFeature.LEA_STATUS)),
     FeatureStatus("佩戴检测", "System feature placeholder", false),
     FeatureStatus("Quick Access", "System feature placeholder", false),
     FeatureStatus("Sense / AutoPlay / Multipoint / FOTA", "Advanced modules reserved", false),

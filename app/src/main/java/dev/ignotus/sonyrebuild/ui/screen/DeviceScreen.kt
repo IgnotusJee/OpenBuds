@@ -197,6 +197,7 @@ internal fun DeviceScreen(
         if (state.connectedDevice != null) {
             DeviceInfoCard(state)
             BatteryCard(state)
+            LeaStatusCard(state)
             QuickControlCard(
                 state = state,
                 onSetNoiseControlMode = onSetNoiseControlMode,
@@ -403,6 +404,20 @@ internal fun BatteryCard(state: SonyHeadphoneUiState) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 10.dp),
             )
+        }
+    }
+}
+
+@Composable
+internal fun LeaStatusCard(state: SonyHeadphoneUiState) {
+    val lea = state.leaState
+    if (lea.connectionType == null && lea.streamingStatus == null && lea.pairedHistory == null) return
+    SectionCard(title = "LE Audio", icon = Icons.Rounded.Bluetooth) {
+        lea.connectionType?.let { InfoLine("Connection type", it) }
+        lea.streamingStatus?.let { InfoLine("Streaming status", it) }
+        lea.pairedHistory?.let { InfoLine("Paired history", it) }
+        if (lea.raw.isNotEmpty()) {
+            InfoLine("Raw", lea.raw.joinToString(" "))
         }
     }
 }

@@ -60,6 +60,7 @@ enum class HeadphoneFeature {
     PLAYBACK_CONTROL,
     EQ,
     CLEAR_BASS,
+    LEA_STATUS,
 }
 
 enum class HeadphoneTransport {

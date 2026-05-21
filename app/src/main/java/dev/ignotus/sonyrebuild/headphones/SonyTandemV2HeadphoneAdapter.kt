@@ -5,6 +5,7 @@ import dev.ignotus.sonyrebuild.protocol.DeviceInfoType
 import dev.ignotus.sonyrebuild.protocol.AmbientSoundMode
 import dev.ignotus.sonyrebuild.protocol.EqEbbInquiredType
 import dev.ignotus.sonyrebuild.protocol.EqPresetId
+import dev.ignotus.sonyrebuild.protocol.LeaInquiredType
 import dev.ignotus.sonyrebuild.protocol.NcAsmInquiredType
 import dev.ignotus.sonyrebuild.protocol.NoiseControlMode
 import dev.ignotus.sonyrebuild.protocol.ParsedTandemResponse
@@ -27,6 +28,7 @@ object SonyTandemV2HeadphoneAdapter : HeadphoneAdapter {
         HeadphoneFeature.PLAYBACK_CONTROL,
         HeadphoneFeature.EQ,
         HeadphoneFeature.CLEAR_BASS,
+        HeadphoneFeature.LEA_STATUS,
     )
 
     private val linkBudsS = ProfileTemplate(
@@ -135,6 +137,9 @@ object SonyTandemV2HeadphoneAdapter : HeadphoneAdapter {
             }
             if (profile.supports(HeadphoneFeature.PLAYBACK_CONTROL)) {
                 addAll(buildRefreshPlaybackCommands(profile))
+            }
+            if (profile.supports(HeadphoneFeature.LEA_STATUS)) {
+                addAll(buildRefreshLeaCommands(profile))
             }
         }
 
@@ -271,6 +276,11 @@ object SonyTandemV2HeadphoneAdapter : HeadphoneAdapter {
             listOf(HeadphoneCommand("GET playback status", SonyTandemV2Table1Protocol.buildGetPlaybackStatus()))
         } else {
             emptyList()
+        }
+
+    private fun buildRefreshLeaCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> =
+        LeaInquiredType.entries.map {
+            HeadphoneCommand("GET LEA status $it", SonyTandemV2Table1Protocol.buildGetLeaStatus(it))
         }
 
     override fun buildPlaybackCommands(profile: ConnectedHeadphoneProfile, control: PlaybackControl): List<HeadphoneCommand> =
