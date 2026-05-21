@@ -287,8 +287,11 @@ object SonyTandemV2HeadphoneAdapter : HeadphoneAdapter {
         }
 
     private fun buildRefreshLeaCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> =
-        LeaInquiredType.entries.map {
-            HeadphoneCommand("GET LEA status $it", SonyTandemV2Table1Protocol.buildGetLeaStatus(it))
+        LeaInquiredType.entries.flatMap { type ->
+            listOf(
+                HeadphoneCommand("GET LEA status $type", SonyTandemV2Table1Protocol.buildGetLeaStatus(type)),
+                HeadphoneCommand("GET LEA paired history $type", SonyTandemV2Table1Protocol.buildGetLeaPairedHistory(type)),
+            )
         }
 
     override fun buildPlaybackCommands(profile: ConnectedHeadphoneProfile, control: PlaybackControl): List<HeadphoneCommand> =

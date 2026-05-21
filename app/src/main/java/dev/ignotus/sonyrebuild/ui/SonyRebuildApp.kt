@@ -112,6 +112,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
@@ -167,7 +168,6 @@ import dev.ignotus.sonyrebuild.ui.screen.SettingsScreen
 import dev.ignotus.sonyrebuild.ui.screen.AboutScreen
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import java.net.HttpURLConnection
@@ -341,8 +341,7 @@ fun SonyRebuildApp(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-                .graphicsLayer { clip = true },
+                .background(MaterialTheme.colorScheme.background),
         ) {
             Box(
                 modifier = Modifier
@@ -648,8 +647,8 @@ private fun FloatingLiquidNavigationBar(
     val containerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (isLight) 0.40f else 0.34f)
     val tabsBackdrop = if (liquidGlassEnabled && backdrop != null) rememberLayerBackdrop() else null
     var totalWidthPx by remember { mutableFloatStateOf(0f) }
+    var tabWidthPx by remember { mutableFloatStateOf(0f) }
     var currentIndex by remember { mutableIntStateOf(selectedIndex) }
-    val tabWidthPx = if (totalWidthPx > 0f) (totalWidthPx - with(density) { 8.dp.toPx() }) / tabs.size else 0f
     val offsetAnimation = remember { Animatable(0f) }
     val panelOffsetPx by remember(density) {
         derivedStateOf {
@@ -663,7 +662,11 @@ private fun FloatingLiquidNavigationBar(
             }
         }
     }
-    val dampedDragAnimation = remember(animationScope, tabs.size, density, isLtr, tabWidthPx, totalWidthPx) {
+    class DampedDragAnimationHolder {
+        var instance: DampedDragAnimation? = null
+    }
+    val holder = remember { DampedDragAnimationHolder() }
+    val dampedDragAnimation = remember(animationScope, tabs.size, density, isLtr) {
         DampedDragAnimation(
             animationScope = animationScope,
             initialValue = selectedIndex.toFloat(),
@@ -671,12 +674,26 @@ private fun FloatingLiquidNavigationBar(
             visibilityThreshold = 0.001f,
             initialScale = 1f,
             pressedScale = 78f / 56f,
+            canDrag = { offset ->
+                val anim = holder.instance ?: return@DampedDragAnimation true
+                if (tabWidthPx == 0f) return@DampedDragAnimation false
+                val currentValue = anim.value
+                val indicatorX = currentValue * tabWidthPx
+                val padding = with(density) { 4.dp.toPx() }
+                val globalTouchX = if (isLtr) {
+                    val touchX = indicatorX + offset.x
+                    padding + touchX
+                } else {
+                    totalWidthPx - padding - tabWidthPx - indicatorX + offset.x
+                }
+                globalTouchX in 0f..totalWidthPx
+            },
             onDragStarted = { position ->
                 if (tabWidthPx > 0f) {
                     val direction = if (isLtr) 1f else -1f
                     val touchOffsetFromCenter = position.x - tabWidthPx / 2f
                     snapToValue(
-                        (value + touchOffsetFromCenter / tabWidthPx * direction)
+                        (targetValue + touchOffsetFromCenter / tabWidthPx * direction)
                             .coerceIn(0f, tabs.lastIndex.toFloat())
                     )
                 }
@@ -692,8 +709,8 @@ private fun FloatingLiquidNavigationBar(
             onDrag = { _, dragAmount ->
                 if (tabWidthPx > 0f) {
                     val direction = if (isLtr) 1f else -1f
-                    snapToValue(
-                        (value + dragAmount.x / tabWidthPx * direction)
+                    updateValue(
+                        (targetValue + dragAmount.x / tabWidthPx * direction)
                             .coerceIn(0f, tabs.lastIndex.toFloat())
                     )
                     animationScope.launch {
@@ -701,7 +718,7 @@ private fun FloatingLiquidNavigationBar(
                     }
                 }
             },
-        )
+        ).also { holder.instance = it }
     }
 
     LaunchedEffect(selectedIndex) {
@@ -738,6 +755,7 @@ private fun FloatingLiquidNavigationBar(
                 .height(64.dp)
                 .onGloballyPositioned { coordinates ->
                     totalWidthPx = coordinates.size.width.toFloat()
+                    tabWidthPx = (totalWidthPx - with(density) { 8.dp.toPx() }) / tabs.size
                 }
                 .graphicsLayer { clip = false }
                 .graphicsLayer { translationX = panelOffsetPx }
@@ -761,6 +779,14 @@ private fun FloatingLiquidNavigationBar(
                                     color = Color.Black.copy(alpha = if (isLight) 0.12f else 0.26f),
                                     alpha = shadowAlpha,
                                 )
+                            },
+                            layerBlock = {
+                                if (liquidGlassEnabled) {
+                                    val progress = dampedDragAnimation.pressProgress
+                                    val scale = lerp(1f, 1f + 16f.dp.toPx() / size.width, progress)
+                                    scaleX = scale
+                                    scaleY = scale
+                                }
                             },
                             onDrawSurface = {
                                 drawRect(containerColor)
@@ -786,6 +812,7 @@ private fun FloatingLiquidNavigationBar(
                         .clearAndSetSemantics {}
                         .alpha(0f)
                         .layerBackdrop(tabsBackdrop)
+                        .graphicsLayer { translationX = panelOffsetPx }
                         .fillMaxWidth()
                         .height(56.dp)
                         .drawBackdrop(
@@ -805,7 +832,8 @@ private fun FloatingLiquidNavigationBar(
                             onDrawSurface = {
                                 drawRect(containerColor)
                             },
-                        ),
+                        )
+                        .graphicsLayer(colorFilter = ColorFilter.tint(MaterialTheme.colorScheme.primary)),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     tabs.forEach { tab ->
@@ -852,17 +880,9 @@ private fun FloatingLiquidNavigationBar(
                         .graphicsLayer {
                             val progressOffset = dampedDragAnimation.value * tabWidthPx
                             translationX = if (isLtr) {
-                                progressOffset
+                                progressOffset + panelOffsetPx
                             } else {
-                                -progressOffset
-                            }
-                            scaleX = dampedDragAnimation.scaleX /
-                                (1f - (dampedDragAnimation.velocity / 10f * 0.75f).coerceIn(-0.2f, 0.2f))
-                            scaleY = dampedDragAnimation.scaleY *
-                                (1f - (dampedDragAnimation.velocity / 10f * 0.25f).coerceIn(-0.2f, 0.2f))
-                            if (!liquidGlassEnabled) {
-                                scaleX = 1f
-                                scaleY = 1f
+                                -progressOffset + panelOffsetPx
                             }
                         }
                         .then(if (liquidGlassEnabled && interactionsEnabled) dampedDragAnimation.modifier else Modifier)
@@ -896,6 +916,15 @@ private fun FloatingLiquidNavigationBar(
                                                 0.34f * dampedDragAnimation.pressProgress
                                             },
                                         )
+                                    },
+                                    layerBlock = {
+                                        if (liquidGlassEnabled) {
+                                            scaleX = dampedDragAnimation.scaleX
+                                            scaleY = dampedDragAnimation.scaleY
+                                            val velocity = dampedDragAnimation.velocity / 10f
+                                            scaleX /= 1f - (velocity * 0.75f).coerceIn(-0.2f, 0.2f)
+                                            scaleY *= 1f - (velocity * 0.25f).coerceIn(-0.2f, 0.2f)
+                                        }
                                     },
                                     onDrawSurface = {
                                         val progress = dampedDragAnimation.pressProgress

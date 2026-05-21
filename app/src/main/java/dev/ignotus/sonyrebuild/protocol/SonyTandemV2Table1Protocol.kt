@@ -95,9 +95,9 @@ enum class LeaInquiredType(val code: Byte) {
     TWS_SUPPORTS_LEA_UNI_LEA_BROAD(0x02),
 }
 
-enum class LeaConnectionType(val code: Byte) {
-    SPP(0x00),
-    BLE_GATT(0x01),
+enum class LeaEnableDisable(val code: Byte) {
+    ENABLE(0x00),
+    DISABLE(0x01),
     OUT_OF_RANGE(0xFF.toByte()),
 }
 
@@ -259,8 +259,15 @@ sealed interface ParsedTandemResponse {
     data class LeaStatus(
         val type: LeaInquiredType?,
         val values: List<Int>,
-        val connectionType: LeaConnectionType? = null,
-        val streamingStatus: LeaStreamingStatus? = null,
+        val enabled: LeaEnableDisable? = null,
+        val streamingStatusL: LeaStreamingStatus? = null,
+        val streamingStatusR: LeaStreamingStatus? = null,
+        override val raw: ByteArray,
+    ) : ParsedTandemResponse
+
+    data class LeaPairedHistoryStatus(
+        val type: LeaInquiredType?,
+        val values: List<Int>,
         val pairedHistory: LeaPairedHistory? = null,
         override val raw: ByteArray,
     ) : ParsedTandemResponse
@@ -320,6 +327,9 @@ object SonyTandemV2Table1Protocol {
     const val LEA_GET_STATUS: Byte = 0x42
     const val LEA_RET_STATUS: Byte = 0x43
     const val LEA_NTFY_STATUS: Byte = 0x45
+    const val LEA_GET_PARAM: Byte = 0x46
+    const val LEA_RET_PARAM: Byte = 0x47
+    const val LEA_NTFY_PARAM: Byte = 0x49
     const val SYSTEM_GET_PARAM: Byte = 0x36
     const val SYSTEM_RET_PARAM: Byte = 0x37
 
@@ -440,6 +450,9 @@ object SonyTandemV2Table1Protocol {
     fun buildGetLeaStatus(type: LeaInquiredType): ByteArray =
         SonyTandemFrame.message(LEA_GET_STATUS, byteArrayOf(type.code))
 
+    fun buildGetLeaPairedHistory(type: LeaInquiredType): ByteArray =
+        SonyTandemFrame.message(LEA_GET_PARAM, byteArrayOf(type.code))
+
     fun buildGetQuickAccess(): ByteArray =
         SonyTandemFrame.message(SYSTEM_GET_PARAM, byteArrayOf(SystemInquiredType.QUICK_ACCESS.code))
 
@@ -520,6 +533,7 @@ object SonyTandemV2Table1Protocol {
                 raw = raw,
             )
             LEA_RET_STATUS, LEA_NTFY_STATUS -> parseLeaStatus(payload, raw)
+            LEA_RET_PARAM, LEA_NTFY_PARAM -> parseLeaParam(payload, raw)
             SYSTEM_RET_PARAM -> parseSystemRetParam(payload, raw)
             else -> ParsedTandemResponse.Unknown(dataType.unsigned, command.unsigned, payload, raw)
         }
@@ -823,24 +837,43 @@ object SonyTandemV2Table1Protocol {
         val typeCode = payload.firstOrNull()
         val type = LeaInquiredType.entries.firstOrNull { it.code == typeCode }
         val values = payload.unsignedList()
-        val connectionType = payload.getOrNull(1)?.let { ct ->
-            LeaConnectionType.entries.firstOrNull { it.code == ct }
+        val enabled = payload.getOrNull(1)?.let { code ->
+            LeaEnableDisable.entries.firstOrNull { it.code == code }
         }
-        val streamingStatus = payload.getOrNull(2)?.let { ss ->
-            LeaStreamingStatus.entries.firstOrNull { it.code == ss }
-        }
-        val pairedHistory = payload.getOrNull(1)?.let { ph ->
-            LeaPairedHistory.entries.firstOrNull { it.code == ph }
+        val (streamingL, streamingR) = when (type) {
+            LeaInquiredType.HBS_SUPPORTS_A2DP_LEA_UNI_LEA_BROAD_WITH_CTKD ->
+                payload.getOrNull(2)?.toLeaStreamingStatus() to null
+            LeaInquiredType.TWS_SUPPORTS_A2DP_LEA_UNI_LEA_BROAD_WITH_CTKD,
+            LeaInquiredType.TWS_SUPPORTS_LEA_UNI_LEA_BROAD ->
+                payload.getOrNull(2)?.toLeaStreamingStatus() to payload.getOrNull(3)?.toLeaStreamingStatus()
+            null -> null to null
         }
         return ParsedTandemResponse.LeaStatus(
             type = type,
             values = values,
-            connectionType = connectionType,
-            streamingStatus = streamingStatus,
+            enabled = enabled,
+            streamingStatusL = streamingL,
+            streamingStatusR = streamingR,
+            raw = raw,
+        )
+    }
+
+    private fun parseLeaParam(payload: ByteArray, raw: ByteArray): ParsedTandemResponse {
+        val typeCode = payload.firstOrNull()
+        val type = LeaInquiredType.entries.firstOrNull { it.code == typeCode }
+        val pairedHistory = payload.getOrNull(1)?.let { code ->
+            LeaPairedHistory.entries.firstOrNull { it.code == code }
+        }
+        return ParsedTandemResponse.LeaPairedHistoryStatus(
+            type = type,
+            values = payload.unsignedList(),
             pairedHistory = pairedHistory,
             raw = raw,
         )
     }
+
+    private fun Byte.toLeaStreamingStatus(): LeaStreamingStatus? =
+        LeaStreamingStatus.entries.firstOrNull { it.code == this }
 
     private fun parseSystemRetParam(payload: ByteArray, raw: ByteArray): ParsedTandemResponse =
         when (payload.firstOrNull()) {

@@ -79,8 +79,9 @@ data class EqState(
 )
 
 data class LeaState(
-    val connectionType: String? = null,
-    val streamingStatus: String? = null,
+    val enabled: String? = null,
+    val streamingStatusL: String? = null,
+    val streamingStatusR: String? = null,
     val pairedHistory: String? = null,
     val raw: List<Int> = emptyList(),
 )
@@ -573,6 +574,7 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
             is ParsedTandemResponse.NoiseControl -> applyNoise(parsed)
             is ParsedTandemResponse.PlaybackAck -> applyPlayback(parsed)
             is ParsedTandemResponse.LeaStatus -> applyLeaStatus(parsed)
+            is ParsedTandemResponse.LeaPairedHistoryStatus -> applyLeaPairedHistory(parsed)
             is ParsedTandemResponse.QuickAccess -> applyQuickAccess(parsed)
             is ParsedTandemResponse.WearingStatus -> applyWearingStatus(parsed)
             is ParsedTandemResponse.Unknown -> applyKnownOrUnknown(parsed)
@@ -801,12 +803,22 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
     }
 
     private fun applyLeaStatus(response: ParsedTandemResponse.LeaStatus) {
-        appendLog("LEA status ${response.type} connectionType=${response.connectionType} streaming=${response.streamingStatus} paired=${response.pairedHistory}")
-        _state.update {
-            it.copy(leaState = LeaState(
-                connectionType = response.connectionType?.name,
-                streamingStatus = response.streamingStatus?.name,
-                pairedHistory = response.pairedHistory?.name,
+        appendLog("LEA status ${response.type} enabled=${response.enabled} streamingL=${response.streamingStatusL} streamingR=${response.streamingStatusR}")
+        _state.update { current ->
+            current.copy(leaState = current.leaState.copy(
+                enabled = response.enabled?.name ?: current.leaState.enabled,
+                streamingStatusL = response.streamingStatusL?.name ?: current.leaState.streamingStatusL,
+                streamingStatusR = response.streamingStatusR?.name ?: current.leaState.streamingStatusR,
+                raw = response.values,
+            ))
+        }
+    }
+
+    private fun applyLeaPairedHistory(response: ParsedTandemResponse.LeaPairedHistoryStatus) {
+        appendLog("LEA paired history ${response.type} pairedHistory=${response.pairedHistory}")
+        _state.update { current ->
+            current.copy(leaState = current.leaState.copy(
+                pairedHistory = response.pairedHistory?.name ?: current.leaState.pairedHistory,
                 raw = response.values,
             ))
         }
@@ -826,10 +838,10 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
 
     private fun applyWearingStatus(response: ParsedTandemResponse.WearingStatus) {
         appendLog("Wearing status=${response.status} result=${response.result}")
-        _state.update {
-            it.copy(wearingState = WearingState(
-                status = response.status?.name,
-                result = response.result?.name,
+        _state.update { current ->
+            current.copy(wearingState = current.wearingState.copy(
+                status = response.status?.name ?: current.wearingState.status,
+                result = response.result?.name ?: current.wearingState.result,
                 raw = response.values,
             ))
         }

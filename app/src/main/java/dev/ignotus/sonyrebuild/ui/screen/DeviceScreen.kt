@@ -414,10 +414,11 @@ internal fun BatteryCard(state: SonyHeadphoneUiState) {
 @Composable
 internal fun LeaStatusCard(state: SonyHeadphoneUiState) {
     val lea = state.leaState
-    if (lea.connectionType == null && lea.streamingStatus == null && lea.pairedHistory == null) return
+    if (lea.enabled == null && lea.streamingStatusL == null && lea.streamingStatusR == null && lea.pairedHistory == null) return
     SectionCard(title = "LE Audio", icon = Icons.Rounded.Bluetooth) {
-        lea.connectionType?.let { InfoLine("Connection type", it) }
-        lea.streamingStatus?.let { InfoLine("Streaming status", it) }
+        lea.enabled?.let { InfoLine("Enabled", it) }
+        lea.streamingStatusL?.let { InfoLine("Streaming L", it) }
+        lea.streamingStatusR?.let { InfoLine("Streaming R", it) }
         lea.pairedHistory?.let { InfoLine("Paired history", it) }
         if (lea.raw.isNotEmpty()) {
             InfoLine("Raw", lea.raw.joinToString(" "))

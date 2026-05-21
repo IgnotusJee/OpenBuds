@@ -74,12 +74,6 @@ import dev.ignotus.sonyrebuild.ui.rememberAboutHazeStyle
 import dev.ignotus.sonyrebuild.ui.rememberGlassVisualTokens
 import dev.ignotus.sonyrebuild.ui.reareyeHorizontalTransform
 import dev.ignotus.sonyrebuild.ui.screen.DeviceModelImage
-import dev.ignotus.sonyrebuild.ui.aboutAcrylicSource
-import dev.ignotus.sonyrebuild.ui.appVersionName
-import dev.ignotus.sonyrebuild.ui.reareyeHorizontalTransform
-import dev.ignotus.sonyrebuild.ui.rememberAboutHazeState
-import dev.ignotus.sonyrebuild.ui.rememberAboutHazeStyle
-import dev.ignotus.sonyrebuild.ui.rememberGlassVisualTokens
 
 @Composable
 internal fun AboutScreen(

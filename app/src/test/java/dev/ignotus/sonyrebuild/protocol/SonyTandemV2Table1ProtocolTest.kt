@@ -434,14 +434,50 @@ class SonyTandemV2Table1ProtocolTest {
     }
 
     @Test
-    fun parser_leaRetStatus_extractsConnectionAndStreaming() {
-        val raw = byteArrayOf(0x0E, 0x43, 0x00, 0x01, 0x02)
+    fun leaGetPairedHistory_matchesTandemV2Shape() {
+        assertArrayEquals(
+            byteArrayOf(0x0E, 0x46, 0x01),
+            SonyTandemV2Table1Protocol.buildGetLeaPairedHistory(LeaInquiredType.HBS_SUPPORTS_A2DP_LEA_UNI_LEA_BROAD_WITH_CTKD),
+        )
+    }
+
+    @Test
+    fun parser_leaRetStatus_HBS_extractsEnableAndStreaming() {
+        val raw = byteArrayOf(0x0E, 0x43, 0x01, 0x00, 0x02)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
         assertTrue(parsed is ParsedTandemResponse.LeaStatus)
         parsed as ParsedTandemResponse.LeaStatus
-        assertEquals(LeaConnectionType.BLE_GATT, parsed.connectionType)
-        assertEquals(LeaStreamingStatus.VIA_A2DP, parsed.streamingStatus)
+        assertEquals(LeaInquiredType.HBS_SUPPORTS_A2DP_LEA_UNI_LEA_BROAD_WITH_CTKD, parsed.type)
+        assertEquals(LeaEnableDisable.ENABLE, parsed.enabled)
+        assertEquals(LeaStreamingStatus.VIA_A2DP, parsed.streamingStatusL)
+        assertEquals(null, parsed.streamingStatusR)
+    }
+
+    @Test
+    fun parser_leaRetStatus_TWS_extractsEnableAndDualStreaming() {
+        val raw = byteArrayOf(0x0E, 0x43, 0x00, 0x00, 0x02, 0x03)
+        val parsed = SonyTandemV2Table1Protocol.parse(raw)
+
+        assertTrue(parsed is ParsedTandemResponse.LeaStatus)
+        parsed as ParsedTandemResponse.LeaStatus
+        assertEquals(LeaInquiredType.TWS_SUPPORTS_A2DP_LEA_UNI_LEA_BROAD_WITH_CTKD, parsed.type)
+        assertEquals(LeaEnableDisable.ENABLE, parsed.enabled)
+        assertEquals(LeaStreamingStatus.VIA_A2DP, parsed.streamingStatusL)
+        assertEquals(LeaStreamingStatus.VIA_LE_AUDIO_UNICAST, parsed.streamingStatusR)
+    }
+
+    @Test
+    fun parser_leaNtfyStatus_TWS_sameAsRet() {
+        val raw = byteArrayOf(0x0E, 0x45, 0x00, 0x01, 0x01, 0x02)
+        val parsed = SonyTandemV2Table1Protocol.parse(raw)
+
+        assertTrue(parsed is ParsedTandemResponse.LeaStatus)
+        parsed as ParsedTandemResponse.LeaStatus
+        assertEquals(LeaInquiredType.TWS_SUPPORTS_A2DP_LEA_UNI_LEA_BROAD_WITH_CTKD, parsed.type)
+        assertEquals(LeaEnableDisable.DISABLE, parsed.enabled)
+        assertEquals(LeaStreamingStatus.NONE, parsed.streamingStatusL)
+        assertEquals(LeaStreamingStatus.VIA_A2DP, parsed.streamingStatusR)
     }
 
     @Test
@@ -451,8 +487,21 @@ class SonyTandemV2Table1ProtocolTest {
 
         assertTrue(parsed is ParsedTandemResponse.LeaStatus)
         parsed as ParsedTandemResponse.LeaStatus
-        assertEquals(null, parsed.connectionType)
-        assertEquals(null, parsed.streamingStatus)
+        assertEquals(null, parsed.type)
+        assertEquals(null, parsed.enabled)
+        assertEquals(null, parsed.streamingStatusL)
+        assertEquals(null, parsed.streamingStatusR)
+    }
+
+    @Test
+    fun parser_leaRetParam_extractsPairedHistory() {
+        val raw = byteArrayOf(0x0E, 0x47, 0x00, 0x01)
+        val parsed = SonyTandemV2Table1Protocol.parse(raw)
+
+        assertTrue(parsed is ParsedTandemResponse.LeaPairedHistoryStatus)
+        parsed as ParsedTandemResponse.LeaPairedHistoryStatus
+        assertEquals(LeaInquiredType.TWS_SUPPORTS_A2DP_LEA_UNI_LEA_BROAD_WITH_CTKD, parsed.type)
+        assertEquals(LeaPairedHistory.ONLY_CLASSIC_BT, parsed.pairedHistory)
     }
 
     // ── Quick Access ───────────────────────────────────────────────────────
