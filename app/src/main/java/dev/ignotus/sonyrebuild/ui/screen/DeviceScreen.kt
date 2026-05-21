@@ -30,6 +30,7 @@ import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SkipNext
 import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material3.Button
@@ -198,6 +199,7 @@ internal fun DeviceScreen(
             DeviceInfoCard(state)
             BatteryCard(state)
             LeaStatusCard(state)
+            QuickAccessStatusCard(state)
             QuickControlCard(
                 state = state,
                 onSetNoiseControlMode = onSetNoiseControlMode,
@@ -418,6 +420,19 @@ internal fun LeaStatusCard(state: SonyHeadphoneUiState) {
         lea.pairedHistory?.let { InfoLine("Paired history", it) }
         if (lea.raw.isNotEmpty()) {
             InfoLine("Raw", lea.raw.joinToString(" "))
+        }
+    }
+}
+
+@Composable
+internal fun QuickAccessStatusCard(state: SonyHeadphoneUiState) {
+    val qa = state.quickAccessState
+    if (qa.lrKeyFunction == null && qa.ncAmbKeyFunction == null) return
+    SectionCard(title = "Quick Access", icon = Icons.Rounded.Settings) {
+        qa.lrKeyFunction?.let { InfoLine("L/R Key", it) }
+        qa.ncAmbKeyFunction?.let { InfoLine("NC/AMB Key", it) }
+        if (qa.raw.isNotEmpty()) {
+            InfoLine("Raw", qa.raw.joinToString(" "))
         }
     }
 }

@@ -28,6 +28,7 @@ import dev.ignotus.sonyrebuild.protocol.NoiseControlMode
 import dev.ignotus.sonyrebuild.protocol.ParsedTandemResponse
 import dev.ignotus.sonyrebuild.protocol.PlaybackStatus
 import dev.ignotus.sonyrebuild.protocol.PowerInquiredType
+import dev.ignotus.sonyrebuild.protocol.QuickAccessKey
 import dev.ignotus.sonyrebuild.protocol.hexString
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -84,6 +85,12 @@ data class LeaState(
     val raw: List<Int> = emptyList(),
 )
 
+data class QuickAccessState(
+    val lrKeyFunction: String? = null,
+    val ncAmbKeyFunction: String? = null,
+    val raw: List<Int> = emptyList(),
+)
+
 data class EndpointDiagnosticState(
     val reason: String,
     val serviceLabels: List<String> = emptyList(),
@@ -113,6 +120,7 @@ data class SonyHeadphoneUiState(
     val noiseControlState: NoiseControlState = NoiseControlState(),
     val eqState: EqState = EqState(),
     val leaState: LeaState = LeaState(),
+    val quickAccessState: QuickAccessState = QuickAccessState(),
     val playbackStatus: PlaybackStatus = PlaybackStatus.UNKNOWN,
     val endpointDiagnostic: EndpointDiagnosticState? = null,
     val supportedFeatures: List<FeatureStatus> = featureStatusesFor(null),
@@ -558,6 +566,7 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
             is ParsedTandemResponse.NoiseControl -> applyNoise(parsed)
             is ParsedTandemResponse.PlaybackAck -> applyPlayback(parsed)
             is ParsedTandemResponse.LeaStatus -> applyLeaStatus(parsed)
+            is ParsedTandemResponse.QuickAccess -> applyQuickAccess(parsed)
             is ParsedTandemResponse.Unknown -> applyKnownOrUnknown(parsed)
         }
     }
@@ -795,6 +804,18 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
         }
     }
 
+    private fun applyQuickAccess(response: ParsedTandemResponse.QuickAccess) {
+        appendLog("Quick Access key=${response.key} function=${response.function}")
+        _state.update { current ->
+            val functionName = response.function?.name
+            current.copy(quickAccessState = when (response.key) {
+                QuickAccessKey.L_R_KEY -> current.quickAccessState.copy(lrKeyFunction = functionName)
+                QuickAccessKey.NC_AMB_KEY -> current.quickAccessState.copy(ncAmbKeyFunction = functionName)
+                else -> current.quickAccessState
+            }.copy(raw = response.values))
+        }
+    }
+
     private fun applyKnownOrUnknown(response: ParsedTandemResponse.Unknown) {
         when (response.command) {
             PLAY_NTFY_PARAM -> appendLog(
@@ -971,6 +992,7 @@ fun featureStatusesFor(profile: ConnectedHeadphoneProfile?): List<FeatureStatus>
     FeatureStatus("播放控制", "Play, pause, previous, next", profile.supports(HeadphoneFeature.PLAYBACK_CONTROL)),
     FeatureStatus("EQ / Clear Bass", "Preset EQ, custom EQ, and Clear Bass", profile.supports(HeadphoneFeature.EQ)),
     FeatureStatus("LE Audio 状态", "Connection type, streaming status, paired history", profile.supports(HeadphoneFeature.LEA_STATUS)),
+    FeatureStatus("Quick Access", "Customizable button actions L/R and NC/AMB keys", profile.supports(HeadphoneFeature.QUICK_ACCESS)),
     FeatureStatus("佩戴检测", "System feature placeholder", false),
     FeatureStatus("Quick Access", "System feature placeholder", false),
     FeatureStatus("Sense / AutoPlay / Multipoint / FOTA", "Advanced modules reserved", false),

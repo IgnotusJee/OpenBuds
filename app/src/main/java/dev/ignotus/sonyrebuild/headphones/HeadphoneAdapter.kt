@@ -61,6 +61,7 @@ enum class HeadphoneFeature {
     EQ,
     CLEAR_BASS,
     LEA_STATUS,
+    QUICK_ACCESS,
 }
 
 enum class HeadphoneTransport {

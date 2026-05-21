@@ -116,6 +116,34 @@ enum class LeaPairedHistory(val code: Byte) {
     OUT_OF_RANGE(0xFF.toByte()),
 }
 
+enum class SystemInquiredType(val code: Byte) {
+    QUICK_ACCESS(0x0D),
+}
+
+enum class QuickAccessKey(val code: Byte) {
+    L_R_KEY(0x00),
+    NC_AMB_KEY(0x01),
+    FIXED_QUICK_ACCESS_KEY(0x02),
+    OUT_OF_RANGE(0xFF.toByte()),
+}
+
+enum class QuickAccessFunction(val code: Byte) {
+    NO_FUNCTION(0x00),
+    NC_ASM_OFF(0x01),
+    NC_ASM(0x02),
+    NC_OFF(0x03),
+    ASM_OFF(0x04),
+    PLAY_PAUSE(0x20),
+    NEXT_TRACK(0x21),
+    PREV_TRACK(0x22),
+    VOLUME_UP(0x23),
+    VOLUME_DOWN(0x24),
+    VOICE_RECOGNITION(0x30),
+    QUICK_ACCESS1(0x43),
+    QUICK_ACCESS2(0x44),
+    OUT_OF_RANGE(0xFF.toByte()),
+}
+
 enum class AmbientSoundMode(val code: Byte) {
     NORMAL(0x00),
     VOICE(0x01),
@@ -222,6 +250,13 @@ sealed interface ParsedTandemResponse {
         override val raw: ByteArray,
     ) : ParsedTandemResponse
 
+    data class QuickAccess(
+        val key: QuickAccessKey? = null,
+        val function: QuickAccessFunction? = null,
+        val values: List<Int>,
+        override val raw: ByteArray,
+    ) : ParsedTandemResponse
+
     data class Unknown(
         val dataType: Int?,
         val command: Int?,
@@ -263,6 +298,8 @@ object SonyTandemV2Table1Protocol {
     const val LEA_GET_STATUS: Byte = 0x42
     const val LEA_RET_STATUS: Byte = 0x43
     const val LEA_NTFY_STATUS: Byte = 0x45
+    const val SYSTEM_GET_PARAM: Byte = 0x36
+    const val SYSTEM_RET_PARAM: Byte = 0x37
 
     private const val PLAYBACK_CONTROL_WITH_FUNCTION_CHANGE: Byte = 0x03
     private const val ENABLE: Byte = 0x00
@@ -381,6 +418,9 @@ object SonyTandemV2Table1Protocol {
     fun buildGetLeaStatus(type: LeaInquiredType): ByteArray =
         SonyTandemFrame.message(LEA_GET_STATUS, byteArrayOf(type.code))
 
+    fun buildGetQuickAccess(): ByteArray =
+        SonyTandemFrame.message(SYSTEM_GET_PARAM, byteArrayOf(SystemInquiredType.QUICK_ACCESS.code))
+
     fun buildSetNcOnOff(enabled: Boolean): ByteArray =
         SonyTandemFrame.message(
             NCASM_SET_PARAM,
@@ -455,6 +495,7 @@ object SonyTandemV2Table1Protocol {
                 raw = raw,
             )
             LEA_RET_STATUS, LEA_NTFY_STATUS -> parseLeaStatus(payload, raw)
+            SYSTEM_RET_PARAM -> parseQuickAccess(payload, raw)
             else -> ParsedTandemResponse.Unknown(dataType.unsigned, command.unsigned, payload, raw)
         }
     }
@@ -772,6 +813,21 @@ object SonyTandemV2Table1Protocol {
             connectionType = connectionType,
             streamingStatus = streamingStatus,
             pairedHistory = pairedHistory,
+            raw = raw,
+        )
+    }
+
+    private fun parseQuickAccess(payload: ByteArray, raw: ByteArray): ParsedTandemResponse {
+        val key = payload.getOrNull(1)?.let { k ->
+            QuickAccessKey.entries.firstOrNull { it.code == k }
+        }
+        val function = payload.getOrNull(2)?.let { f ->
+            QuickAccessFunction.entries.firstOrNull { it.code == f }
+        }
+        return ParsedTandemResponse.QuickAccess(
+            key = key,
+            function = function,
+            values = payload.unsignedList(),
             raw = raw,
         )
     }

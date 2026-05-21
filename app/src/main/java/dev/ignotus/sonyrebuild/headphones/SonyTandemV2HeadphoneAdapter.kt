@@ -29,6 +29,7 @@ object SonyTandemV2HeadphoneAdapter : HeadphoneAdapter {
         HeadphoneFeature.EQ,
         HeadphoneFeature.CLEAR_BASS,
         HeadphoneFeature.LEA_STATUS,
+        HeadphoneFeature.QUICK_ACCESS,
     )
 
     private val linkBudsS = ProfileTemplate(
@@ -140,6 +141,9 @@ object SonyTandemV2HeadphoneAdapter : HeadphoneAdapter {
             }
             if (profile.supports(HeadphoneFeature.LEA_STATUS)) {
                 addAll(buildRefreshLeaCommands(profile))
+            }
+            if (profile.supports(HeadphoneFeature.QUICK_ACCESS)) {
+                add(HeadphoneCommand("GET Quick Access", SonyTandemV2Table1Protocol.buildGetQuickAccess()))
             }
         }
 
