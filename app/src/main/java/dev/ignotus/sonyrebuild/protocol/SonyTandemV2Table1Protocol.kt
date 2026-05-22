@@ -1,349 +1,53 @@
 package dev.ignotus.sonyrebuild.protocol
 
-enum class DeviceInfoType(val code: Byte) {
-    MODEL_NAME(0x01),
-    FW_VERSION(0x02),
-    SERIES_AND_COLOR_INFO(0x03),
-    INSTRUCTION_GUIDE(0x04),
-}
-
-enum class CommonInquiredType(val code: Byte) {
-    DISPLAY_FW_VERSION(0x09),
-}
-
-enum class PowerInquiredType(val code: Byte) {
-    BATTERY(0x00),
-    LEFT_RIGHT_BATTERY(0x01),
-    CRADLE_BATTERY(0x02),
-    AUTO_POWER_OFF(0x04),
-    POWER_SAVE_MODE(0x06),
-    STAMINA(0x0E),
-}
-
-enum class EqEbbInquiredType(val code: Byte) {
-    PRESET_EQ(0x00),
-    EBB(0x01),
-    PRESET_EQ_NONCUSTOMIZABLE(0x02),
-    PRESET_EQ_AND_ULT_MODE(0x03),
-    PRESET_EQ_AND_ERRORCODE(0x04),
-    SOUND_EFFECT(0x30),
-    CUSTOM_EQ(0x31),
-    TURN_KEY_EQ(0x32),
-}
-
-enum class EqPresetId(val code: Byte, val displayName: String) {
-    OFF(0x00, "Off"),
-    ROCK(0x01, "Rock"),
-    POP(0x02, "Pop"),
-    JAZZ(0x03, "Jazz"),
-    DANCE(0x04, "Dance"),
-    EDM(0x05, "EDM"),
-    R_AND_B_HIP_HOP(0x06, "R&B / Hip-Hop"),
-    ACOUSTIC(0x07, "Acoustic"),
-    BRIGHT(0x10, "Bright"),
-    EXCITED(0x11, "Excited"),
-    MELLOW(0x12, "Mellow"),
-    RELAXED(0x13, "Relaxed"),
-    VOCAL(0x14, "Vocal"),
-    TREBLE(0x15, "Treble"),
-    BASS(0x16, "Bass"),
-    SPEECH(0x17, "Speech"),
-    HEAVY(0x30, "Heavy"),
-    CLEAR(0x31, "Clear"),
-    HARD(0x32, "Hard"),
-    SOFT(0x33, "Soft"),
-    CUSTOM(0xA0.toByte(), "手动"),
-    USER_SETTING1(0xA1.toByte(), "自定义1"),
-    USER_SETTING2(0xA2.toByte(), "自定义2"),
-}
-
-enum class NcAsmInquiredType(val code: Byte) {
-    V1_TABLE_SET1_NC_ASM(0x02),
-    NC_ON_OFF(0x01),
-    NC_ON_OFF_AND_ASM_ON_OFF(0x11),
-    NC_MODE_SWITCH_AND_ASM_ON_OFF(0x12),
-    NC_ON_OFF_AND_ASM_SEAMLESS(0x13),
-    NC_MODE_SWITCH_AND_ASM_SEAMLESS(0x14),
-    MODE_NC_ASM_AUTO_NC_MODE_SWITCH_AND_ASM_SEAMLESS(0x15),
-    MODE_NC_ASM_DUAL_SINGLE_NC_MODE_SWITCH_AND_ASM_SEAMLESS(0x16),
-    MODE_NC_ASM_DUAL_NC_MODE_SWITCH_AND_ASM_SEAMLESS(0x17),
-    MODE_NC_NCSS_ASM_DUAL_NC_MODE_SWITCH_AND_ASM_SEAMLESS(0x18),
-    MODE_NC_ASM_DUAL_NC_MODE_SWITCH_AND_ASM_SEAMLESS_NA(0x19),
-    ASM_ON_OFF(0x21),
-    ASM_SEAMLESS(0x22),
-    NC_AMB_TOGGLE(0x30),
-}
-
-enum class PlaybackControl(val code: Byte) {
-    PAUSE(0x01),
-    TRACK_UP(0x02),
-    TRACK_DOWN(0x03),
-    STOP(0x06),
-    PLAY(0x07),
-}
-
-enum class PlayInquiredType(val code: Byte) {
-    PLAYBACK_CONTROL_WITH_CALL_VOLUME_ADJUSTMENT(0x01),
-    PLAYBACK_CONTROL_WITH_CALL_VOLUME_ADJUSTMENT_AND_FUNCTION_CHANGE(0x02),
-    PLAYBACK_CONTROL_WITH_FUNCTION_CHANGE(0x03),
-    PLAY_MODE(0x40),
-}
-
-enum class LeaInquiredType(val code: Byte) {
-    TWS_SUPPORTS_A2DP_LEA_UNI_LEA_BROAD_WITH_CTKD(0x00),
-    HBS_SUPPORTS_A2DP_LEA_UNI_LEA_BROAD_WITH_CTKD(0x01),
-    TWS_SUPPORTS_LEA_UNI_LEA_BROAD(0x02),
-}
-
-enum class LeaEnableDisable(val code: Byte) {
-    ENABLE(0x00),
-    DISABLE(0x01),
-    OUT_OF_RANGE(0xFF.toByte()),
-}
-
-enum class LeaStreamingStatus(val code: Byte) {
-    POWER_OFF(0x00),
-    NONE(0x01),
-    VIA_A2DP(0x02),
-    VIA_LE_AUDIO_UNICAST(0x03),
-    OUT_OF_RANGE(0xFF.toByte()),
-}
-
-enum class LeaPairedHistory(val code: Byte) {
-    BOTH_CLASSIC_BT_BLE(0x00),
-    ONLY_CLASSIC_BT(0x01),
-    ONLY_BLE(0x02),
-    OUT_OF_RANGE(0xFF.toByte()),
-}
-
-enum class SystemInquiredType(val code: Byte) {
-    WEARING_STATUS_DETECTOR(0x06),
-    QUICK_ACCESS(0x0D),
-}
-
-enum class QuickAccessKey(val code: Byte) {
-    L_R_KEY(0x00),
-    NC_AMB_KEY(0x01),
-    FIXED_QUICK_ACCESS_KEY(0x02),
-    OUT_OF_RANGE(0xFF.toByte()),
-}
-
-enum class QuickAccessFunction(val code: Byte) {
-    NO_FUNCTION(0x00),
-    NC_ASM_OFF(0x01),
-    NC_ASM(0x02),
-    NC_OFF(0x03),
-    ASM_OFF(0x04),
-    PLAY_PAUSE(0x20),
-    NEXT_TRACK(0x21),
-    PREV_TRACK(0x22),
-    VOLUME_UP(0x23),
-    VOLUME_DOWN(0x24),
-    VOICE_RECOGNITION(0x30),
-    QUICK_ACCESS1(0x43),
-    QUICK_ACCESS2(0x44),
-    OUT_OF_RANGE(0xFF.toByte()),
-}
-
-enum class WearingDetectionStatus(val code: Byte) {
-    NOT_STARTED(0x00),
-    STARTED(0x01),
-    COMPLETED_SUCCESSFULLY(0x02),
-    COMPLETED_UNSUCCESSFULLY(0x03),
-    OUT_OF_RANGE(0xFF.toByte()),
-}
-
-enum class WearingDetectionResult(val code: Byte) {
-    GOOD(0x00),
-    POOR(0x01),
-    OUT_OF_RANGE(0xFF.toByte()),
-}
-
-enum class AmbientSoundMode(val code: Byte) {
-    NORMAL(0x00),
-    VOICE(0x01),
-}
-
-enum class NoiseControlMode {
-    OFF,
-    NOISE_CANCELLING,
-    AMBIENT_SOUND,
-}
-
-enum class PlaybackStatus {
-    UNKNOWN,
-    PLAYING,
-    PAUSED,
-    STOPPED,
-}
-
-data class TandemMessage(
-    val dataType: Byte,
-    val command: Byte,
-    val payload: ByteArray = byteArrayOf(),
-) {
-    fun toByteArray(): ByteArray = byteArrayOf(dataType, command) + payload
-
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (other !is TandemMessage) return false
-        return dataType == other.dataType &&
-            command == other.command &&
-            payload.contentEquals(other.payload)
-    }
-
-    override fun hashCode(): Int {
-        var result = dataType.toInt()
-        result = 31 * result + command
-        result = 31 * result + payload.contentHashCode()
-        return result
-    }
-}
-
-object SonyTandemFrame {
-    const val DATA_MDR: Byte = 0x0E
-
-    fun message(command: Byte, payload: ByteArray = byteArrayOf()): ByteArray =
-        TandemMessage(DATA_MDR, command, payload).toByteArray()
-}
-
-sealed interface ParsedTandemResponse {
-    val raw: ByteArray
-
-    data class DeviceInfo(
-        val type: DeviceInfoType?,
-        val text: String?,
-        override val raw: ByteArray,
-    ) : ParsedTandemResponse
-
-    data class CommonStatus(
-        val type: CommonInquiredType?,
-        val text: String?,
-        val values: List<Int>,
-        override val raw: ByteArray,
-    ) : ParsedTandemResponse
-
-    data class Battery(
-        val kind: PowerInquiredType?,
-        val values: List<Int>,
-        override val raw: ByteArray,
-    ) : ParsedTandemResponse
-
-    data class EqEbb(
-        val type: EqEbbInquiredType?,
-        val enabled: Boolean? = null,
-        val preset: EqPresetId? = null,
-        val clearBass: Int? = null,
-        val bandSteps: List<Int> = emptyList(),
-        val values: List<Int>,
-        override val raw: ByteArray,
-    ) : ParsedTandemResponse
-
-    data class NoiseControl(
-        val type: NcAsmInquiredType?,
-        val values: List<Int>,
-        val enabled: Boolean? = null,
-        val ambientSoundEnabled: Boolean? = null,
-        val ambientLevel: Int? = null,
-        val ambientMode: AmbientSoundMode? = null,
-        val controlMode: NoiseControlMode? = null,
-        override val raw: ByteArray,
-    ) : ParsedTandemResponse
-
-    data class PlaybackAck(
-        val values: List<Int>,
-        val status: PlaybackStatus = PlaybackStatus.UNKNOWN,
-        override val raw: ByteArray,
-    ) : ParsedTandemResponse
-
-    data class LeaStatus(
-        val type: LeaInquiredType?,
-        val values: List<Int>,
-        val enabled: LeaEnableDisable? = null,
-        val streamingStatusL: LeaStreamingStatus? = null,
-        val streamingStatusR: LeaStreamingStatus? = null,
-        override val raw: ByteArray,
-    ) : ParsedTandemResponse
-
-    data class LeaPairedHistoryStatus(
-        val type: LeaInquiredType?,
-        val values: List<Int>,
-        val pairedHistory: LeaPairedHistory? = null,
-        override val raw: ByteArray,
-    ) : ParsedTandemResponse
-
-    data class QuickAccess(
-        val key: QuickAccessKey? = null,
-        val function: QuickAccessFunction? = null,
-        val values: List<Int>,
-        override val raw: ByteArray,
-    ) : ParsedTandemResponse
-
-    data class WearingStatus(
-        val status: WearingDetectionStatus? = null,
-        val result: WearingDetectionResult? = null,
-        val values: List<Int>,
-        override val raw: ByteArray,
-    ) : ParsedTandemResponse
-
-    data class Unknown(
-        val dataType: Int?,
-        val command: Int?,
-        val payload: ByteArray,
-        override val raw: ByteArray,
-    ) : ParsedTandemResponse
-}
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.CONNECT_GET_DEVICE_INFO
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.CONNECT_GET_PROTOCOL_INFO
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.CONNECT_RET_DEVICE_INFO
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.COMMON_GET_STATUS
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.COMMON_NTFY_STATUS
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.COMMON_RET_STATUS
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.DATA_MDR
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.EQEBB_GET_PARAM
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.EQEBB_GET_STATUS
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.EQEBB_NTFY_PARAM
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.EQEBB_NTFY_STATUS
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.EQEBB_RET_PARAM
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.EQEBB_RET_STATUS
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.EQEBB_SET_PARAM
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.LEA_GET_PARAM
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.LEA_GET_STATUS
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.LEA_NTFY_PARAM
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.LEA_NTFY_STATUS
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.LEA_RET_PARAM
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.LEA_RET_STATUS
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_GET_PARAM
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_GET_STATUS
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_MODE_ASM
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_MODE_NC
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_NTFY_PARAM
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_NTFY_STATUS
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_OFF
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_ON
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_RET_PARAM
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_RET_STATUS
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_SET_PARAM
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NC_VALUE_OFF
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NC_VALUE_ON_DUAL
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NC_VALUE_ON_SINGLE
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.PLAYBACK_CONTROL_WITH_FUNCTION_CHANGE
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.PLAY_GET_STATUS
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.PLAY_NTFY_STATUS
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.PLAY_RET_STATUS
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.PLAY_SET_STATUS
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.POWER_GET_STATUS
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.POWER_NTFY_STATUS
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.POWER_RET_STATUS
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.SYSTEM_GET_PARAM
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.SYSTEM_RET_PARAM
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.VALUE_CHANGED
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.VALUE_ENABLE
 
 object SonyTandemV2Table1Protocol {
-    const val CONNECT_GET_PROTOCOL_INFO: Byte = 0x00
-    const val CONNECT_RET_PROTOCOL_INFO: Byte = 0x01
-    const val CONNECT_GET_DEVICE_INFO: Byte = 0x04
-    const val CONNECT_RET_DEVICE_INFO: Byte = 0x05
-    const val COMMON_GET_STATUS: Byte = 0x12
-    const val COMMON_RET_STATUS: Byte = 0x13
-    const val COMMON_NTFY_STATUS: Byte = 0x15
-    const val POWER_GET_STATUS: Byte = 0x22
-    const val POWER_RET_STATUS: Byte = 0x23
-    const val POWER_NTFY_STATUS: Byte = 0x25
-    const val EQEBB_GET_STATUS: Byte = 0x52
-    const val EQEBB_RET_STATUS: Byte = 0x53
-    const val EQEBB_NTFY_STATUS: Byte = 0x55
-    const val EQEBB_GET_PARAM: Byte = 0x56
-    const val EQEBB_RET_PARAM: Byte = 0x57
-    const val EQEBB_SET_PARAM: Byte = 0x58
-    const val EQEBB_NTFY_PARAM: Byte = 0x59
-    const val NCASM_GET_STATUS: Byte = 0x62
-    const val NCASM_RET_STATUS: Byte = 0x63
-    const val NCASM_SET_STATUS: Byte = 0x64
-    const val NCASM_NTFY_STATUS: Byte = 0x65
-    const val NCASM_GET_PARAM: Byte = 0x66
-    const val NCASM_RET_PARAM: Byte = 0x67
-    const val NCASM_SET_PARAM: Byte = 0x68
-    const val NCASM_NTFY_PARAM: Byte = 0x69
-    const val PLAY_GET_STATUS: Byte = 0xA2.toByte()
-    const val PLAY_RET_STATUS: Byte = 0xA3.toByte()
-    const val PLAY_SET_STATUS: Byte = 0xA4.toByte()
-    const val PLAY_NTFY_STATUS: Byte = 0xA5.toByte()
-    const val LEA_GET_STATUS: Byte = 0x42
-    const val LEA_RET_STATUS: Byte = 0x43
-    const val LEA_NTFY_STATUS: Byte = 0x45
-    const val LEA_GET_PARAM: Byte = 0x46
-    const val LEA_RET_PARAM: Byte = 0x47
-    const val LEA_NTFY_PARAM: Byte = 0x49
-    const val SYSTEM_GET_PARAM: Byte = 0x36
-    const val SYSTEM_RET_PARAM: Byte = 0x37
-
-    private const val PLAYBACK_CONTROL_WITH_FUNCTION_CHANGE: Byte = 0x03
-    private const val ENABLE: Byte = 0x00
-    private const val DISABLE: Byte = 0x01
-    private const val VALUE_CHANGED: Byte = 0x01
-    private const val NCASM_OFF: Byte = 0x00
-    private const val NCASM_ON: Byte = 0x01
-    private const val NCASM_MODE_NC: Byte = 0x00
-    private const val NCASM_MODE_ASM: Byte = 0x01
-    private const val NC_VALUE_OFF: Byte = 0x00
-    private const val NC_VALUE_ON_SINGLE: Byte = 0x01
-    private const val NC_VALUE_ON_DUAL: Byte = 0x02
 
     fun buildGetProtocolInfo(): ByteArray =
         SonyTandemFrame.message(CONNECT_GET_PROTOCOL_INFO)
@@ -504,18 +208,18 @@ object SonyTandemV2Table1Protocol {
     fun buildPlayback(control: PlaybackControl): ByteArray =
         SonyTandemFrame.message(
             PLAY_SET_STATUS,
-            byteArrayOf(PLAYBACK_CONTROL_WITH_FUNCTION_CHANGE, ENABLE, control.code),
+            byteArrayOf(PLAYBACK_CONTROL_WITH_FUNCTION_CHANGE, VALUE_ENABLE, control.code),
         )
 
     fun parse(raw: ByteArray): ParsedTandemResponse {
-        val normalized = if (raw.firstOrNull() == SonyTandemFrame.DATA_MDR) raw else byteArrayOf(SonyTandemFrame.DATA_MDR) + raw
+        val normalized = if (raw.firstOrNull() == DATA_MDR) raw else byteArrayOf(DATA_MDR) + raw
         if (normalized.size < 2) {
             return ParsedTandemResponse.Unknown(null, null, byteArrayOf(), raw)
         }
         val dataType = normalized[0]
         val command = normalized[1]
         val payload = normalized.drop(2).map { it }.toByteArray()
-        if (dataType != SonyTandemFrame.DATA_MDR) {
+        if (dataType != DATA_MDR) {
             return ParsedTandemResponse.Unknown(dataType.unsigned, command.unsigned, payload, raw)
         }
 
@@ -560,6 +264,7 @@ object SonyTandemV2Table1Protocol {
         val text = when (type) {
             CommonInquiredType.DISPLAY_FW_VERSION -> parseLengthPrefixedString(payload, offset = 1)
             null -> null
+            else -> null
         }
         return ParsedTandemResponse.CommonStatus(
             type = type,
@@ -668,7 +373,7 @@ object SonyTandemV2Table1Protocol {
         val values = payload.drop(1).map { it.unsigned }
         val isParamResponse = command == EQEBB_RET_PARAM || command == EQEBB_NTFY_PARAM
         val enabled = if (command == EQEBB_RET_STATUS || command == EQEBB_NTFY_STATUS) {
-            payload.getOrNull(1)?.let { it == ENABLE }
+            payload.getOrNull(1)?.let { it == VALUE_ENABLE }
         } else {
             null
         }
@@ -743,11 +448,11 @@ object SonyTandemV2Table1Protocol {
         val combinedMode = payload.getOrNull(3)
         val combinedControlMode = when (type) {
             NcAsmInquiredType.V1_TABLE_SET1_NC_ASM -> when {
-                payload.getOrNull(1) == SonyTandemV1Table1Protocol.NCASM_EFFECT_OFF -> NoiseControlMode.OFF
+                payload.getOrNull(1) == SonyTandemConstants.NCASM_EFFECT_OFF -> NoiseControlMode.OFF
                 payload.getOrNull(3) == NC_VALUE_ON_SINGLE ||
                     payload.getOrNull(3) == NC_VALUE_ON_DUAL -> NoiseControlMode.NOISE_CANCELLING
                 payload.getOrNull(3) == NC_VALUE_OFF &&
-                    payload.getOrNull(1) != SonyTandemV1Table1Protocol.NCASM_EFFECT_OFF -> NoiseControlMode.AMBIENT_SOUND
+                    payload.getOrNull(1) != SonyTandemConstants.NCASM_EFFECT_OFF -> NoiseControlMode.AMBIENT_SOUND
                 else -> null
             }
             NcAsmInquiredType.MODE_NC_ASM_DUAL_NC_MODE_SWITCH_AND_ASM_SEAMLESS -> when {
@@ -795,7 +500,7 @@ object SonyTandemV2Table1Protocol {
                 NcAsmInquiredType.MODE_NC_ASM_DUAL_NC_MODE_SWITCH_AND_ASM_SEAMLESS ->
                     combinedControlMode == NoiseControlMode.NOISE_CANCELLING
                 NcAsmInquiredType.NC_ON_OFF -> payload.getOrNull(3)?.let { it == NCASM_ON }
-                    ?: payload.getOrNull(1)?.let { it == ENABLE }
+                    ?: payload.getOrNull(1)?.let { it == VALUE_ENABLE }
                 NcAsmInquiredType.NC_ON_OFF_AND_ASM_SEAMLESS,
                 NcAsmInquiredType.NC_MODE_SWITCH_AND_ASM_SEAMLESS -> combinedControlMode == NoiseControlMode.NOISE_CANCELLING
                 else -> null
@@ -805,7 +510,7 @@ object SonyTandemV2Table1Protocol {
                 NcAsmInquiredType.MODE_NC_ASM_DUAL_NC_MODE_SWITCH_AND_ASM_SEAMLESS ->
                     combinedControlMode == NoiseControlMode.AMBIENT_SOUND
                 NcAsmInquiredType.ASM_ON_OFF -> payload.getOrNull(4)?.let { it == NCASM_ON }
-                    ?: payload.getOrNull(1)?.let { it == ENABLE }
+                    ?: payload.getOrNull(1)?.let { it == VALUE_ENABLE }
                 NcAsmInquiredType.ASM_SEAMLESS -> payload.getOrNull(2)?.let { it == NCASM_ON }
                 NcAsmInquiredType.NC_ON_OFF_AND_ASM_SEAMLESS,
                 NcAsmInquiredType.NC_MODE_SWITCH_AND_ASM_SEAMLESS -> combinedControlMode == NoiseControlMode.AMBIENT_SOUND
@@ -912,12 +617,3 @@ object SonyTandemV2Table1Protocol {
         )
     }
 }
-
-val Byte.unsigned: Int
-    get() = toInt() and 0xFF
-
-fun ByteArray.hexString(): String = joinToString(" ") { "%02X".format(it.unsigned) }
-
-private fun ByteArray.unsignedList(): List<Int> = map { it.unsigned }
-
-private fun Byte.percentageOrNull(): Int? = unsigned.takeIf { it in 0..100 }

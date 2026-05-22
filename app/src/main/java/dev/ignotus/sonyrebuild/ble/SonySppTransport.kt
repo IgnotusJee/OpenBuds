@@ -1,7 +1,7 @@
 package dev.ignotus.sonyrebuild.ble
 
 import android.bluetooth.BluetoothSocket
-import dev.ignotus.sonyrebuild.protocol.SonyTandemFrame
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants
 import dev.ignotus.sonyrebuild.protocol.hexString
 import java.io.IOException
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -121,10 +121,10 @@ internal class SonySppTransport(
             }
             DataType.DATA_MDR, DataType.DATA_MDR_NO2, DataType.LARGE_DATA_MDR -> {
                 sendAck(sequence)
-                onPayload(byteArrayOf(SonyTandemFrame.DATA_MDR) + payload)
+                onPayload(byteArrayOf(SonyTandemConstants.DATA_MDR) + payload)
             }
             DataType.SHOT_MDR, DataType.SHOT_MDR_NO2 -> {
-                onPayload(byteArrayOf(SonyTandemFrame.DATA_MDR) + payload)
+                onPayload(byteArrayOf(SonyTandemConstants.DATA_MDR) + payload)
             }
             DataType.UNKNOWN -> log("SPP RX unsupported data type=0x${body[0].u.toString(16)}")
         }
@@ -231,7 +231,7 @@ internal class SonySppTransport(
             fun fromTandemBytes(bytes: ByteArray): OutboundFrame {
                 if (bytes.isEmpty()) return OutboundFrame(DataType.DATA_MDR, bytes)
                 return when (bytes[0]) {
-                    SonyTandemFrame.DATA_MDR -> OutboundFrame(DataType.DATA_MDR, bytes.drop(1).toByteArray())
+                    SonyTandemConstants.DATA_MDR -> OutboundFrame(DataType.DATA_MDR, bytes.drop(1).toByteArray())
                     else -> OutboundFrame(DataType.DATA_MDR, bytes)
                 }
             }

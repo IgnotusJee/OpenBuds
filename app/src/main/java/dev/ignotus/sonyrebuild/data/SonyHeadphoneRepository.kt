@@ -14,6 +14,7 @@ import dev.ignotus.sonyrebuild.ble.SonyBleClientListener
 import dev.ignotus.sonyrebuild.ble.SonyBleConnectionInfo
 import dev.ignotus.sonyrebuild.ble.UnsupportedEndpointDiagnostics
 import dev.ignotus.sonyrebuild.headphones.ConnectedHeadphoneProfile
+import dev.ignotus.sonyrebuild.headphones.EqWriteStrategy
 import dev.ignotus.sonyrebuild.headphones.HeadphoneAdapterRegistry
 import dev.ignotus.sonyrebuild.headphones.HeadphoneFeature
 import dev.ignotus.sonyrebuild.headphones.HeadphoneFormFactor
@@ -304,10 +305,10 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
             return
         }
         val profile = ensureConnectedProfile()
-        val type = if (profile.usesXm4EqWriteStrategy()) EqEbbInquiredType.EBB else _state.value.eqState.presetType
+        val type = if (profile.eqWriteStrategy == EqWriteStrategy.XM4_COMBINED_EBB) EqEbbInquiredType.EBB else _state.value.eqState.presetType
         val bandSteps = _state.value.eqState.rawBandSteps.takeIf {
             it.isNotEmpty() && when {
-                profile.usesXm4EqWriteStrategy() -> preset in setOf(
+                profile.eqWriteStrategy == EqWriteStrategy.XM4_COMBINED_EBB -> preset in setOf(
                     EqPresetId.CUSTOM,
                     EqPresetId.USER_SETTING1,
                     EqPresetId.USER_SETTING2,
@@ -334,7 +335,7 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
         }
         val clamped = level.coerceIn(-10, 10)
         val eq = _state.value.eqState
-        if (!ensureConnectedProfile().usesXm4EqWriteStrategy() && eq.rawBandSteps.size > EQ_CLEAR_BASS_RAW_INDEX) {
+        if (ensureConnectedProfile().eqWriteStrategy != EqWriteStrategy.XM4_COMBINED_EBB && eq.rawBandSteps.size > EQ_CLEAR_BASS_RAW_INDEX) {
             val targetPreset = eq.bandEditPreset()
             val rawSteps = eq.rawBandSteps.toMutableList()
             rawSteps[EQ_CLEAR_BASS_RAW_INDEX] = displayEqStepToRaw(clamped)
@@ -721,8 +722,8 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
     private fun sendEqBandSteps(label: String, rawSteps: List<Int>, preset: EqPresetId?) {
         val eq = _state.value.eqState
         val profile = ensureConnectedProfile()
-        val type = if (profile.usesXm4EqWriteStrategy()) EqEbbInquiredType.EBB else eq.presetType
-        val useCustomPayload = !profile.usesXm4EqWriteStrategy() && eq.usesCustomEqPayload && preset == null
+        val type = if (profile.eqWriteStrategy == EqWriteStrategy.XM4_COMBINED_EBB) EqEbbInquiredType.EBB else eq.presetType
+        val useCustomPayload = profile.eqWriteStrategy != EqWriteStrategy.XM4_COMBINED_EBB && eq.usesCustomEqPayload && preset == null
         HeadphoneAdapterRegistry.buildSetEqBandCommands(profile, rawSteps, preset, useCustomPayload, type)
             .forEach { sendCommand(label, it.bytes) }
     }
@@ -976,9 +977,6 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
 
 private fun ConnectedHeadphoneProfile?.supports(feature: HeadphoneFeature): Boolean =
     this?.supports(feature) == true
-
-private fun ConnectedHeadphoneProfile.usesXm4EqWriteStrategy(): Boolean =
-    brand.equals("Sony", ignoreCase = true) && modelName.equals("WH-1000XM4", ignoreCase = true)
 
 private fun String?.toHeadphoneTransport(): HeadphoneTransport =
     when (this) {

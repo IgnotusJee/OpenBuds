@@ -85,6 +85,11 @@ data class HeadphoneCommand(
     override fun hashCode(): Int = 31 * label.hashCode() + bytes.contentHashCode()
 }
 
+enum class EqWriteStrategy {
+    STANDARD,
+    XM4_COMBINED_EBB,
+}
+
 data class HeadphoneCapabilities(
     val features: Set<HeadphoneFeature>,
     val formFactor: HeadphoneFormFactor,
@@ -108,10 +113,59 @@ data class ConnectedHeadphoneProfile(
     val capabilities: HeadphoneCapabilities,
     val featureProtocolMap: Map<HeadphoneFeature, HeadphoneProtocolVariant> = emptyMap(),
     val protocolEvidence: List<String> = emptyList(),
+    val eqWriteStrategy: EqWriteStrategy = EqWriteStrategy.STANDARD,
 ) {
     fun supports(feature: HeadphoneFeature): Boolean = feature in capabilities.features
     fun protocolFor(feature: HeadphoneFeature): HeadphoneProtocolVariant =
         featureProtocolMap[feature] ?: HeadphoneProtocolVariant.UNKNOWN
+}
+
+data class ProfileTemplate(
+    val modelName: String,
+    val series: String?,
+    val capabilities: HeadphoneCapabilities,
+    val knownStaticProfile: Boolean = true,
+    val eqWriteStrategy: EqWriteStrategy = EqWriteStrategy.STANDARD,
+) {
+    val featureProtocolMap: Map<HeadphoneFeature, HeadphoneProtocolVariant> by lazy {
+        buildFeatureProtocolMap()
+    }
+
+    private fun buildFeatureProtocolMap(): Map<HeadphoneFeature, HeadphoneProtocolVariant> =
+        when (modelName) {
+            "WH-1000XM4" -> capabilities.features.associateWith { feature ->
+                when (feature) {
+                    HeadphoneFeature.BATTERY -> HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1
+                    else -> HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1
+                }
+            }
+            else -> capabilities.features.associateWith { HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1 }
+        }
+
+    fun toProfile(adapterId: String, brand: String, protocolName: String, displayName: String): ConnectedHeadphoneProfile =
+        ConnectedHeadphoneProfile(
+            adapterId = adapterId,
+            brand = brand,
+            modelName = modelName,
+            displayName = displayName.removePrefix("LE_").takeIf { it.isNotBlank() } ?: modelName,
+            protocolName = protocolName,
+            series = series,
+            capabilities = capabilities,
+            featureProtocolMap = featureProtocolMap,
+            protocolEvidence = if (knownStaticProfile) {
+                listOf(
+                    "static-profile:$modelName",
+                    "reverse:C11518x DeviceCapabilityTableset1/2 dispatch",
+                    "reverse:MdlSeries table-set mapping",
+                )
+            } else {
+                listOf(
+                    "probe-only:unknown-sony-device",
+                    "reverse:C11518x DeviceCapabilityTableset1/2 dispatch",
+                )
+            },
+            eqWriteStrategy = eqWriteStrategy,
+        )
 }
 
 interface HeadphoneAdapter {
@@ -123,6 +177,18 @@ interface HeadphoneAdapter {
     fun fallbackProfile(device: DiscoveredSonyDevice): ConnectedHeadphoneProfile
     fun withTransport(profile: ConnectedHeadphoneProfile, transport: HeadphoneTransport): ConnectedHeadphoneProfile =
         profile.copy(transport = transport)
+
+    fun matchTemplate(
+        template: ProfileTemplate,
+        device: DiscoveredSonyDevice,
+        reportedModelName: String? = null,
+    ): ConnectedHeadphoneProfile? {
+        val candidates = listOfNotNull(reportedModelName, device.name.removePrefix("LE_"))
+        val matched = candidates.any { candidate ->
+            candidate.normalizedModelName().contains(template.modelName.normalizedModelName())
+        }
+        return if (matched) template.toProfile(id, brand, protocolName, device.name) else null
+    }
 
     fun buildRefreshCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand>
     fun buildSetNoiseControlModeCommands(
@@ -229,3 +295,8 @@ object HeadphoneAdapterRegistry {
     private fun adapterFor(profile: ConnectedHeadphoneProfile): HeadphoneAdapter =
         adapters.firstOrNull { it.id == profile.adapterId } ?: SonyTandemV2HeadphoneAdapter
 }
+
+fun String.normalizedModelName(): String =
+    uppercase()
+        .removePrefix("LE_")
+        .replace(Regex("[\\s\\-_.]+"), "")

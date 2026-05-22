@@ -1,8 +1,9 @@
 package dev.ignotus.sonyrebuild.headphones
 
 import dev.ignotus.sonyrebuild.ble.DiscoveredSonyDevice
-import dev.ignotus.sonyrebuild.protocol.DeviceInfoType
 import dev.ignotus.sonyrebuild.protocol.AmbientSoundMode
+import dev.ignotus.sonyrebuild.protocol.CommonInquiredType
+import dev.ignotus.sonyrebuild.protocol.DeviceInfoType
 import dev.ignotus.sonyrebuild.protocol.EqEbbInquiredType
 import dev.ignotus.sonyrebuild.protocol.EqPresetId
 import dev.ignotus.sonyrebuild.protocol.LeaInquiredType
@@ -11,6 +12,25 @@ import dev.ignotus.sonyrebuild.protocol.NoiseControlMode
 import dev.ignotus.sonyrebuild.protocol.ParsedTandemResponse
 import dev.ignotus.sonyrebuild.protocol.PlaybackControl
 import dev.ignotus.sonyrebuild.protocol.PowerInquiredType
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.COMMON_NTFY_BATTERY_LEVEL
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.COMMON_RET_BATTERY_LEVEL
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.DATA_MDR
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.EQEBB_GET_PARAM
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.EQEBB_GET_STATUS
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.EQEBB_NTFY_PARAM
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.EQEBB_NTFY_STATUS
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.EQEBB_RET_PARAM
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.EQEBB_RET_STATUS
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.EQEBB_SET_PARAM
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_GET_PARAM
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_GET_STATUS
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_NTFY_PARAM
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_NTFY_STATUS
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_RET_PARAM
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_RET_STATUS
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_SET_PARAM
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.POWER_NTFY_STATUS
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.POWER_RET_STATUS
 import dev.ignotus.sonyrebuild.protocol.SonyTandemV1Table1Protocol
 import dev.ignotus.sonyrebuild.protocol.SonyTandemV2Table1Protocol
 
@@ -86,6 +106,7 @@ object SonyTandemV2HeadphoneAdapter : HeadphoneAdapter {
             queryProtocolInfo = false,
             queryNoiseControlParams = true,
         ),
+        eqWriteStrategy = EqWriteStrategy.XM4_COMBINED_EBB,
     )
 
     private val templates = listOf(wh1000xm4, linkBudsS)
@@ -94,13 +115,11 @@ object SonyTandemV2HeadphoneAdapter : HeadphoneAdapter {
         device: DiscoveredSonyDevice,
         reportedModelName: String?,
     ): ConnectedHeadphoneProfile? {
-        val candidates = listOfNotNull(reportedModelName, device.name.removePrefix("LE_"))
-        val template = templates.firstOrNull { template ->
-            candidates.any { candidate ->
-                candidate.normalizedModelName().contains(template.modelName.normalizedModelName())
-            }
-        } ?: return null
-        return template.toProfile(device.name)
+        return templates.firstOrNull { template ->
+            matchTemplate(template, device, reportedModelName) != null
+        }?.let { template ->
+            matchTemplate(template, device, reportedModelName)
+        }
     }
 
     override fun fallbackProfile(device: DiscoveredSonyDevice): ConnectedHeadphoneProfile =
@@ -117,7 +136,7 @@ object SonyTandemV2HeadphoneAdapter : HeadphoneAdapter {
                 eqParamTypes = emptyList(),
             ),
             knownStaticProfile = false,
-        ).toProfile(device.name)
+        ).toProfile(id, brand, protocolName, device.name)
 
     override fun buildRefreshCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> =
         buildList {
@@ -297,67 +316,83 @@ object SonyTandemV2HeadphoneAdapter : HeadphoneAdapter {
     override fun buildPlaybackCommands(profile: ConnectedHeadphoneProfile, control: PlaybackControl): List<HeadphoneCommand> =
         listOf(HeadphoneCommand("PLAYBACK ${control.name}", SonyTandemV2Table1Protocol.buildPlayback(control)))
 
-    override fun parse(profile: ConnectedHeadphoneProfile, raw: ByteArray): ParsedTandemResponse =
-        when {
-            profile.protocolFor(HeadphoneFeature.BATTERY) == HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1 &&
-                raw.getOrNull(if (raw.firstOrNull() == dev.ignotus.sonyrebuild.protocol.SonyTandemFrame.DATA_MDR) 1 else 0) in
-                setOf(
-                    SonyTandemV1Table1Protocol.COMMON_RET_BATTERY_LEVEL,
-                    SonyTandemV1Table1Protocol.COMMON_NTFY_BATTERY_LEVEL,
-                ) -> SonyTandemV1Table1Protocol.parse(raw)
-            raw.getOrNull(if (raw.firstOrNull() == dev.ignotus.sonyrebuild.protocol.SonyTandemFrame.DATA_MDR) 2 else 1) ==
-                NcAsmInquiredType.V1_TABLE_SET1_NC_ASM.code -> SonyTandemV1Table1Protocol.parse(raw)
+    override fun parse(profile: ConnectedHeadphoneProfile, raw: ByteArray): ParsedTandemResponse {
+        val normalized = if (raw.firstOrNull() == DATA_MDR) raw else byteArrayOf(DATA_MDR) + raw
+        val command = normalized.getOrNull(1) ?: return ParsedTandemResponse.Unknown(null, null, byteArrayOf(), raw)
+        val payload = normalized.drop(2).toByteArray()
+        val feature = classifyCommand(command, payload)
+        return when (profile.protocolFor(feature)) {
+            HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1 -> {
+                val result = SonyTandemV1Table1Protocol.parse(raw)
+                if (result is ParsedTandemResponse.Unknown) {
+                    SonyTandemV2Table1Protocol.parse(raw)
+                } else {
+                    result
+                }
+            }
             else -> SonyTandemV2Table1Protocol.parse(raw)
         }
+    }
 
-    private data class ProfileTemplate(
-        val modelName: String,
-        val series: String?,
-        val capabilities: HeadphoneCapabilities,
-        val knownStaticProfile: Boolean = true,
-    ) {
-        private val featureProtocolMap: Map<HeadphoneFeature, HeadphoneProtocolVariant> =
-            when (modelName) {
-                "WH-1000XM4" -> commonFeatures.associateWith { feature ->
-                    when (feature) {
-                        HeadphoneFeature.BATTERY,
-                        HeadphoneFeature.NOISE_CONTROL,
-                        HeadphoneFeature.AMBIENT_LEVEL,
-                        HeadphoneFeature.AMBIENT_VOICE_MODE -> HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1
-                        else -> HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1
-                    }
-                }
-                else -> commonFeatures.associateWith { HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1 }
+    private fun classifyCommand(command: Byte, payload: ByteArray = byteArrayOf()): HeadphoneFeature = when (command) {
+        COMMON_RET_BATTERY_LEVEL -> HeadphoneFeature.BATTERY
+        COMMON_NTFY_BATTERY_LEVEL -> classify0x13(payload)
+        POWER_RET_STATUS, POWER_NTFY_STATUS -> HeadphoneFeature.BATTERY
+        EQEBB_GET_STATUS, EQEBB_RET_STATUS, EQEBB_NTFY_STATUS,
+        EQEBB_GET_PARAM, EQEBB_RET_PARAM, EQEBB_SET_PARAM,
+        EQEBB_NTFY_PARAM -> HeadphoneFeature.EQ
+        NCASM_GET_STATUS, NCASM_RET_STATUS, NCASM_NTFY_STATUS,
+        NCASM_GET_PARAM, NCASM_RET_PARAM, NCASM_SET_PARAM,
+        NCASM_NTFY_PARAM -> HeadphoneFeature.NOISE_CONTROL
+        else -> HeadphoneFeature.DEVICE_INFO
+    }
+
+    /**
+     * 0x13 is overloaded: V2 COMMON_RET_STATUS and V1 COMMON_NTFY_BATTERY_LEVEL.
+     * CommonInquiredType codes 0x00-0x06 overlap with PowerInquiredType codes.
+     * Non-overlapping codes are routed directly; for overlapping codes we inspect
+     * payload shape to decide whether it looks like a V1 battery response.
+     */
+    private fun classify0x13(payload: ByteArray): HeadphoneFeature {
+        val firstPayloadByte = payload.firstOrNull() ?: return HeadphoneFeature.DEVICE_INFO
+        val isCommonType = CommonInquiredType.entries.any { it.code == firstPayloadByte }
+        val isPowerType = PowerInquiredType.entries.any { it.code == firstPayloadByte }
+
+        return when {
+            // Non-overlapping CommonInquiredType (0x03, 0x05, 0x07, 0x08, 0x09) → V2 common status
+            isCommonType && !isPowerType -> HeadphoneFeature.DEVICE_INFO
+            // Non-overlapping PowerInquiredType (0x0E = STAMINA) → V1 battery
+            isPowerType && !isCommonType -> HeadphoneFeature.BATTERY
+            // Overlapping codes (0x00, 0x01, 0x02, 0x04, 0x06): inspect payload shape
+            isPowerType && isCommonType -> {
+                if (looksLikeV1BatteryPayload(payload)) HeadphoneFeature.BATTERY
+                else HeadphoneFeature.DEVICE_INFO
             }
+            else -> HeadphoneFeature.DEVICE_INFO
+        }
+    }
 
-        fun toProfile(displayName: String): ConnectedHeadphoneProfile =
-            ConnectedHeadphoneProfile(
-                adapterId = SonyTandemV2HeadphoneAdapter.id,
-                brand = SonyTandemV2HeadphoneAdapter.brand,
-                modelName = modelName,
-                displayName = displayName.removePrefix("LE_").takeIf { it.isNotBlank() } ?: modelName,
-                protocolName = SonyTandemV2HeadphoneAdapter.protocolName,
-                series = series,
-                capabilities = capabilities,
-                featureProtocolMap = featureProtocolMap,
-                protocolEvidence = if (knownStaticProfile) {
-                    listOf(
-                        "static-profile:$modelName",
-                        "reverse:C11518x DeviceCapabilityTableset1/2 dispatch",
-                        "reverse:MdlSeries table-set mapping",
-                    )
-                } else {
-                    listOf(
-                        "probe-only:unknown-sony-device",
-                        "reverse:C11518x DeviceCapabilityTableset1/2 dispatch",
-                    )
-                },
-            )
+    private fun looksLikeV1BatteryPayload(payload: ByteArray): Boolean {
+        val type = payload.firstOrNull()?.toInt()?.and(0xFF) ?: return false
+        return when (type) {
+            0x00, 0x02 -> {
+                // BATTERY or CRADLE: [type, level] — level is 0-100 or 0xFF
+                payload.size == 2 && payload[1].isBatteryPercentage()
+            }
+            0x01 -> {
+                // LEFT_RIGHT: [type, level_L, 0x00, level_R]
+                payload.size == 4 &&
+                    payload[1].isBatteryPercentage() &&
+                    payload[2].toInt().and(0xFF) == 0x00 &&
+                    payload[3].isBatteryPercentage()
+            }
+            0x04, 0x06 -> false // AUTO_POWER_OFF, POWER_SAVE_MODE — route to DEVICE_INFO
+            else -> false
+        }
+    }
+
+    private fun Byte.isBatteryPercentage(): Boolean {
+        val v = this.toInt() and 0xFF
+        return v in 0..100 || v == 0xFF
     }
 }
-
-private fun String.normalizedModelName(): String =
-    uppercase()
-        .removePrefix("LE_")
-        .replace(" ", "")
-        .replace("_", "-")
