@@ -78,7 +78,7 @@ object SonyTandemV1Table1Protocol {
             COMMON_RET_BATTERY_LEVEL,
             COMMON_NTFY_BATTERY_LEVEL -> parseBattery(payload, raw)
             NCASM_RET_PARAM,
-            NCASM_NTFY_PARAM -> parseNoiseControl(payload, raw)
+            NCASM_NTFY_PARAM -> parseNoiseControl(command, payload, raw)
             else -> ParsedTandemResponse.Unknown(
                 dataType = normalized.firstOrNull()?.unsigned,
                 command = command?.unsigned,
@@ -104,14 +104,14 @@ object SonyTandemV1Table1Protocol {
         return ParsedTandemResponse.Battery(kind, values, raw)
     }
 
-    private fun parseNoiseControl(payload: ByteArray, raw: ByteArray): ParsedTandemResponse {
+    private fun parseNoiseControl(command: Byte, payload: ByteArray, raw: ByteArray): ParsedTandemResponse {
         val type = payload.firstOrNull()?.let { code ->
             NcAsmInquiredType.entries.firstOrNull { it.code == code }
         }
         if (type != NcAsmInquiredType.V1_TABLE_SET1_NC_ASM) {
             return ParsedTandemResponse.Unknown(
                 dataType = DATA_MDR.unsigned,
-                command = NCASM_RET_PARAM.unsigned,
+                command = command.unsigned,
                 payload = payload,
                 raw = raw,
             )

@@ -244,6 +244,44 @@ class SonyTandemTable2ProtocolTest {
         assertArrayEquals(raw, parsed.raw)
     }
 
+    @Test
+    fun table2Common_equalityUsesRawContent() {
+        val first = ParsedTandemResponse.Table2Common(
+            family = "CONNECT",
+            command = 0x07,
+            values = listOf(0x01),
+            raw = byteArrayOf(0x0F, 0x07, 0x01),
+        )
+        val second = ParsedTandemResponse.Table2Common(
+            family = "CONNECT",
+            command = 0x07,
+            values = listOf(0x01),
+            raw = byteArrayOf(0x0F, 0x07, 0x01),
+        )
+
+        assertEquals(first, second)
+        assertEquals(first.hashCode(), second.hashCode())
+    }
+
+    @Test
+    fun table2Generic_equalityUsesRawContent() {
+        val first = ParsedTandemResponse.Table2Generic(
+            family = "POWER",
+            inquiredType = 0x00,
+            values = listOf(0x01),
+            raw = byteArrayOf(0x0F, 0x23, 0x00, 0x01),
+        )
+        val second = ParsedTandemResponse.Table2Generic(
+            family = "POWER",
+            inquiredType = 0x00,
+            values = listOf(0x01),
+            raw = byteArrayOf(0x0F, 0x23, 0x00, 0x01),
+        )
+
+        assertEquals(first, second)
+        assertEquals(first.hashCode(), second.hashCode())
+    }
+
     // ── V1 Table2: command family classification ────────────────────────────
 
     @Test
@@ -309,6 +347,30 @@ class SonyTandemTable2ProtocolTest {
         assertTrue("Expected Table2Generic but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Table2Generic)
         parsed as ParsedTandemResponse.Table2Generic
         assertEquals("VOICE_GUIDANCE", parsed.family)
+    }
+
+    @Test
+    fun v1_parse_unknownPeripheralInquiredType_foldsToNoUse() {
+        val raw = byteArrayOf(0x0E, 0x33, 0x7F, 0x01)
+        val parsed = SonyTandemV1Table2Protocol.parse(raw)
+
+        assertTrue("Expected Table2Generic but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Table2Generic)
+        parsed as ParsedTandemResponse.Table2Generic
+        assertEquals("PERIPHERAL", parsed.family)
+        assertEquals(0x00, parsed.inquiredType)
+        assertEquals(listOf(0x01), parsed.values)
+    }
+
+    @Test
+    fun v1_parse_unknownVoiceGuidanceInquiredType_foldsToNoUse() {
+        val raw = byteArrayOf(0x0E, 0x43, 0x7F, 0x01)
+        val parsed = SonyTandemV1Table2Protocol.parse(raw)
+
+        assertTrue("Expected Table2Generic but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Table2Generic)
+        parsed as ParsedTandemResponse.Table2Generic
+        assertEquals("VOICE_GUIDANCE", parsed.family)
+        assertEquals(0x00, parsed.inquiredType)
+        assertEquals(listOf(0x01), parsed.values)
     }
 
     @Test

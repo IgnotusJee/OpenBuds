@@ -354,6 +354,18 @@ class SonyTandemV2Table1ProtocolTest {
     }
 
     @Test
+    fun parser_v1UnknownNcAsmNotification_preservesNotificationCommand() {
+        val raw = byteArrayOf(0x0E, 0x69, 0x7F, 0x01)
+        val parsed = SonyTandemV1Table1Protocol.parse(raw)
+
+        assertTrue(parsed is ParsedTandemResponse.Unknown)
+        parsed as ParsedTandemResponse.Unknown
+        assertEquals(0x0E, parsed.dataType)
+        assertEquals(0x69, parsed.command)
+        assertArrayEquals(byteArrayOf(0x7F, 0x01), parsed.payload)
+    }
+
+    @Test
     fun parser_ncasmStatus_doesNotTreatFeatureEnableAsCurrentMode() {
         val raw = byteArrayOf(0x0E, 0x63, 0x01, 0x00)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)

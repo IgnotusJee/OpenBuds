@@ -121,6 +121,7 @@ enum class PeripheralInquiredTypeV1Table2(val code: Byte) {
     PAIRING_DEVICE_MANAGEMENT_CLASSIC_BT(0x01),
     ;
     companion object {
+        // Sony V1 enums fold unknown bytes to NO_USE; mirror that even though diagnostics lose the raw value.
         fun fromCode(b: Byte): PeripheralInquiredTypeV1Table2 =
             entries.firstOrNull { it.code == b } ?: NO_USE
     }
@@ -131,6 +132,7 @@ enum class VoiceGuidanceInquiredTypeV1Table2(val code: Byte) {
     VOICE_GUIDANCE_SETTING(0x01),
     ;
     companion object {
+        // Sony V1 enums fold unknown bytes to NO_USE; mirror that even though diagnostics lose the raw value.
         fun fromCode(b: Byte): VoiceGuidanceInquiredTypeV1Table2 =
             entries.firstOrNull { it.code == b } ?: NO_USE
     }

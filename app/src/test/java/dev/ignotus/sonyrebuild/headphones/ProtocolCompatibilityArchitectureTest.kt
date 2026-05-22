@@ -78,6 +78,19 @@ class ProtocolCompatibilityArchitectureTest {
         assertTrue(source.contains("client.sendToChannel(command.channel, command.bytes)"))
     }
 
-    private fun mainSource(path: String): String =
-        File("src/main/java/dev/ignotus/sonyrebuild/$path").readText()
+    private fun mainSource(path: String): String {
+        val relativePath = "src/main/java/dev/ignotus/sonyrebuild/$path"
+        val userDir = requireNotNull(System.getProperty("user.dir"))
+        val candidates = generateSequence(File(userDir).absoluteFile) { it.parentFile }
+            .flatMap { dir ->
+                sequenceOf(
+                    File(dir, relativePath),
+                    File(dir, "app/$relativePath"),
+                    File(dir, "App/app/$relativePath"),
+                )
+            }
+
+        return candidates.firstOrNull { it.isFile }?.readText()
+            ?: error("Cannot locate $relativePath from $userDir")
+    }
 }

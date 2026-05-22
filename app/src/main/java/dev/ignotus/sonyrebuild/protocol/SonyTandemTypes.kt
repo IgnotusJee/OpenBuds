@@ -119,14 +119,48 @@ sealed interface ParsedTandemResponse {
         val command: Int,
         val values: List<Int>,
         override val raw: ByteArray,
-    ) : ParsedTandemResponse
+    ) : ParsedTandemResponse {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other !is Table2Common) return false
+            return family == other.family &&
+                command == other.command &&
+                values == other.values &&
+                raw.contentEquals(other.raw)
+        }
+
+        override fun hashCode(): Int {
+            var result = family.hashCode()
+            result = 31 * result + command
+            result = 31 * result + values.hashCode()
+            result = 31 * result + raw.contentHashCode()
+            return result
+        }
+    }
 
     data class Table2Generic(
         val family: String,
         val inquiredType: Int?,
         val values: List<Int>,
         override val raw: ByteArray,
-    ) : ParsedTandemResponse
+    ) : ParsedTandemResponse {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other !is Table2Generic) return false
+            return family == other.family &&
+                inquiredType == other.inquiredType &&
+                values == other.values &&
+                raw.contentEquals(other.raw)
+        }
+
+        override fun hashCode(): Int {
+            var result = family.hashCode()
+            result = 31 * result + (inquiredType ?: 0)
+            result = 31 * result + values.hashCode()
+            result = 31 * result + raw.contentHashCode()
+            return result
+        }
+    }
 }
 
 val Byte.unsigned: Int

@@ -104,9 +104,9 @@ class SonyBleClientChannelTest {
     }
 
     @Test
-    fun channelFromService_sppHasNoGattService() {
-        val sppChannel = TandemChannel.fromServiceUuid(SonyGatt.TANDEM_V2_HPC_SERVICE)
-        assertTrue(sppChannel != TandemChannel.SPP_MDR)
+    fun channelFromService_v2HpcIsNotSpp() {
+        val v2HpcChannel = TandemChannel.fromServiceUuid(SonyGatt.TANDEM_V2_HPC_SERVICE)
+        assertFalse(v2HpcChannel == TandemChannel.SPP_MDR)
     }
 
     @Test
