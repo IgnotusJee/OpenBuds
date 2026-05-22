@@ -28,9 +28,19 @@ class ProtocolCompatibilityArchitectureTest {
     }
 
     @Test
-    fun table2DefaultChannelIsMc() {
+    fun protocolDefaultChannelsMatchGattRouting() {
+        assertEquals(TandemChannel.GATT_V1_MC, defaultChannelFor(HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1))
         assertEquals(TandemChannel.GATT_V2_MC, defaultChannelFor(HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE2))
         assertEquals(TandemChannel.GATT_V1_MC, defaultChannelFor(HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE2))
+        assertEquals(TandemChannel.GATT_V2_HPC, defaultChannelFor(HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1))
+    }
+
+    @Test
+    fun codecDefaultChannelsMatchProtocolDefaults() {
+        assertEquals(TandemChannel.GATT_V1_MC, SonyTandemV1Table1Codec.defaultChannel)
+        assertEquals(TandemChannel.GATT_V1_MC, SonyTandemV1Table2Codec.defaultChannel)
+        assertEquals(TandemChannel.GATT_V2_HPC, SonyTandemV2Table1Codec.defaultChannel)
+        assertEquals(TandemChannel.GATT_V2_MC, SonyTandemV2Table2Codec.defaultChannel)
     }
 
     @Test

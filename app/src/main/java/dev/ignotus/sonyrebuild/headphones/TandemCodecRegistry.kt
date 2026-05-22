@@ -45,7 +45,7 @@ object UnknownTandemCodec : TandemCodec {
 
 object SonyTandemV1Table1Codec : TandemCodec {
     override val variant: HeadphoneProtocolVariant = HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1
-    override val defaultChannel: TandemChannel = TandemChannel.GATT_V2_HPC
+    override val defaultChannel: TandemChannel = TandemChannel.GATT_V1_MC
 
     fun buildGetBatteryStatus(type: PowerInquiredType): ByteArray =
         SonyTandemV1Table1Protocol.buildGetBatteryStatus(type)

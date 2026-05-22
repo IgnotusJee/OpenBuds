@@ -410,9 +410,9 @@ fun String.normalizedModelName(): String =
 
 fun defaultChannelFor(variant: HeadphoneProtocolVariant): TandemChannel =
     when (variant) {
+        HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1,
         HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE2 -> TandemChannel.GATT_V1_MC
         HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE2 -> TandemChannel.GATT_V2_MC
-        HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1,
         HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1,
         HeadphoneProtocolVariant.UNKNOWN -> TandemChannel.GATT_V2_HPC
     }

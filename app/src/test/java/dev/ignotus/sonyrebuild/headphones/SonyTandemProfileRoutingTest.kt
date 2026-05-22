@@ -130,6 +130,7 @@ class SonyTandemProfileRoutingTest {
             ),
             commands[0].bytes,
         )
+        assertEquals(TandemChannel.GATT_V1_MC, commands[0].channel)
     }
 
     @Test
@@ -144,6 +145,7 @@ class SonyTandemProfileRoutingTest {
             byteArrayOf(0x0E, 0x10, 0x00),
             batteryCmd.bytes,
         )
+        assertEquals(TandemChannel.GATT_V1_MC, batteryCmd.channel)
     }
 
     @Test
@@ -160,6 +162,7 @@ class SonyTandemProfileRoutingTest {
             NcAsmInquiredType.V1_TABLE_SET1_NC_ASM.code.unsigned,
             ncCmd.bytes[2].unsigned,
         )
+        assertEquals(TandemChannel.GATT_V1_MC, ncCmd.channel)
     }
 
     @Test
@@ -168,6 +171,10 @@ class SonyTandemProfileRoutingTest {
         assertEquals(
             HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1,
             profile.protocolFor(HeadphoneFeature.EQ),
+        )
+        assertTrue(
+            SonyTandemHeadphoneAdapter.buildRefreshEqCommands(profile)
+                .all { it.channel == TandemChannel.GATT_V2_HPC },
         )
     }
 
@@ -178,6 +185,16 @@ class SonyTandemProfileRoutingTest {
             HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1,
             profile.protocolFor(HeadphoneFeature.CLEAR_BASS),
         )
+        val context = EqWriteContext(
+            presetType = EqEbbInquiredType.EBB,
+            rawBandSteps = emptyList(),
+            usesCustomEqPayload = false,
+            currentPreset = null,
+        )
+        assertEquals(
+            TandemChannel.GATT_V2_HPC,
+            SonyTandemHeadphoneAdapter.buildSetClearBassCommands(profile, level = 3, context).single().channel,
+        )
     }
 
     @Test
@@ -186,6 +203,10 @@ class SonyTandemProfileRoutingTest {
         assertEquals(
             HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1,
             profile.protocolFor(HeadphoneFeature.PLAYBACK_CONTROL),
+        )
+        assertEquals(
+            TandemChannel.GATT_V2_HPC,
+            SonyTandemHeadphoneAdapter.buildRefreshPlaybackCommands(profile).single().channel,
         )
     }
 
