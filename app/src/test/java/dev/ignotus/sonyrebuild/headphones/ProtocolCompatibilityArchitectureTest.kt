@@ -1,0 +1,73 @@
+package dev.ignotus.sonyrebuild.headphones
+
+import dev.ignotus.sonyrebuild.ble.DiscoveredSonyDevice
+import dev.ignotus.sonyrebuild.protocol.PlaybackControl
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+import java.io.File
+
+class ProtocolCompatibilityArchitectureTest {
+    @Test
+    fun profileBindingsBackProtocolForAndCarryChannels() {
+        val profile = HeadphoneAdapterRegistry.resolve(
+            DiscoveredSonyDevice(
+                name = "LinkBuds S",
+                address = "00:11:22:33:44:55",
+                rssi = 0,
+                source = "bonded",
+                isLikelyControlEndpoint = true,
+            )
+        )
+
+        val binding = profile.bindingFor(HeadphoneFeature.NOISE_CONTROL)
+        requireNotNull(binding)
+        assertEquals(profile.protocolFor(HeadphoneFeature.NOISE_CONTROL), binding.variant)
+        assertEquals(TandemChannel.GATT_V2_HPC, binding.channel)
+    }
+
+    @Test
+    fun table2DefaultChannelIsMc() {
+        assertEquals(TandemChannel.GATT_V2_MC, defaultChannelFor(HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE2))
+        assertEquals(TandemChannel.GATT_V1_MC, defaultChannelFor(HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE2))
+    }
+
+    @Test
+    fun playbackCommandsAreTandemFirstForStaticProfiles() {
+        val profile = HeadphoneAdapterRegistry.resolve(
+            DiscoveredSonyDevice(
+                name = "LinkBuds S",
+                address = "00:11:22:33:44:55",
+                rssi = 0,
+                source = "bonded",
+                isLikelyControlEndpoint = true,
+            )
+        )
+
+        assertEquals(PlaybackDispatchStrategy.TANDEM_FIRST, profile.playbackDispatchStrategy)
+        val command = HeadphoneAdapterRegistry.buildPlaybackCommands(profile, PlaybackControl.PLAY).single()
+        assertEquals(TandemChannel.GATT_V2_HPC, command.channel)
+        assertEquals(0xA4, command.bytes[1].toInt() and 0xFF)
+    }
+
+    @Test
+    fun adapterDoesNotImportProtocolObjectsDirectly() {
+        val source = mainSource("headphones/SonyTandemHeadphoneAdapter.kt")
+        assertFalse(source.contains("import dev.ignotus.sonyrebuild.protocol.SonyTandemV1Table1Protocol"))
+        assertFalse(source.contains("import dev.ignotus.sonyrebuild.protocol.SonyTandemV2Table1Protocol"))
+        assertFalse(source.contains("SonyTandemV1Table1Protocol."))
+        assertFalse(source.contains("SonyTandemV2Table1Protocol."))
+    }
+
+    @Test
+    fun repositoryDoesNotImportEqWriteStrategyOrDropCommandChannel() {
+        val source = mainSource("data/SonyHeadphoneRepository.kt")
+        assertFalse(source.contains("import dev.ignotus.sonyrebuild.headphones.EqWriteStrategy"))
+        assertFalse(source.contains("client.send(bytes)"))
+        assertTrue(source.contains("client.sendToChannel(command.channel, command.bytes)"))
+    }
+
+    private fun mainSource(path: String): String =
+        File("src/main/java/dev/ignotus/sonyrebuild/$path").readText()
+}

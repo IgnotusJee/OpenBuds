@@ -14,11 +14,14 @@ import dev.ignotus.sonyrebuild.ble.SonyBleClientListener
 import dev.ignotus.sonyrebuild.ble.SonyBleConnectionInfo
 import dev.ignotus.sonyrebuild.ble.UnsupportedEndpointDiagnostics
 import dev.ignotus.sonyrebuild.headphones.ConnectedHeadphoneProfile
-import dev.ignotus.sonyrebuild.headphones.EqWriteStrategy
+import dev.ignotus.sonyrebuild.headphones.EqWriteContext
 import dev.ignotus.sonyrebuild.headphones.HeadphoneAdapterRegistry
+import dev.ignotus.sonyrebuild.headphones.HeadphoneCommand
 import dev.ignotus.sonyrebuild.headphones.HeadphoneFeature
 import dev.ignotus.sonyrebuild.headphones.HeadphoneFormFactor
 import dev.ignotus.sonyrebuild.headphones.HeadphoneTransport
+import dev.ignotus.sonyrebuild.headphones.PlaybackDispatchStrategy
+import dev.ignotus.sonyrebuild.headphones.TandemChannel
 import dev.ignotus.sonyrebuild.media.MediaPlaybackController
 import dev.ignotus.sonyrebuild.protocol.AmbientSoundMode
 import dev.ignotus.sonyrebuild.protocol.DeviceInfoType
@@ -27,6 +30,7 @@ import dev.ignotus.sonyrebuild.protocol.EqPresetId
 import dev.ignotus.sonyrebuild.protocol.NcAsmInquiredType
 import dev.ignotus.sonyrebuild.protocol.NoiseControlMode
 import dev.ignotus.sonyrebuild.protocol.ParsedTandemResponse
+import dev.ignotus.sonyrebuild.protocol.PlaybackControl
 import dev.ignotus.sonyrebuild.protocol.PlaybackStatus
 import dev.ignotus.sonyrebuild.protocol.PowerInquiredType
 import dev.ignotus.sonyrebuild.protocol.QuickAccessKey
@@ -209,7 +213,7 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
         }
         val profile = ensureConnectedProfile()
         HeadphoneAdapterRegistry.buildRefreshCommands(profile)
-            .forEach { sendCommand(it.label, it.bytes) }
+            .forEach(::sendCommand)
         updatePlaybackStatusFromAudioManager()
     }
 
@@ -230,7 +234,7 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
         }
         val profile = ensureConnectedProfile()
         HeadphoneAdapterRegistry.buildSetNoiseControlModeCommands(profile, mode, level, ambientMode)
-            .forEach { sendCommand(it.label, it.bytes) }
+            .forEach(::sendCommand)
         refreshNoiseControlStateAfterWrite(profile)
     }
 
@@ -261,7 +265,7 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
             NoiseControlMode.AMBIENT_SOUND,
             clamped,
             mode,
-        ).forEach { sendCommand(it.label, it.bytes) }
+        ).forEach(::sendCommand)
         refreshNoiseControlStateAfterWrite(profile)
     }
 
@@ -291,7 +295,7 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
             NoiseControlMode.AMBIENT_SOUND,
             level,
             ambientMode,
-        ).forEach { sendCommand(it.label, it.bytes) }
+        ).forEach(::sendCommand)
         refreshNoiseControlStateAfterWrite(profile)
     }
 
@@ -305,22 +309,12 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
             return
         }
         val profile = ensureConnectedProfile()
-        val type = if (profile.eqWriteStrategy == EqWriteStrategy.XM4_COMBINED_EBB) EqEbbInquiredType.EBB else _state.value.eqState.presetType
-        val bandSteps = _state.value.eqState.rawBandSteps.takeIf {
-            it.isNotEmpty() && when {
-                profile.eqWriteStrategy == EqWriteStrategy.XM4_COMBINED_EBB -> preset in setOf(
-                    EqPresetId.CUSTOM,
-                    EqPresetId.USER_SETTING1,
-                    EqPresetId.USER_SETTING2,
-                )
-                else -> type in setOf(EqEbbInquiredType.EBB, EqEbbInquiredType.PRESET_EQ)
-            }
-        }.orEmpty()
+        val context = currentEqWriteContext()
         _state.update {
             it.copy(eqState = it.eqState.copy(preset = preset, enabled = preset != EqPresetId.OFF))
         }
-        HeadphoneAdapterRegistry.buildSetEqPresetCommands(profile, preset, type, bandSteps)
-            .forEach { sendCommand(it.label, it.bytes) }
+        HeadphoneAdapterRegistry.buildSetEqPresetCommands(profile, preset, context)
+            .forEach(::sendCommand)
         refreshEqState()
     }
 
@@ -335,20 +329,22 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
         }
         val clamped = level.coerceIn(-10, 10)
         val eq = _state.value.eqState
-        if (ensureConnectedProfile().eqWriteStrategy != EqWriteStrategy.XM4_COMBINED_EBB && eq.rawBandSteps.size > EQ_CLEAR_BASS_RAW_INDEX) {
-            val targetPreset = eq.bandEditPreset()
-            val rawSteps = eq.rawBandSteps.toMutableList()
-            rawSteps[EQ_CLEAR_BASS_RAW_INDEX] = displayEqStepToRaw(clamped)
-            updateEqBands(rawSteps, targetPreset)
-            sendEqBandSteps("SET Clear Bass as EQ band $clamped", rawSteps, targetPreset)
-            refreshEqState()
-            return
-        }
+        val profile = ensureConnectedProfile()
+        val targetPreset = eq.bandEditPreset()
+        val context = currentEqWriteContext()
         _state.update {
             it.copy(eqState = it.eqState.copy(clearBass = clamped))
         }
-        HeadphoneAdapterRegistry.buildSetClearBassCommands(ensureConnectedProfile(), clamped)
-            .forEach { sendCommand(it.label, it.bytes) }
+        val nextContext = if (eq.rawBandSteps.size > EQ_CLEAR_BASS_RAW_INDEX) {
+            val rawSteps = eq.rawBandSteps.toMutableList()
+            rawSteps[EQ_CLEAR_BASS_RAW_INDEX] = displayEqStepToRaw(clamped)
+            updateEqBands(rawSteps, targetPreset)
+            context.copy(rawBandSteps = rawSteps, currentPreset = targetPreset)
+        } else {
+            context
+        }
+        HeadphoneAdapterRegistry.buildSetClearBassCommands(profile, clamped, nextContext)
+            .forEach(::sendCommand)
         refreshEqState()
     }
 
@@ -387,9 +383,11 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
             "eq_band" -> setCustomEqBand(0, (state.value.eqState.bandSteps.firstOrNull() ?: 0) + 1)
             "battery_tandem" -> HeadphoneAdapterRegistry.buildRefreshBatteryCommands(ensureConnectedProfile())
                 .firstOrNull()
-                ?.let { sendCommandIfReady("DEBUG ${it.label}", it.bytes) }
+                ?.let { sendCommandIfReady(it.copy(label = "DEBUG ${it.label}")) }
                 ?: appendLog("Debug battery action ignored: current profile has no battery query")
-            "raw" -> rawHex?.hexToByteArrayOrNull()?.let { sendCommandIfReady("DEBUG RAW", it) }
+            "raw" -> rawHex?.hexToByteArrayOrNull()?.let {
+                sendCommandIfReady(HeadphoneCommand("DEBUG RAW", it))
+            }
                 ?: appendLog("Debug raw action ignored: invalid hex")
             else -> appendLog("Unknown debug action: $action")
         }
@@ -397,22 +395,20 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
 
     fun playbackPrevious() {
         if (!canWrite(HeadphoneFeature.PLAYBACK_CONTROL)) return
-        appendLog("MEDIA previous via AudioManager")
-        mediaController.previous()
+        dispatchPlayback(PlaybackControl.TRACK_DOWN, mediaFallback = { mediaController.previous() })
         refreshPlaybackState()
     }
 
     fun playbackPlayPause() {
         if (!canWrite(HeadphoneFeature.PLAYBACK_CONTROL)) return
         val wasPlaying = _state.value.playbackStatus == PlaybackStatus.PLAYING
-        appendLog("MEDIA play/pause via AudioManager wasPlaying=$wasPlaying")
-        mediaController.playPause()
+        val control = if (wasPlaying) PlaybackControl.PAUSE else PlaybackControl.PLAY
+        dispatchPlayback(control, mediaFallback = { mediaController.playPause() })
     }
 
     fun playbackNext() {
         if (!canWrite(HeadphoneFeature.PLAYBACK_CONTROL)) return
-        appendLog("MEDIA next via AudioManager")
-        mediaController.next()
+        dispatchPlayback(PlaybackControl.TRACK_UP, mediaFallback = { mediaController.next() })
         refreshPlaybackState()
     }
 
@@ -428,15 +424,43 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
         _state.update { it.copy(strictSonyScanFilter = enabled) }
     }
 
-    private fun sendCommand(label: String, bytes: ByteArray) {
-        appendLog("$label -> ${bytes.hexString()}")
-        client.send(bytes)
+    private fun sendCommand(command: HeadphoneCommand) {
+        appendLog("${command.label} [${command.channel}] -> ${command.bytes.hexString()}")
+        client.sendToChannel(command.channel, command.bytes)
     }
 
-    private fun sendCommandIfReady(label: String, bytes: ByteArray) {
+    private fun sendCommandIfReady(command: HeadphoneCommand) {
         if (_state.value.deviceInfo.protocolReady) {
-            sendCommand(label, bytes)
+            sendCommand(command)
         }
+    }
+
+    private fun dispatchPlayback(control: PlaybackControl, mediaFallback: () -> Unit) {
+        val profile = ensureConnectedProfile()
+        val commands = if (_state.value.deviceInfo.protocolReady) {
+            HeadphoneAdapterRegistry.buildPlaybackCommands(profile, control)
+        } else {
+            emptyList()
+        }
+        if (commands.isNotEmpty() && profile.playbackDispatchStrategy != PlaybackDispatchStrategy.ANDROID_MEDIA_FALLBACK) {
+            appendLog("PLAYBACK ${control.name} via Tandem")
+            commands.forEach(::sendCommand)
+            return
+        }
+        if (profile.playbackDispatchStrategy != PlaybackDispatchStrategy.TANDEM_ONLY) {
+            appendLog("PLAYBACK ${control.name} via Android media fallback")
+            mediaFallback()
+        }
+    }
+
+    private fun currentEqWriteContext(): EqWriteContext {
+        val eq = _state.value.eqState
+        return EqWriteContext(
+            presetType = eq.presetType,
+            rawBandSteps = eq.rawBandSteps,
+            usesCustomEqPayload = eq.usesCustomEqPayload,
+            currentPreset = eq.preset,
+        )
     }
 
     override fun onBluetoothUnavailable(reason: String) {
@@ -564,10 +588,10 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
         refreshBasics()
     }
 
-    override fun onMessage(raw: ByteArray) {
-        appendLog("RX ${raw.hexString()}")
+    override fun onMessage(channel: TandemChannel, raw: ByteArray) {
+        appendLog("RX [$channel] ${raw.hexString()}")
         val profile = _state.value.connectedProfile ?: ensureConnectedProfile()
-        when (val parsed = HeadphoneAdapterRegistry.parse(profile, raw)) {
+        when (val parsed = HeadphoneAdapterRegistry.parse(profile, channel, raw)) {
             is ParsedTandemResponse.DeviceInfo -> applyDeviceInfo(parsed)
             is ParsedTandemResponse.CommonStatus -> applyCommonStatus(parsed)
             is ParsedTandemResponse.Battery -> applyBattery(parsed)
@@ -579,6 +603,10 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
             is ParsedTandemResponse.QuickAccess -> applyQuickAccess(parsed)
             is ParsedTandemResponse.WearingStatus -> applyWearingStatus(parsed)
             is ParsedTandemResponse.Unknown -> applyKnownOrUnknown(parsed)
+            is ParsedTandemResponse.Table2Common,
+            is ParsedTandemResponse.Table2Generic -> {
+                appendLog("Table2 ${parsed::class.simpleName} channel=$channel raw=${parsed.raw.hexString()}")
+            }
         }
     }
 
@@ -720,18 +748,15 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
     }
 
     private fun sendEqBandSteps(label: String, rawSteps: List<Int>, preset: EqPresetId?) {
-        val eq = _state.value.eqState
         val profile = ensureConnectedProfile()
-        val type = if (profile.eqWriteStrategy == EqWriteStrategy.XM4_COMBINED_EBB) EqEbbInquiredType.EBB else eq.presetType
-        val useCustomPayload = profile.eqWriteStrategy != EqWriteStrategy.XM4_COMBINED_EBB && eq.usesCustomEqPayload && preset == null
-        HeadphoneAdapterRegistry.buildSetEqBandCommands(profile, rawSteps, preset, useCustomPayload, type)
-            .forEach { sendCommand(label, it.bytes) }
+        HeadphoneAdapterRegistry.buildSetEqBandCommands(profile, rawSteps, preset, currentEqWriteContext())
+            .forEach { sendCommand(it.copy(label = label)) }
     }
 
     private fun refreshNoiseControlState() {
         val profile = ensureConnectedProfile()
         HeadphoneAdapterRegistry.buildRefreshNoiseControlCommands(profile)
-            .forEach { sendCommand(it.label, it.bytes) }
+            .forEach(::sendCommand)
     }
 
     private fun refreshNoiseControlStateAfterWrite(profile: ConnectedHeadphoneProfile) {
@@ -745,13 +770,13 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
     private fun refreshEqState() {
         val profile = ensureConnectedProfile()
         HeadphoneAdapterRegistry.buildRefreshEqCommands(profile)
-            .forEach { sendCommand(it.label, it.bytes) }
+            .forEach(::sendCommand)
     }
 
     private fun refreshPlaybackState() {
         val profile = ensureConnectedProfile()
         HeadphoneAdapterRegistry.buildRefreshPlaybackCommands(profile)
-            .forEach { sendCommandIfReady(it.label, it.bytes) }
+            .forEach(::sendCommandIfReady)
     }
 
     private fun updateEqBands(rawSteps: List<Int>, preset: EqPresetId? = _state.value.eqState.preset) {

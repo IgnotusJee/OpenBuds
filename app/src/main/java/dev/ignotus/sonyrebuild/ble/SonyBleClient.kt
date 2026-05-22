@@ -22,6 +22,7 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
+import dev.ignotus.sonyrebuild.headphones.TandemChannel
 import dev.ignotus.sonyrebuild.protocol.SonyGatt
 import dev.ignotus.sonyrebuild.protocol.hexString
 import java.io.IOException
@@ -67,6 +68,12 @@ data class SonyBleConnectionInfo(
     val transport: String = "GATT_HPC",
 )
 
+data class GattTandemEndpoint(
+    val channel: TandemChannel,
+    val toAcc: BluetoothGattCharacteristic,
+    val fromAcc: BluetoothGattCharacteristic,
+)
+
 data class UnsupportedEndpointDiagnostics(
     val reason: String,
     val serviceLabels: List<String>,
@@ -83,7 +90,7 @@ interface SonyBleClientListener {
     fun onScanStateChanged(scanning: Boolean)
     fun onConnectionStateChanged(connected: Boolean, device: DiscoveredSonyDevice?)
     fun onReady(info: SonyBleConnectionInfo)
-    fun onMessage(raw: ByteArray)
+    fun onMessage(channel: TandemChannel, raw: ByteArray)
     fun onLog(message: String)
 }
 
@@ -103,6 +110,7 @@ class SonyBleClient(
     private var connectedDevice: DiscoveredSonyDevice? = null
     private var toAcc: BluetoothGattCharacteristic? = null
     private var fromAcc: BluetoothGattCharacteristic? = null
+    private val gattEndpoints: MutableMap<TandemChannel, GattTandemEndpoint> = mutableMapOf()
     private var writableValueLength: Int? = null
     private var optimalMtu: Int? = null
     private var negotiatedMtu: Int = 23
@@ -110,7 +118,8 @@ class SonyBleClient(
     private var determineMtuNotificationEnabled = false
     private var unsupportedProbe: UnsupportedEndpointProbe? = null
     private var sppTransport: SonySppTransport? = null
-    private val writeQueue = ConcurrentLinkedQueue<ByteArray>()
+    private val writeQueue = ConcurrentLinkedQueue<PendingTandemWrite>()
+    private val pendingNotifyEndpoints = ArrayDeque<GattTandemEndpoint>()
     @Volatile private var writing = false
 
     private val scanCallback = object : ScanCallback() {
@@ -162,9 +171,11 @@ class SonyBleClient(
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 log("GATT disconnected: status=$status")
                 writeQueue.clear()
+                pendingNotifyEndpoints.clear()
                 writing = false
                 toAcc = null
                 fromAcc = null
+                gattEndpoints.clear()
                 handshakeStep = HandshakeStep.Idle
                 determineMtuNotificationEnabled = false
                 listener.onConnectionStateChanged(false, connectedDevice)
@@ -187,15 +198,41 @@ class SonyBleClient(
                 return
             }
             log("Tandem V2 HPC service discovered")
-            toAcc = service.getCharacteristic(SonyGatt.TANDEM_HPC_TO_ACC)
-            fromAcc = service.getCharacteristic(SonyGatt.TANDEM_HPC_FROM_ACC)
+            val hpcSpec = TandemGattRouting.endpointSpecFor(TandemChannel.GATT_V2_HPC)
+            toAcc = service.getCharacteristic(hpcSpec.toAccUuid)
+            fromAcc = service.getCharacteristic(hpcSpec.fromAccUuid)
             if (toAcc == null || fromAcc == null) {
                 val characteristics = service.characteristics.joinToString { it.uuid.toString() }
                 log("Tandem V2 HPC characteristics incomplete. Available=[$characteristics]")
                 listener.onBluetoothUnavailable("Tandem V2 HPC characteristics are incomplete")
                 return
             }
+            gattEndpoints[TandemChannel.GATT_V2_HPC] = GattTandemEndpoint(
+                channel = TandemChannel.GATT_V2_HPC,
+                toAcc = toAcc!!,
+                fromAcc = fromAcc!!,
+            )
+            discoverMcEndpoints(gatt)
             beginTandemHandshake(gatt)
+        }
+
+        private fun discoverMcEndpoints(gatt: BluetoothGatt) {
+            for (channel in listOf(TandemChannel.GATT_V2_MC, TandemChannel.GATT_V1_MC)) {
+                val spec = TandemGattRouting.endpointSpecFor(channel)
+                val service = gatt.getService(spec.serviceUuid) ?: continue
+                val mcToAcc = service.getCharacteristic(spec.toAccUuid)
+                val mcFromAcc = service.getCharacteristic(spec.fromAccUuid)
+                if (mcToAcc != null && mcFromAcc != null) {
+                    gattEndpoints[channel] = GattTandemEndpoint(
+                        channel = channel,
+                        toAcc = mcToAcc,
+                        fromAcc = mcFromAcc,
+                    )
+                    log("MC endpoint registered: $channel")
+                } else {
+                    log("MC service $channel found but characteristics incomplete")
+                }
+            }
         }
 
         override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
@@ -229,7 +266,7 @@ class SonyBleClient(
             characteristic: BluetoothGattCharacteristic,
             value: ByteArray,
         ) {
-            handleCharacteristicChanged(gatt, characteristic.uuid, value)
+            handleCharacteristicChanged(characteristic, value)
         }
 
         @Deprecated("Used below Android 13")
@@ -237,7 +274,7 @@ class SonyBleClient(
             gatt: BluetoothGatt,
             characteristic: BluetoothGattCharacteristic,
         ) {
-            handleCharacteristicChanged(gatt, characteristic.uuid, characteristic.value ?: byteArrayOf())
+            handleCharacteristicChanged(characteristic, characteristic.value ?: byteArrayOf())
         }
 
         override fun onCharacteristicWrite(
@@ -266,17 +303,22 @@ class SonyBleClient(
                     handshakeStep == HandshakeStep.DisableDetermineMtu -> {
                     readWritableValueLength(gatt)
                 }
-                descriptor.characteristic?.uuid == SonyGatt.TANDEM_HPC_FROM_ACC &&
-                    handshakeStep == HandshakeStep.EnableTandemNotifications -> {
-                    handshakeStep = HandshakeStep.Ready
-                    listener.onReady(
-                        SonyBleConnectionInfo(
-                            mtu = negotiatedMtu,
-                            writableValueLength = writableValueLength,
-                            optimalMtu = optimalMtu,
-                            transport = "GATT_HPC",
+                handshakeStep == HandshakeStep.EnableTandemNotifications &&
+                    TandemGattRouting.fromAccChannel(
+                        endpoints = gattEndpoints,
+                        serviceUuid = descriptor.characteristic?.service?.uuid,
+                        characteristicUuid = descriptor.characteristic?.uuid,
+                    ) != null -> {
+                    if (status != BluetoothGatt.GATT_SUCCESS) {
+                        val channel = TandemGattRouting.fromAccChannel(
+                            endpoints = gattEndpoints,
+                            serviceUuid = descriptor.characteristic?.service?.uuid,
+                            characteristicUuid = descriptor.characteristic?.uuid,
                         )
-                    )
+                        listener.onBluetoothUnavailable("Failed to enable Tandem notification for $channel: $status")
+                        return
+                    }
+                    enableNextTandemNotification(gatt)
                 }
             }
         }
@@ -379,9 +421,11 @@ class SonyBleClient(
     private fun closeGatt(notify: Boolean) {
         closeSpp(notify = false)
         writeQueue.clear()
+        pendingNotifyEndpoints.clear()
         writing = false
         toAcc = null
         fromAcc = null
+        gattEndpoints.clear()
         handshakeStep = HandshakeStep.Idle
         determineMtuNotificationEnabled = false
         unsupportedProbe = null
@@ -414,11 +458,32 @@ class SonyBleClient(
             transport.send(bytes)
             return
         }
-        if (gatt == null || toAcc == null) {
-            listener.onBluetoothUnavailable("Tandem write channel is not ready")
+        writeToChannel(TandemChannel.GATT_V2_HPC, bytes)
+    }
+
+    fun sendToChannel(channel: TandemChannel, bytes: ByteArray) {
+        log("TX $channel ${bytes.hexString()}")
+        val transport = sppTransport
+        if (transport != null) {
+            transport.send(bytes)
             return
         }
-        writeQueue.add(bytes)
+        writeToChannel(channel, bytes)
+    }
+
+    fun availableChannels(): Set<TandemChannel> {
+        val channels = mutableSetOf<TandemChannel>()
+        if (sppTransport != null) channels.add(TandemChannel.SPP_MDR)
+        channels.addAll(gattEndpoints.keys)
+        return channels
+    }
+
+    private fun writeToChannel(channel: TandemChannel, bytes: ByteArray) {
+        if (channel !in gattEndpoints && sppTransport == null) {
+            listener.onBluetoothUnavailable("Channel $channel is not available (available: ${availableChannels()})")
+            return
+        }
+        writeQueue.add(PendingTandemWrite(channel, bytes))
         drainWriteQueue()
     }
 
@@ -460,7 +525,7 @@ class SonyBleClient(
                 socket.connect()
                 sppTransport = SonySppTransport(
                     socket = socket,
-                    onPayload = listener::onMessage,
+                    onPayload = { payload -> listener.onMessage(TandemChannel.SPP_MDR, payload) },
                     onClosed = { reason ->
                         log(reason ?: "SPP transport closed")
                         sppTransport = null
@@ -571,15 +636,21 @@ class SonyBleClient(
         log("Read $uuid = ${value.hexString()}")
     }
 
-    private fun handleCharacteristicChanged(gatt: BluetoothGatt, uuid: UUID, value: ByteArray) {
+    private fun handleCharacteristicChanged(characteristic: BluetoothGattCharacteristic, value: ByteArray) {
+        val uuid = characteristic.uuid
         if (uuid == SonyGatt.DETERMINE_MTU) {
             log("Handshake: DETERMINE_MTU notification ${value.hexString()}")
             if (determineMtuNotificationEnabled) {
-                readWritableValueLength(gatt)
+                gatt?.let(::readWritableValueLength)
             }
             return
         }
-        listener.onMessage(value)
+        val channel = TandemGattRouting.fromAccChannel(
+            endpoints = gattEndpoints,
+            serviceUuid = characteristic.service?.uuid,
+            characteristicUuid = uuid,
+        ) ?: TandemChannel.GATT_V2_HPC
+        listener.onMessage(channel, value)
     }
 
     private fun beginUnsupportedEndpointProbe(
@@ -777,12 +848,19 @@ class SonyBleClient(
     }
 
     private fun enableTandemNotifications(gatt: BluetoothGatt) {
-        val characteristic = fromAcc ?: return
         handshakeStep = HandshakeStep.EnableTandemNotifications
-        log("Handshake: enable TANDEM_HPC_FROM_ACC notification")
-        gatt.setCharacteristicNotification(characteristic, true)
-        val descriptor = characteristic.getDescriptor(CLIENT_CHARACTERISTIC_CONFIG)
-        if (descriptor == null) {
+        pendingNotifyEndpoints.clear()
+        val orderedChannels = TandemGattRouting.notificationOrder(gattEndpoints.keys)
+        gattEndpoints.values
+            .sortedBy { endpoint -> orderedChannels.indexOf(endpoint.channel) }
+            .forEach { pendingNotifyEndpoints.addLast(it) }
+        enableNextTandemNotification(gatt)
+    }
+
+    private fun enableNextTandemNotification(gatt: BluetoothGatt) {
+        val endpoint = pendingNotifyEndpoints.removeFirstOrNull()
+        if (endpoint == null) {
+            handshakeStep = HandshakeStep.Ready
             listener.onReady(
                 SonyBleConnectionInfo(
                     mtu = negotiatedMtu,
@@ -791,6 +869,14 @@ class SonyBleClient(
                     transport = "GATT_HPC",
                 )
             )
+            return
+        }
+        val characteristic = endpoint.fromAcc
+        log("Handshake: enable ${endpoint.channel} ${SonyGatt.characteristicLabel(characteristic.uuid)} notification")
+        gatt.setCharacteristicNotification(characteristic, true)
+        val descriptor = characteristic.getDescriptor(CLIENT_CHARACTERISTIC_CONFIG)
+        if (descriptor == null) {
+            enableNextTandemNotification(gatt)
             return
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -835,19 +921,25 @@ class SonyBleClient(
 
     private fun drainWriteQueue() {
         val gatt = gatt ?: return
-        val characteristic = toAcc ?: return
         if (writing) return
-        val bytes = writeQueue.poll() ?: return
+        val pending = writeQueue.poll() ?: return
+        val endpoint = gattEndpoints[pending.channel]
+        if (endpoint == null) {
+            listener.onBluetoothUnavailable("Channel ${pending.channel} is not available (available: ${availableChannels()})")
+            drainWriteQueue()
+            return
+        }
+        val characteristic = endpoint.toAcc
         writing = true
         val accepted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             gatt.writeCharacteristic(
                 characteristic,
-                bytes,
+                pending.bytes,
                 BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT,
             ) == BluetoothGatt.GATT_SUCCESS
         } else {
             @Suppress("DEPRECATION")
-            characteristic.value = bytes
+            characteristic.value = pending.bytes
             characteristic.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
             @Suppress("DEPRECATION")
             gatt.writeCharacteristic(characteristic)

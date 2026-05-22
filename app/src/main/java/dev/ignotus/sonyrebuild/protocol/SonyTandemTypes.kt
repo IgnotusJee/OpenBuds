@@ -113,6 +113,20 @@ sealed interface ParsedTandemResponse {
         val payload: ByteArray,
         override val raw: ByteArray,
     ) : ParsedTandemResponse
+
+    data class Table2Common(
+        val family: String,
+        val command: Int,
+        val values: List<Int>,
+        override val raw: ByteArray,
+    ) : ParsedTandemResponse
+
+    data class Table2Generic(
+        val family: String,
+        val inquiredType: Int?,
+        val values: List<Int>,
+        override val raw: ByteArray,
+    ) : ParsedTandemResponse
 }
 
 val Byte.unsigned: Int

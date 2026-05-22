@@ -12,32 +12,33 @@ import dev.ignotus.sonyrebuild.protocol.NoiseControlMode
 import dev.ignotus.sonyrebuild.protocol.ParsedTandemResponse
 import dev.ignotus.sonyrebuild.protocol.PlaybackControl
 import dev.ignotus.sonyrebuild.protocol.PowerInquiredType
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.COMMON_NTFY_BATTERY_LEVEL
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.COMMON_RET_BATTERY_LEVEL
 import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.DATA_MDR
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.EQEBB_GET_PARAM
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.EQEBB_GET_STATUS
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.EQEBB_NTFY_PARAM
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.EQEBB_NTFY_STATUS
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.EQEBB_RET_PARAM
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.EQEBB_RET_STATUS
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.EQEBB_SET_PARAM
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_GET_PARAM
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_GET_STATUS
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_NTFY_PARAM
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_NTFY_STATUS
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_RET_PARAM
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_RET_STATUS
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_SET_PARAM
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.POWER_NTFY_STATUS
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.POWER_RET_STATUS
-import dev.ignotus.sonyrebuild.protocol.SonyTandemV1Table1Protocol
-import dev.ignotus.sonyrebuild.protocol.SonyTandemV2Table1Protocol
+import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.DATA_MDR_NO2
 
-object SonyTandemV2HeadphoneAdapter : HeadphoneAdapter {
-    override val id: String = "sony-tandem-v2"
+object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
+    private const val COMMON_RET_BATTERY_LEVEL: Byte = 0x11
+    private const val COMMON_NTFY_BATTERY_LEVEL: Byte = 0x13
+    private const val POWER_RET_STATUS: Byte = 0x23
+    private const val POWER_NTFY_STATUS: Byte = 0x25
+    private const val EQEBB_GET_STATUS: Byte = 0x52
+    private const val EQEBB_RET_STATUS: Byte = 0x53
+    private const val EQEBB_NTFY_STATUS: Byte = 0x55
+    private const val EQEBB_GET_PARAM: Byte = 0x56
+    private const val EQEBB_RET_PARAM: Byte = 0x57
+    private const val EQEBB_SET_PARAM: Byte = 0x58
+    private const val EQEBB_NTFY_PARAM: Byte = 0x59
+    private const val NCASM_GET_STATUS: Byte = 0x62
+    private const val NCASM_RET_STATUS: Byte = 0x63
+    private const val NCASM_NTFY_STATUS: Byte = 0x65
+    private const val NCASM_GET_PARAM: Byte = 0x66
+    private const val NCASM_RET_PARAM: Byte = 0x67
+    private const val NCASM_SET_PARAM: Byte = 0x68
+    private const val NCASM_NTFY_PARAM: Byte = 0x69
+    override val id: String = "sony-tandem"
     override val brand: String = "Sony"
     override val protocolName: String = "Sony Tandem"
+
+    val legacyIds: Set<String> = setOf("sony-tandem-v2")
 
     private val commonFeatures = setOf(
         HeadphoneFeature.DEVICE_INFO,
@@ -111,6 +112,14 @@ object SonyTandemV2HeadphoneAdapter : HeadphoneAdapter {
 
     private val templates = listOf(wh1000xm4, linkBudsS)
 
+    private fun command(
+        profile: ConnectedHeadphoneProfile,
+        feature: HeadphoneFeature,
+        label: String,
+        bytes: ByteArray,
+    ): HeadphoneCommand =
+        HeadphoneCommand(label = label, bytes = bytes, channel = profile.channelFor(feature))
+
     override fun match(
         device: DiscoveredSonyDevice,
         reportedModelName: String?,
@@ -141,13 +150,13 @@ object SonyTandemV2HeadphoneAdapter : HeadphoneAdapter {
     override fun buildRefreshCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> =
         buildList {
             if (profile.capabilities.queryProtocolInfo) {
-                add(HeadphoneCommand("GET protocol info", SonyTandemV2Table1Protocol.buildGetProtocolInfo()))
+                add(command(profile, HeadphoneFeature.DEVICE_INFO, "GET protocol info", SonyTandemV2Table1Codec.buildGetProtocolInfo()))
             }
             if (profile.supports(HeadphoneFeature.DEVICE_INFO)) {
                 DeviceInfoType.entries.forEach {
-                    add(HeadphoneCommand("GET device info $it", SonyTandemV2Table1Protocol.buildGetDeviceInfo(it)))
+                    add(command(profile, HeadphoneFeature.DEVICE_INFO, "GET device info $it", SonyTandemV2Table1Codec.buildGetDeviceInfo(it)))
                 }
-                add(HeadphoneCommand("GET display firmware version", SonyTandemV2Table1Protocol.buildGetDisplayFirmwareVersion()))
+                add(command(profile, HeadphoneFeature.DEVICE_INFO, "GET display firmware version", SonyTandemV2Table1Codec.buildGetDisplayFirmwareVersion()))
             }
             addAll(buildRefreshBatteryCommands(profile))
             if (profile.supports(HeadphoneFeature.NOISE_CONTROL)) {
@@ -163,10 +172,10 @@ object SonyTandemV2HeadphoneAdapter : HeadphoneAdapter {
                 addAll(buildRefreshLeaCommands(profile))
             }
             if (profile.supports(HeadphoneFeature.QUICK_ACCESS)) {
-                add(HeadphoneCommand("GET Quick Access", SonyTandemV2Table1Protocol.buildGetQuickAccess()))
+                add(command(profile, HeadphoneFeature.QUICK_ACCESS, "GET Quick Access", SonyTandemV2Table1Codec.buildGetQuickAccess()))
             }
             if (profile.supports(HeadphoneFeature.WEARING_STATUS)) {
-                add(HeadphoneCommand("GET Wearing status", SonyTandemV2Table1Protocol.buildGetWearingStatus()))
+                add(command(profile, HeadphoneFeature.WEARING_STATUS, "GET Wearing status", SonyTandemV2Table1Codec.buildGetWearingStatus()))
             }
         }
 
@@ -190,43 +199,56 @@ object SonyTandemV2HeadphoneAdapter : HeadphoneAdapter {
         ambientMode: AmbientSoundMode,
     ): List<HeadphoneCommand> {
         val level = ambientLevel.coerceIn(1, 20)
-        return if (NcAsmInquiredType.V1_TABLE_SET1_NC_ASM in profile.capabilities.writableNoiseControlTypes) {
-            listOf(
-                HeadphoneCommand(
+
+        // V1 profile: use V1 TableSet1 builder — protocolFor is the single source of truth
+        if (profile.protocolFor(HeadphoneFeature.NOISE_CONTROL) == HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1) {
+            return listOf(
+                command(
+                    profile,
+                    HeadphoneFeature.NOISE_CONTROL,
                     "SET NC/ASM V1 table1 mode $mode level=$level voice=${ambientMode == AmbientSoundMode.VOICE}",
-                    SonyTandemV1Table1Protocol.buildSetNoiseControlMode(mode, level, ambientMode),
+                    SonyTandemV1Table1Codec.buildSetNoiseControlMode(mode, level, ambientMode),
                 )
             )
-        } else if (NcAsmInquiredType.NC_MODE_SWITCH_AND_ASM_SEAMLESS in profile.capabilities.writableNoiseControlTypes) {
+        }
+
+        // V2 profile: select builder based on capability subtype
+        return if (NcAsmInquiredType.NC_MODE_SWITCH_AND_ASM_SEAMLESS in profile.capabilities.writableNoiseControlTypes) {
             listOf(
-                HeadphoneCommand(
+                command(
+                    profile,
+                    HeadphoneFeature.NOISE_CONTROL,
                     "SET NC/ASM 0x14 mode $mode level=$level voice=${ambientMode == AmbientSoundMode.VOICE}",
-                    SonyTandemV2Table1Protocol.buildSetNcModeSwitchAndAmbientLevel(mode, level, ambientMode),
+                    SonyTandemV2Table1Codec.buildSetNcModeSwitchAndAmbientLevel(mode, level, ambientMode),
                 )
             )
         } else if (NcAsmInquiredType.MODE_NC_ASM_DUAL_NC_MODE_SWITCH_AND_ASM_SEAMLESS in
             profile.capabilities.writableNoiseControlTypes
         ) {
             listOf(
-                HeadphoneCommand(
+                command(
+                    profile,
+                    HeadphoneFeature.NOISE_CONTROL,
                     "SET NC/ASM mode $mode level=$level voice=${ambientMode == AmbientSoundMode.VOICE}",
-                    SonyTandemV2Table1Protocol.buildSetNoiseControlMode(mode, level, ambientMode),
+                    SonyTandemV2Table1Codec.buildSetNoiseControlMode(mode, level, ambientMode),
                 )
             )
         } else {
             when (mode) {
                 NoiseControlMode.NOISE_CANCELLING -> listOf(
-                    HeadphoneCommand("SET NC on", SonyTandemV2Table1Protocol.buildSetNcOnOff(true)),
+                    command(profile, HeadphoneFeature.NOISE_CONTROL, "SET NC on", SonyTandemV2Table1Codec.buildSetNcOnOff(true)),
                 )
                 NoiseControlMode.AMBIENT_SOUND -> listOf(
-                    HeadphoneCommand(
+                    command(
+                        profile,
+                        HeadphoneFeature.NOISE_CONTROL,
                         "SET ASM level $level voice=${ambientMode == AmbientSoundMode.VOICE}",
-                        SonyTandemV2Table1Protocol.buildSetAmbientLevel(level, enabled = true, mode = ambientMode),
+                        SonyTandemV2Table1Codec.buildSetAmbientLevel(level, enabled = true, mode = ambientMode),
                     ),
                 )
                 NoiseControlMode.OFF -> listOf(
-                    HeadphoneCommand("SET NC off", SonyTandemV2Table1Protocol.buildSetNcOnOff(false)),
-                    HeadphoneCommand("SET ASM off", SonyTandemV2Table1Protocol.buildSetAmbientSound(false, ambientMode)),
+                    command(profile, HeadphoneFeature.NOISE_CONTROL, "SET NC off", SonyTandemV2Table1Codec.buildSetNcOnOff(false)),
+                    command(profile, HeadphoneFeature.NOISE_CONTROL, "SET ASM off", SonyTandemV2Table1Codec.buildSetAmbientSound(false, ambientMode)),
                 )
             }
         }
@@ -235,12 +257,13 @@ object SonyTandemV2HeadphoneAdapter : HeadphoneAdapter {
     override fun buildSetEqPresetCommands(
         profile: ConnectedHeadphoneProfile,
         preset: EqPresetId,
-        type: EqEbbInquiredType,
-        bandSteps: List<Int>,
+        context: EqWriteContext,
     ): List<HeadphoneCommand> = listOf(
-        HeadphoneCommand(
-            "SET EQ preset ${preset.name} type=$type",
-            SonyTandemV2Table1Protocol.buildSetEqPreset(preset, type, bandSteps),
+        command(
+            profile,
+            HeadphoneFeature.EQ,
+            "SET EQ preset ${preset.name} type=${context.typeFor(profile)}",
+            SonyTandemV2Table1Codec.buildSetEqPreset(preset, context.typeFor(profile), context.bandStepsFor(profile, preset)),
         )
     )
 
@@ -248,40 +271,68 @@ object SonyTandemV2HeadphoneAdapter : HeadphoneAdapter {
         profile: ConnectedHeadphoneProfile,
         rawSteps: List<Int>,
         preset: EqPresetId?,
-        useCustomPayload: Boolean,
-        type: EqEbbInquiredType,
+        context: EqWriteContext,
     ): List<HeadphoneCommand> {
+        val type = context.typeFor(profile)
+        val useCustomPayload = context.useCustomPayloadFor(profile, preset)
         val command = if (useCustomPayload && preset == null) {
-            SonyTandemV2Table1Protocol.buildSetCustomEqBandSteps(rawSteps)
+            SonyTandemV2Table1Codec.buildSetCustomEqBandSteps(rawSteps)
         } else {
-            SonyTandemV2Table1Protocol.buildSetEqPreset(
+            SonyTandemV2Table1Codec.buildSetEqPreset(
                 preset = preset ?: EqPresetId.CUSTOM,
                 type = type,
                 bandSteps = rawSteps,
             )
         }
-        return listOf(HeadphoneCommand("SET EQ bands type=$type preset=${preset?.name ?: "CUSTOM"}", command))
+        return listOf(command(profile, HeadphoneFeature.EQ, "SET EQ bands type=$type preset=${preset?.name ?: "CUSTOM"}", command))
     }
 
-    override fun buildSetClearBassCommands(profile: ConnectedHeadphoneProfile, level: Int): List<HeadphoneCommand> =
-        listOf(HeadphoneCommand("SET Clear Bass $level", SonyTandemV2Table1Protocol.buildSetClearBass(level)))
+    override fun buildSetClearBassCommands(
+        profile: ConnectedHeadphoneProfile,
+        level: Int,
+        context: EqWriteContext,
+    ): List<HeadphoneCommand> =
+        if (profile.eqWriteStrategy != EqWriteStrategy.XM4_COMBINED_EBB &&
+            context.rawBandSteps.isNotEmpty()
+        ) {
+            val rawSteps = context.rawBandSteps.toMutableList()
+            rawSteps[0] = (level.coerceIn(-10, 10) + 10).coerceIn(0, 255)
+            buildSetEqBandCommands(profile, rawSteps, context.bandEditPreset(), context)
+                .map { it.copy(label = "SET Clear Bass as EQ band $level") }
+        } else {
+            listOf(command(profile, HeadphoneFeature.CLEAR_BASS, "SET Clear Bass $level", SonyTandemV2Table1Codec.buildSetClearBass(level)))
+        }
 
     override fun buildRefreshNoiseControlCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> =
-        profile.capabilities.noiseControlQueryTypes.map {
-            if (profile.capabilities.queryNoiseControlParams) {
-                HeadphoneCommand("GET NC/ASM param $it", SonyTandemV2Table1Protocol.buildGetNcAsmParam(it))
-            } else {
-                HeadphoneCommand("GET NC/ASM status $it", SonyTandemV2Table1Protocol.buildGetNcAsmStatus(it))
+        when (profile.protocolFor(HeadphoneFeature.NOISE_CONTROL)) {
+            HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1 -> {
+                listOf(
+                    command(
+                        profile,
+                        HeadphoneFeature.NOISE_CONTROL,
+                        "GET NC/ASM param V1",
+                        SonyTandemV1Table1Codec.buildGetNcAsmParam(),
+                    )
+                )
+            }
+            else -> {
+                profile.capabilities.noiseControlQueryTypes.map {
+                    if (profile.capabilities.queryNoiseControlParams) {
+                        command(profile, HeadphoneFeature.NOISE_CONTROL, "GET NC/ASM param $it", SonyTandemV2Table1Codec.buildGetNcAsmParam(it))
+                    } else {
+                        command(profile, HeadphoneFeature.NOISE_CONTROL, "GET NC/ASM status $it", SonyTandemV2Table1Codec.buildGetNcAsmStatus(it))
+                    }
+                }
             }
         }
 
     override fun buildRefreshEqCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> =
         buildList {
             profile.capabilities.eqStatusTypes.forEach {
-                add(HeadphoneCommand("GET EQ status $it", SonyTandemV2Table1Protocol.buildGetEqEbbStatus(it)))
+                add(command(profile, HeadphoneFeature.EQ, "GET EQ status $it", SonyTandemV2Table1Codec.buildGetEqEbbStatus(it)))
             }
             profile.capabilities.eqParamTypes.forEach {
-                add(HeadphoneCommand("GET EQ param $it", SonyTandemV2Table1Protocol.buildGetEqEbbParam(it)))
+                add(command(profile, HeadphoneFeature.EQ, "GET EQ param $it", SonyTandemV2Table1Codec.buildGetEqEbbParam(it)))
             }
         }
 
@@ -291,16 +342,16 @@ object SonyTandemV2HeadphoneAdapter : HeadphoneAdapter {
         } else {
             profile.capabilities.batteryQueries.map {
                 val bytes = when (profile.protocolFor(HeadphoneFeature.BATTERY)) {
-                    HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1 -> SonyTandemV1Table1Protocol.buildGetBatteryStatus(it)
-                    else -> SonyTandemV2Table1Protocol.buildGetBatteryStatus(it)
+                    HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1 -> SonyTandemV1Table1Codec.buildGetBatteryStatus(it)
+                    else -> SonyTandemV2Table1Codec.buildGetBatteryStatus(it)
                 }
-                HeadphoneCommand("GET battery $it", bytes)
+                command(profile, HeadphoneFeature.BATTERY, "GET battery $it", bytes)
             }
         }
 
     override fun buildRefreshPlaybackCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> =
         if (profile.supports(HeadphoneFeature.PLAYBACK_CONTROL)) {
-            listOf(HeadphoneCommand("GET playback status", SonyTandemV2Table1Protocol.buildGetPlaybackStatus()))
+            listOf(command(profile, HeadphoneFeature.PLAYBACK_CONTROL, "GET playback status", SonyTandemV2Table1Codec.buildGetPlaybackStatus()))
         } else {
             emptyList()
         }
@@ -308,30 +359,74 @@ object SonyTandemV2HeadphoneAdapter : HeadphoneAdapter {
     private fun buildRefreshLeaCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> =
         LeaInquiredType.entries.flatMap { type ->
             listOf(
-                HeadphoneCommand("GET LEA status $type", SonyTandemV2Table1Protocol.buildGetLeaStatus(type)),
-                HeadphoneCommand("GET LEA paired history $type", SonyTandemV2Table1Protocol.buildGetLeaPairedHistory(type)),
+                command(profile, HeadphoneFeature.LEA_STATUS, "GET LEA status $type", SonyTandemV2Table1Codec.buildGetLeaStatus(type)),
+                command(profile, HeadphoneFeature.LEA_STATUS, "GET LEA paired history $type", SonyTandemV2Table1Codec.buildGetLeaPairedHistory(type)),
             )
         }
 
     override fun buildPlaybackCommands(profile: ConnectedHeadphoneProfile, control: PlaybackControl): List<HeadphoneCommand> =
-        listOf(HeadphoneCommand("PLAYBACK ${control.name}", SonyTandemV2Table1Protocol.buildPlayback(control)))
+        if (profile.supports(HeadphoneFeature.PLAYBACK_CONTROL)) {
+            listOf(command(profile, HeadphoneFeature.PLAYBACK_CONTROL, "PLAYBACK ${control.name}", SonyTandemV2Table1Codec.buildPlayback(control)))
+        } else {
+            emptyList()
+        }
 
-    override fun parse(profile: ConnectedHeadphoneProfile, raw: ByteArray): ParsedTandemResponse {
+    override fun parse(
+        profile: ConnectedHeadphoneProfile,
+        channel: TandemChannel,
+        raw: ByteArray,
+    ): ParsedTandemResponse {
+        if (raw.firstOrNull() == DATA_MDR_NO2) {
+            return SonyTandemV2Table2Codec.parse(raw)
+        }
         val normalized = if (raw.firstOrNull() == DATA_MDR) raw else byteArrayOf(DATA_MDR) + raw
         val command = normalized.getOrNull(1) ?: return ParsedTandemResponse.Unknown(null, null, byteArrayOf(), raw)
         val payload = normalized.drop(2).toByteArray()
-        val feature = classifyCommand(command, payload)
-        return when (profile.protocolFor(feature)) {
-            HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1 -> {
-                val result = SonyTandemV1Table1Protocol.parse(raw)
-                if (result is ParsedTandemResponse.Unknown) {
-                    SonyTandemV2Table1Protocol.parse(raw)
-                } else {
-                    result
-                }
+        val binding = bindingForResponse(profile, channel, command, payload)
+        return TandemCodecRegistry.codecFor(binding.variant).parse(raw).let { parsed ->
+            if (parsed !is ParsedTandemResponse.Unknown) {
+                parsed
+            } else if (binding.feature == HeadphoneFeature.DEVICE_INFO &&
+                binding.variant != HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1
+            ) {
+                SonyTandemV2Table1Codec.parse(raw)
+            } else {
+                parsed
             }
-            else -> SonyTandemV2Table1Protocol.parse(raw)
         }
+    }
+
+    private fun bindingForResponse(
+        profile: ConnectedHeadphoneProfile,
+        channel: TandemChannel,
+        command: Byte,
+        payload: ByteArray,
+    ): FeatureProtocolBinding {
+        if (channel == TandemChannel.GATT_V2_MC) {
+            return FeatureProtocolBinding(
+                feature = HeadphoneFeature.DEVICE_INFO,
+                variant = HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE2,
+                channel = channel,
+            )
+        }
+        if (channel == TandemChannel.GATT_V1_MC && isV1Table2Command(command)) {
+            return FeatureProtocolBinding(
+                feature = HeadphoneFeature.DEVICE_INFO,
+                variant = HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE2,
+                channel = channel,
+            )
+        }
+        val feature = classifyCommand(command, payload)
+        return profile.bindingFor(feature) ?: FeatureProtocolBinding(
+            feature = feature,
+            variant = HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1,
+            channel = TandemChannel.GATT_V2_HPC,
+        )
+    }
+
+    private fun isV1Table2Command(command: Byte): Boolean {
+        val code = command.toInt() and 0xFF
+        return code in 0x30..0x49
     }
 
     private fun classifyCommand(command: Byte, payload: ByteArray = byteArrayOf()): HeadphoneFeature = when (command) {
@@ -359,11 +454,8 @@ object SonyTandemV2HeadphoneAdapter : HeadphoneAdapter {
         val isPowerType = PowerInquiredType.entries.any { it.code == firstPayloadByte }
 
         return when {
-            // Non-overlapping CommonInquiredType (0x03, 0x05, 0x07, 0x08, 0x09) → V2 common status
             isCommonType && !isPowerType -> HeadphoneFeature.DEVICE_INFO
-            // Non-overlapping PowerInquiredType (0x0E = STAMINA) → V1 battery
             isPowerType && !isCommonType -> HeadphoneFeature.BATTERY
-            // Overlapping codes (0x00, 0x01, 0x02, 0x04, 0x06): inspect payload shape
             isPowerType && isCommonType -> {
                 if (looksLikeV1BatteryPayload(payload)) HeadphoneFeature.BATTERY
                 else HeadphoneFeature.DEVICE_INFO
@@ -376,17 +468,15 @@ object SonyTandemV2HeadphoneAdapter : HeadphoneAdapter {
         val type = payload.firstOrNull()?.toInt()?.and(0xFF) ?: return false
         return when (type) {
             0x00, 0x02 -> {
-                // BATTERY or CRADLE: [type, level] — level is 0-100 or 0xFF
                 payload.size == 2 && payload[1].isBatteryPercentage()
             }
             0x01 -> {
-                // LEFT_RIGHT: [type, level_L, 0x00, level_R]
                 payload.size == 4 &&
                     payload[1].isBatteryPercentage() &&
                     payload[2].toInt().and(0xFF) == 0x00 &&
                     payload[3].isBatteryPercentage()
             }
-            0x04, 0x06 -> false // AUTO_POWER_OFF, POWER_SAVE_MODE — route to DEVICE_INFO
+            0x04, 0x06 -> false
             else -> false
         }
     }
@@ -395,4 +485,36 @@ object SonyTandemV2HeadphoneAdapter : HeadphoneAdapter {
         val v = this.toInt() and 0xFF
         return v in 0..100 || v == 0xFF
     }
+
+    private fun EqWriteContext.typeFor(profile: ConnectedHeadphoneProfile): EqEbbInquiredType =
+        if (profile.eqWriteStrategy == EqWriteStrategy.XM4_COMBINED_EBB) EqEbbInquiredType.EBB else presetType
+
+    private fun EqWriteContext.bandStepsFor(
+        profile: ConnectedHeadphoneProfile,
+        preset: EqPresetId,
+    ): List<Int> =
+        rawBandSteps.takeIf {
+            it.isNotEmpty() && when {
+                profile.eqWriteStrategy == EqWriteStrategy.XM4_COMBINED_EBB -> preset in setOf(
+                    EqPresetId.CUSTOM,
+                    EqPresetId.USER_SETTING1,
+                    EqPresetId.USER_SETTING2,
+                )
+                else -> typeFor(profile) in setOf(EqEbbInquiredType.EBB, EqEbbInquiredType.PRESET_EQ)
+            }
+        }.orEmpty()
+
+    private fun EqWriteContext.useCustomPayloadFor(
+        profile: ConnectedHeadphoneProfile,
+        preset: EqPresetId?,
+    ): Boolean =
+        profile.eqWriteStrategy != EqWriteStrategy.XM4_COMBINED_EBB && usesCustomEqPayload && preset == null
+
+    private fun EqWriteContext.bandEditPreset(): EqPresetId =
+        when (currentPreset) {
+            EqPresetId.CUSTOM,
+            EqPresetId.USER_SETTING1,
+            EqPresetId.USER_SETTING2 -> currentPreset
+            else -> EqPresetId.CUSTOM
+        }
 }

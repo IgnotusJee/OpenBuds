@@ -1,6 +1,7 @@
 package dev.ignotus.sonyrebuild.headphones
 
 import dev.ignotus.sonyrebuild.ble.DiscoveredSonyDevice
+import dev.ignotus.sonyrebuild.protocol.AmbientSoundMode
 import dev.ignotus.sonyrebuild.protocol.EqEbbInquiredType
 import dev.ignotus.sonyrebuild.protocol.EqPresetId
 import dev.ignotus.sonyrebuild.protocol.NcAsmInquiredType
@@ -23,20 +24,18 @@ sealed interface HeadphoneOperation {
     data class SetNoiseControl(
         val mode: NoiseControlMode,
         val ambientLevel: Int,
-        val ambientMode: dev.ignotus.sonyrebuild.protocol.AmbientSoundMode,
+        val ambientMode: AmbientSoundMode,
     ) : HeadphoneOperation
     data class SetEqPreset(
         val preset: EqPresetId,
-        val type: EqEbbInquiredType,
-        val bandSteps: List<Int>,
+        val context: EqWriteContext,
     ) : HeadphoneOperation
     data class SetEqBands(
         val rawSteps: List<Int>,
         val preset: EqPresetId?,
-        val useCustomPayload: Boolean,
-        val type: EqEbbInquiredType,
+        val context: EqWriteContext,
     ) : HeadphoneOperation
-    data class SetClearBass(val level: Int) : HeadphoneOperation
+    data class SetClearBass(val level: Int, val context: EqWriteContext) : HeadphoneOperation
     data class Playback(val control: PlaybackControl) : HeadphoneOperation
 }
 
@@ -72,23 +71,68 @@ enum class HeadphoneTransport {
     UNSUPPORTED_LE_ENDPOINT,
 }
 
+enum class TandemChannel {
+    SPP_MDR,
+    GATT_V2_HPC,
+    GATT_V2_MC,
+    GATT_V1_MC,
+    ;
+
+    companion object {
+        fun fromServiceUuid(uuid: java.util.UUID): TandemChannel? {
+            // Lazy-init to avoid circular dependency with SonyGatt
+            val v2Hpc = java.util.UUID.fromString("5b833e20-6bc7-4802-8e9a-723ceca4bd8f")
+            val v2Mc = java.util.UUID.fromString("5b833e21-6bc7-4802-8e9a-723ceca4bd8f")
+            val v1Mc = java.util.UUID.fromString("5b833e23-6bc7-4802-8e9a-723ceca4bd8f")
+            return when (uuid) {
+                v2Hpc -> GATT_V2_HPC
+                v2Mc -> GATT_V2_MC
+                v1Mc -> GATT_V1_MC
+                else -> null
+            }
+        }
+    }
+}
+
+enum class PlaybackDispatchStrategy {
+    TANDEM_FIRST,
+    ANDROID_MEDIA_FALLBACK,
+    TANDEM_ONLY,
+}
+
+data class FeatureProtocolBinding(
+    val feature: HeadphoneFeature,
+    val variant: HeadphoneProtocolVariant,
+    val channel: TandemChannel,
+    val queryTypes: List<Any> = emptyList(),
+    val writableTypes: Set<Any> = emptySet(),
+)
+
 data class HeadphoneCommand(
     val label: String,
     val bytes: ByteArray,
+    val channel: TandemChannel = TandemChannel.GATT_V2_HPC,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is HeadphoneCommand) return false
-        return label == other.label && bytes.contentEquals(other.bytes)
+        return label == other.label && channel == other.channel && bytes.contentEquals(other.bytes)
     }
 
-    override fun hashCode(): Int = 31 * label.hashCode() + bytes.contentHashCode()
+    override fun hashCode(): Int = 31 * (31 * label.hashCode() + channel.hashCode()) + bytes.contentHashCode()
 }
 
 enum class EqWriteStrategy {
     STANDARD,
     XM4_COMBINED_EBB,
 }
+
+data class EqWriteContext(
+    val presetType: EqEbbInquiredType,
+    val rawBandSteps: List<Int>,
+    val usesCustomEqPayload: Boolean,
+    val currentPreset: EqPresetId?,
+)
 
 data class HeadphoneCapabilities(
     val features: Set<HeadphoneFeature>,
@@ -112,12 +156,17 @@ data class ConnectedHeadphoneProfile(
     val transport: HeadphoneTransport = HeadphoneTransport.UNKNOWN,
     val capabilities: HeadphoneCapabilities,
     val featureProtocolMap: Map<HeadphoneFeature, HeadphoneProtocolVariant> = emptyMap(),
+    val featureBindings: Map<HeadphoneFeature, FeatureProtocolBinding> = emptyMap(),
     val protocolEvidence: List<String> = emptyList(),
     val eqWriteStrategy: EqWriteStrategy = EqWriteStrategy.STANDARD,
+    val playbackDispatchStrategy: PlaybackDispatchStrategy = PlaybackDispatchStrategy.TANDEM_FIRST,
 ) {
     fun supports(feature: HeadphoneFeature): Boolean = feature in capabilities.features
     fun protocolFor(feature: HeadphoneFeature): HeadphoneProtocolVariant =
-        featureProtocolMap[feature] ?: HeadphoneProtocolVariant.UNKNOWN
+        featureBindings[feature]?.variant ?: featureProtocolMap[feature] ?: HeadphoneProtocolVariant.UNKNOWN
+    fun bindingFor(feature: HeadphoneFeature): FeatureProtocolBinding? = featureBindings[feature]
+    fun channelFor(feature: HeadphoneFeature): TandemChannel =
+        featureBindings[feature]?.channel ?: defaultChannelFor(protocolFor(feature))
 }
 
 data class ProfileTemplate(
@@ -135,12 +184,47 @@ data class ProfileTemplate(
         when (modelName) {
             "WH-1000XM4" -> capabilities.features.associateWith { feature ->
                 when (feature) {
-                    HeadphoneFeature.BATTERY -> HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1
+                    HeadphoneFeature.BATTERY,
+                    HeadphoneFeature.NOISE_CONTROL,
+                    HeadphoneFeature.AMBIENT_LEVEL,
+                    HeadphoneFeature.AMBIENT_VOICE_MODE -> HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1
+                    HeadphoneFeature.EQ,
+                    HeadphoneFeature.CLEAR_BASS,
+                    HeadphoneFeature.PLAYBACK_CONTROL -> HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1
                     else -> HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1
                 }
             }
             else -> capabilities.features.associateWith { HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1 }
         }
+
+    val featureBindings: Map<HeadphoneFeature, FeatureProtocolBinding> by lazy {
+        featureProtocolMap.mapValues { (feature, variant) ->
+            FeatureProtocolBinding(
+                feature = feature,
+                variant = variant,
+                channel = defaultChannelFor(variant),
+                queryTypes = queryTypesFor(feature),
+                writableTypes = writableTypesFor(feature),
+            )
+        }
+    }
+
+    private fun queryTypesFor(feature: HeadphoneFeature): List<Any> = when (feature) {
+        HeadphoneFeature.BATTERY -> capabilities.batteryQueries
+        HeadphoneFeature.NOISE_CONTROL,
+        HeadphoneFeature.AMBIENT_LEVEL,
+        HeadphoneFeature.AMBIENT_VOICE_MODE -> capabilities.noiseControlQueryTypes
+        HeadphoneFeature.EQ,
+        HeadphoneFeature.CLEAR_BASS -> capabilities.eqStatusTypes + capabilities.eqParamTypes
+        else -> emptyList()
+    }
+
+    private fun writableTypesFor(feature: HeadphoneFeature): Set<Any> = when (feature) {
+        HeadphoneFeature.NOISE_CONTROL,
+        HeadphoneFeature.AMBIENT_LEVEL,
+        HeadphoneFeature.AMBIENT_VOICE_MODE -> capabilities.writableNoiseControlTypes
+        else -> emptySet()
+    }
 
     fun toProfile(adapterId: String, brand: String, protocolName: String, displayName: String): ConnectedHeadphoneProfile =
         ConnectedHeadphoneProfile(
@@ -152,6 +236,7 @@ data class ProfileTemplate(
             series = series,
             capabilities = capabilities,
             featureProtocolMap = featureProtocolMap,
+            featureBindings = featureBindings,
             protocolEvidence = if (knownStaticProfile) {
                 listOf(
                     "static-profile:$modelName",
@@ -165,6 +250,11 @@ data class ProfileTemplate(
                 )
             },
             eqWriteStrategy = eqWriteStrategy,
+            playbackDispatchStrategy = if (knownStaticProfile) {
+                PlaybackDispatchStrategy.TANDEM_FIRST
+            } else {
+                PlaybackDispatchStrategy.ANDROID_MEDIA_FALLBACK
+            },
         )
 }
 
@@ -195,25 +285,27 @@ interface HeadphoneAdapter {
         profile: ConnectedHeadphoneProfile,
         mode: NoiseControlMode,
         ambientLevel: Int,
-        ambientMode: dev.ignotus.sonyrebuild.protocol.AmbientSoundMode,
+        ambientMode: AmbientSoundMode,
     ): List<HeadphoneCommand> = emptyList()
 
     fun buildSetEqPresetCommands(
         profile: ConnectedHeadphoneProfile,
         preset: EqPresetId,
-        type: EqEbbInquiredType,
-        bandSteps: List<Int>,
+        context: EqWriteContext,
     ): List<HeadphoneCommand> = emptyList()
 
     fun buildSetEqBandCommands(
         profile: ConnectedHeadphoneProfile,
         rawSteps: List<Int>,
         preset: EqPresetId?,
-        useCustomPayload: Boolean,
-        type: EqEbbInquiredType,
+        context: EqWriteContext,
     ): List<HeadphoneCommand> = emptyList()
 
-    fun buildSetClearBassCommands(profile: ConnectedHeadphoneProfile, level: Int): List<HeadphoneCommand> =
+    fun buildSetClearBassCommands(
+        profile: ConnectedHeadphoneProfile,
+        level: Int,
+        context: EqWriteContext,
+    ): List<HeadphoneCommand> =
         emptyList()
 
     fun buildRefreshNoiseControlCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> = emptyList()
@@ -227,20 +319,23 @@ interface HeadphoneAdapter {
     fun buildPlaybackCommands(profile: ConnectedHeadphoneProfile, control: PlaybackControl): List<HeadphoneCommand> =
         emptyList()
 
-    fun parse(profile: ConnectedHeadphoneProfile, raw: ByteArray): ParsedTandemResponse
+    fun parse(profile: ConnectedHeadphoneProfile, channel: TandemChannel, raw: ByteArray): ParsedTandemResponse
+
+    fun parse(profile: ConnectedHeadphoneProfile, raw: ByteArray): ParsedTandemResponse =
+        parse(profile, TandemChannel.GATT_V2_HPC, raw)
 
     fun canWrite(profile: ConnectedHeadphoneProfile, feature: HeadphoneFeature): Boolean =
         profile.supports(feature)
 }
 
 object HeadphoneAdapterRegistry {
-    private val adapters: List<HeadphoneAdapter> = listOf(SonyTandemV2HeadphoneAdapter)
+    private val adapters: List<HeadphoneAdapter> = listOf(SonyTandemHeadphoneAdapter)
 
     fun resolve(device: DiscoveredSonyDevice, reportedModelName: String? = null): ConnectedHeadphoneProfile {
         adapters.forEach { adapter ->
             adapter.match(device, reportedModelName)?.let { return it }
         }
-        return SonyTandemV2HeadphoneAdapter.fallbackProfile(device)
+        return SonyTandemHeadphoneAdapter.fallbackProfile(device)
     }
 
     fun buildRefreshCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> =
@@ -253,29 +348,31 @@ object HeadphoneAdapterRegistry {
         profile: ConnectedHeadphoneProfile,
         mode: NoiseControlMode,
         ambientLevel: Int,
-        ambientMode: dev.ignotus.sonyrebuild.protocol.AmbientSoundMode,
+        ambientMode: AmbientSoundMode,
     ): List<HeadphoneCommand> =
         adapterFor(profile).buildSetNoiseControlModeCommands(profile, mode, ambientLevel, ambientMode)
 
     fun buildSetEqPresetCommands(
         profile: ConnectedHeadphoneProfile,
         preset: EqPresetId,
-        type: EqEbbInquiredType,
-        bandSteps: List<Int>,
+        context: EqWriteContext,
     ): List<HeadphoneCommand> =
-        adapterFor(profile).buildSetEqPresetCommands(profile, preset, type, bandSteps)
+        adapterFor(profile).buildSetEqPresetCommands(profile, preset, context)
 
     fun buildSetEqBandCommands(
         profile: ConnectedHeadphoneProfile,
         rawSteps: List<Int>,
         preset: EqPresetId?,
-        useCustomPayload: Boolean,
-        type: EqEbbInquiredType,
+        context: EqWriteContext,
     ): List<HeadphoneCommand> =
-        adapterFor(profile).buildSetEqBandCommands(profile, rawSteps, preset, useCustomPayload, type)
+        adapterFor(profile).buildSetEqBandCommands(profile, rawSteps, preset, context)
 
-    fun buildSetClearBassCommands(profile: ConnectedHeadphoneProfile, level: Int): List<HeadphoneCommand> =
-        adapterFor(profile).buildSetClearBassCommands(profile, level)
+    fun buildSetClearBassCommands(
+        profile: ConnectedHeadphoneProfile,
+        level: Int,
+        context: EqWriteContext,
+    ): List<HeadphoneCommand> =
+        adapterFor(profile).buildSetClearBassCommands(profile, level, context)
 
     fun buildRefreshNoiseControlCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> =
         adapterFor(profile).buildRefreshNoiseControlCommands(profile)
@@ -289,14 +386,33 @@ object HeadphoneAdapterRegistry {
     fun buildRefreshPlaybackCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> =
         adapterFor(profile).buildRefreshPlaybackCommands(profile)
 
+    fun buildPlaybackCommands(profile: ConnectedHeadphoneProfile, control: PlaybackControl): List<HeadphoneCommand> =
+        adapterFor(profile).buildPlaybackCommands(profile, control)
+
+    fun parse(profile: ConnectedHeadphoneProfile, channel: TandemChannel, raw: ByteArray): ParsedTandemResponse =
+        adapterFor(profile).parse(profile, channel, raw)
+
     fun parse(profile: ConnectedHeadphoneProfile, raw: ByteArray): ParsedTandemResponse =
         adapterFor(profile).parse(profile, raw)
 
     private fun adapterFor(profile: ConnectedHeadphoneProfile): HeadphoneAdapter =
-        adapters.firstOrNull { it.id == profile.adapterId } ?: SonyTandemV2HeadphoneAdapter
+        adapters.firstOrNull { it.id == profile.adapterId }
+            ?: adapters.firstOrNull { adapter ->
+                adapter is SonyTandemHeadphoneAdapter && profile.adapterId in adapter.legacyIds
+            }
+            ?: SonyTandemHeadphoneAdapter
 }
 
 fun String.normalizedModelName(): String =
     uppercase()
         .removePrefix("LE_")
         .replace(Regex("[\\s\\-_.]+"), "")
+
+fun defaultChannelFor(variant: HeadphoneProtocolVariant): TandemChannel =
+    when (variant) {
+        HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE2 -> TandemChannel.GATT_V1_MC
+        HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE2 -> TandemChannel.GATT_V2_MC
+        HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1,
+        HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1,
+        HeadphoneProtocolVariant.UNKNOWN -> TandemChannel.GATT_V2_HPC
+    }

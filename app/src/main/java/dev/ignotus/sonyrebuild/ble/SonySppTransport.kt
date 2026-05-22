@@ -1,7 +1,6 @@
 package dev.ignotus.sonyrebuild.ble
 
 import android.bluetooth.BluetoothSocket
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants
 import dev.ignotus.sonyrebuild.protocol.hexString
 import java.io.IOException
 import java.util.concurrent.ConcurrentLinkedQueue
@@ -16,7 +15,7 @@ internal class SonySppTransport(
     private val input = socket.inputStream
     private val output = socket.outputStream
     private val closed = AtomicBoolean(false)
-    private val pendingWrites = ConcurrentLinkedQueue<OutboundFrame>()
+    private val pendingWrites = ConcurrentLinkedQueue<SppPayloadMapping>()
     private val lock = Any()
 
     private var readerThread: Thread? = null
@@ -31,7 +30,7 @@ internal class SonySppTransport(
     }
 
     fun send(tandemBytes: ByteArray) {
-        val frame = OutboundFrame.fromTandemBytes(tandemBytes)
+        val frame = SonySppPayloadMapper.outboundFromTandemBytes(tandemBytes)
         pendingWrites.add(frame)
         drainWrites()
     }
@@ -95,7 +94,7 @@ internal class SonySppTransport(
             return
         }
 
-        val type = DataType.fromByte(body[0])
+        val type = SonySppFrameType.fromByte(body[0])
         val sequence = body[1]
         val length = body.int32be(2)
         if (length < 0 || body.size != HEADER_SIZE + length + CHECKSUM_SIZE) {
@@ -106,7 +105,7 @@ internal class SonySppTransport(
         log("SPP RX type=${type.name} seq=${sequence.u} payload=${payload.hexString()}")
 
         when (type) {
-            DataType.ACK -> {
+            SonySppFrameType.ACK -> {
                 synchronized(lock) {
                     if (awaitingAck == sequence) {
                         nextTxSequence = sequence
@@ -119,14 +118,17 @@ internal class SonySppTransport(
                 }
                 drainWrites()
             }
-            DataType.DATA_MDR, DataType.DATA_MDR_NO2, DataType.LARGE_DATA_MDR -> {
+            SonySppFrameType.DATA_MDR,
+            SonySppFrameType.DATA_MDR_NO2,
+            SonySppFrameType.LARGE_DATA_MDR -> {
                 sendAck(sequence)
-                onPayload(byteArrayOf(SonyTandemConstants.DATA_MDR) + payload)
+                SonySppPayloadMapper.inboundToTandemBytes(type, payload)?.let(onPayload)
             }
-            DataType.SHOT_MDR, DataType.SHOT_MDR_NO2 -> {
-                onPayload(byteArrayOf(SonyTandemConstants.DATA_MDR) + payload)
+            SonySppFrameType.SHOT_MDR,
+            SonySppFrameType.SHOT_MDR_NO2 -> {
+                SonySppPayloadMapper.inboundToTandemBytes(type, payload)?.let(onPayload)
             }
-            DataType.UNKNOWN -> log("SPP RX unsupported data type=0x${body[0].u.toString(16)}")
+            SonySppFrameType.UNKNOWN -> log("SPP RX unsupported data type=0x${body[0].u.toString(16)}")
         }
     }
 
@@ -135,18 +137,18 @@ internal class SonySppTransport(
             if (closed.get() || awaitingAck != null) return
             val outbound = pendingWrites.poll() ?: return
             val sequence = nextTxSequence
-            val encoded = encodeFrame(outbound.type, sequence, outbound.payload)
-            val expectedAck = if (outbound.type.ackRequired) inverseSequence(sequence) else null
+            val encoded = encodeFrame(outbound.frameType, sequence, outbound.payload)
+            val expectedAck = if (outbound.frameType.ackRequired) inverseSequence(sequence) else null
             awaitingAck = expectedAck
             awaitingFrame = if (expectedAck != null) encoded else null
             awaitingRetries = 0
-            if (!outbound.type.ackRequired) {
+            if (!outbound.frameType.ackRequired) {
                 nextTxSequence = inverseSequence(sequence)
                 awaitingFrame = null
             }
             val generation = ++ackGeneration
             log(
-                "SPP TX type=${outbound.type.name} seq=${sequence.u} " +
+                "SPP TX type=${outbound.frameType.name} seq=${sequence.u} " +
                     "payload=${outbound.payload.hexString()} frame=${encoded.hexString()}"
             )
             try {
@@ -204,7 +206,7 @@ internal class SonySppTransport(
 
     private fun sendAck(sequence: Byte) {
         val ackSequence = inverseSequence(sequence)
-        val encoded = encodeFrame(DataType.ACK, ackSequence, byteArrayOf())
+        val encoded = encodeFrame(SonySppFrameType.ACK, ackSequence, byteArrayOf())
         log("SPP TX ACK seq=${ackSequence.u} frame=${encoded.hexString()}")
         try {
             output.write(encoded)
@@ -223,35 +225,6 @@ internal class SonySppTransport(
         }
     }
 
-    private data class OutboundFrame(
-        val type: DataType,
-        val payload: ByteArray,
-    ) {
-        companion object {
-            fun fromTandemBytes(bytes: ByteArray): OutboundFrame {
-                if (bytes.isEmpty()) return OutboundFrame(DataType.DATA_MDR, bytes)
-                return when (bytes[0]) {
-                    SonyTandemConstants.DATA_MDR -> OutboundFrame(DataType.DATA_MDR, bytes.drop(1).toByteArray())
-                    else -> OutboundFrame(DataType.DATA_MDR, bytes)
-                }
-            }
-        }
-    }
-
-    private enum class DataType(val code: Byte, val ackRequired: Boolean) {
-        DATA_MDR(0x0C, true),
-        DATA_MDR_NO2(0x0E, true),
-        ACK(0x01, false),
-        SHOT_MDR(0x1C, false),
-        SHOT_MDR_NO2(0x1E, false),
-        LARGE_DATA_MDR(0x2C, true),
-        UNKNOWN(0xFF.toByte(), true);
-
-        companion object {
-            fun fromByte(code: Byte): DataType = entries.firstOrNull { it.code == code } ?: UNKNOWN
-        }
-    }
-
     private companion object {
         const val WRITABLE_VALUE_LENGTH = 1024
         private const val ACK_TIMEOUT_MS = 1_200L
@@ -262,7 +235,7 @@ internal class SonySppTransport(
         private const val FRAME_END: Byte = 0x3C
         private const val ESCAPE: Byte = 0x3D
 
-        fun encodeFrame(type: DataType, sequence: Byte, payload: ByteArray): ByteArray {
+        fun encodeFrame(type: SonySppFrameType, sequence: Byte, payload: ByteArray): ByteArray {
             val body = ByteArray(HEADER_SIZE + payload.size + CHECKSUM_SIZE)
             body[0] = type.code
             body[1] = sequence

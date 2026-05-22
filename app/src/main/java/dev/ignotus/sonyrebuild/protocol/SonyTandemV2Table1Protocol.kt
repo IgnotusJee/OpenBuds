@@ -1,53 +1,54 @@
 package dev.ignotus.sonyrebuild.protocol
 
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.CONNECT_GET_DEVICE_INFO
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.CONNECT_GET_PROTOCOL_INFO
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.CONNECT_RET_DEVICE_INFO
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.COMMON_GET_STATUS
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.COMMON_NTFY_STATUS
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.COMMON_RET_STATUS
 import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.DATA_MDR
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.EQEBB_GET_PARAM
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.EQEBB_GET_STATUS
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.EQEBB_NTFY_PARAM
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.EQEBB_NTFY_STATUS
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.EQEBB_RET_PARAM
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.EQEBB_RET_STATUS
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.EQEBB_SET_PARAM
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.LEA_GET_PARAM
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.LEA_GET_STATUS
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.LEA_NTFY_PARAM
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.LEA_NTFY_STATUS
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.LEA_RET_PARAM
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.LEA_RET_STATUS
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_GET_PARAM
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_GET_STATUS
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_MODE_ASM
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_MODE_NC
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_NTFY_PARAM
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_NTFY_STATUS
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_OFF
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_ON
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_RET_PARAM
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_RET_STATUS
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NCASM_SET_PARAM
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NC_VALUE_OFF
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NC_VALUE_ON_DUAL
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.NC_VALUE_ON_SINGLE
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.PLAYBACK_CONTROL_WITH_FUNCTION_CHANGE
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.PLAY_GET_STATUS
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.PLAY_NTFY_STATUS
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.PLAY_RET_STATUS
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.PLAY_SET_STATUS
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.POWER_GET_STATUS
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.POWER_NTFY_STATUS
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.POWER_RET_STATUS
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.SYSTEM_GET_PARAM
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.SYSTEM_RET_PARAM
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.VALUE_CHANGED
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.VALUE_ENABLE
 
 object SonyTandemV2Table1Protocol {
+    private const val CONNECT_GET_PROTOCOL_INFO: Byte = 0x00
+    private const val CONNECT_RET_DEVICE_INFO: Byte = 0x05
+    private const val CONNECT_GET_DEVICE_INFO: Byte = 0x04
+    private const val COMMON_GET_STATUS: Byte = 0x12
+    private const val COMMON_RET_STATUS: Byte = 0x13
+    private const val COMMON_NTFY_STATUS: Byte = 0x15
+    private const val POWER_GET_STATUS: Byte = 0x22
+    private const val POWER_RET_STATUS: Byte = 0x23
+    private const val POWER_NTFY_STATUS: Byte = 0x25
+    private const val SYSTEM_GET_PARAM: Byte = 0x36
+    private const val SYSTEM_RET_PARAM: Byte = 0x37
+    private const val LEA_GET_STATUS: Byte = 0x42
+    private const val LEA_RET_STATUS: Byte = 0x43
+    private const val LEA_NTFY_STATUS: Byte = 0x45
+    private const val LEA_GET_PARAM: Byte = 0x46
+    private const val LEA_RET_PARAM: Byte = 0x47
+    private const val LEA_NTFY_PARAM: Byte = 0x49
+    private const val EQEBB_GET_STATUS: Byte = 0x52
+    private const val EQEBB_RET_STATUS: Byte = 0x53
+    private const val EQEBB_NTFY_STATUS: Byte = 0x55
+    private const val EQEBB_GET_PARAM: Byte = 0x56
+    private const val EQEBB_RET_PARAM: Byte = 0x57
+    private const val EQEBB_SET_PARAM: Byte = 0x58
+    private const val EQEBB_NTFY_PARAM: Byte = 0x59
+    private const val NCASM_GET_STATUS: Byte = 0x62
+    private const val NCASM_RET_STATUS: Byte = 0x63
+    private const val NCASM_NTFY_STATUS: Byte = 0x65
+    private const val NCASM_GET_PARAM: Byte = 0x66
+    private const val NCASM_RET_PARAM: Byte = 0x67
+    private const val NCASM_SET_PARAM: Byte = 0x68
+    private const val NCASM_NTFY_PARAM: Byte = 0x69
+    private const val PLAY_GET_STATUS: Byte = 0xA2.toByte()
+    private const val PLAY_RET_STATUS: Byte = 0xA3.toByte()
+    private const val PLAY_SET_STATUS: Byte = 0xA4.toByte()
+    private const val PLAY_NTFY_STATUS: Byte = 0xA5.toByte()
+    private const val VALUE_ENABLE: Byte = 0x00
+    private const val VALUE_CHANGED: Byte = 0x01
+    private const val NCASM_EFFECT_OFF: Byte = 0x00
+    private const val NCASM_ON: Byte = 0x01
+    private const val NCASM_OFF: Byte = 0x00
+    private const val NCASM_MODE_NC: Byte = 0x00
+    private const val NCASM_MODE_ASM: Byte = 0x01
+    private const val NC_VALUE_OFF: Byte = 0x00
+    private const val NC_VALUE_ON_SINGLE: Byte = 0x01
+    private const val NC_VALUE_ON_DUAL: Byte = 0x02
+    private const val PLAYBACK_CONTROL_WITH_FUNCTION_CHANGE: Byte = 0x03
 
     fun buildGetProtocolInfo(): ByteArray =
         SonyTandemFrame.message(CONNECT_GET_PROTOCOL_INFO)
@@ -448,11 +449,11 @@ object SonyTandemV2Table1Protocol {
         val combinedMode = payload.getOrNull(3)
         val combinedControlMode = when (type) {
             NcAsmInquiredType.V1_TABLE_SET1_NC_ASM -> when {
-                payload.getOrNull(1) == SonyTandemConstants.NCASM_EFFECT_OFF -> NoiseControlMode.OFF
+                payload.getOrNull(1) == NCASM_EFFECT_OFF -> NoiseControlMode.OFF
                 payload.getOrNull(3) == NC_VALUE_ON_SINGLE ||
                     payload.getOrNull(3) == NC_VALUE_ON_DUAL -> NoiseControlMode.NOISE_CANCELLING
                 payload.getOrNull(3) == NC_VALUE_OFF &&
-                    payload.getOrNull(1) != SonyTandemConstants.NCASM_EFFECT_OFF -> NoiseControlMode.AMBIENT_SOUND
+                    payload.getOrNull(1) != NCASM_EFFECT_OFF -> NoiseControlMode.AMBIENT_SOUND
                 else -> null
             }
             NcAsmInquiredType.MODE_NC_ASM_DUAL_NC_MODE_SWITCH_AND_ASM_SEAMLESS -> when {
