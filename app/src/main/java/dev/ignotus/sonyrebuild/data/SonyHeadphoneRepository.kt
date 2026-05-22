@@ -339,22 +339,12 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
             return
         }
         val clamped = level.coerceIn(-10, 10)
-        val eq = _state.value.eqState
         val profile = ensureConnectedProfile()
-        val targetPreset = eq.bandEditPreset()
         val context = currentEqWriteContext()
         _state.update {
             it.copy(eqState = it.eqState.copy(clearBass = clamped))
         }
-        val nextContext = if (eq.rawBandSteps.size > EQ_CLEAR_BASS_RAW_INDEX) {
-            val rawSteps = eq.rawBandSteps.toMutableList()
-            rawSteps[EQ_CLEAR_BASS_RAW_INDEX] = displayEqStepToRaw(clamped)
-            updateEqBands(rawSteps, targetPreset)
-            context.copy(rawBandSteps = rawSteps, currentPreset = targetPreset)
-        } else {
-            context
-        }
-        HeadphoneAdapterRegistry.buildSetClearBassCommands(profile, clamped, nextContext)
+        HeadphoneAdapterRegistry.buildSetClearBassCommands(profile, clamped, context)
             .forEach(::sendCommand)
         refreshEqState()
     }

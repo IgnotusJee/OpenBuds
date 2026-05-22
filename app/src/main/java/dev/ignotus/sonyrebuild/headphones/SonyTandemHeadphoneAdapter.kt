@@ -107,7 +107,6 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
             queryProtocolInfo = false,
             queryNoiseControlParams = true,
         ),
-        eqWriteStrategy = EqWriteStrategy.XM4_COMBINED_EBB,
     )
 
     private val templates = listOf(wh1000xm4, linkBudsS)
@@ -262,8 +261,8 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
         command(
             profile,
             HeadphoneFeature.EQ,
-            "SET EQ preset ${preset.name} type=${context.typeFor(profile)}",
-            SonyTandemV2Table1Codec.buildSetEqPreset(preset, context.typeFor(profile), context.bandStepsFor(profile, preset)),
+            "SET EQ preset ${preset.name} type=${EqEbbInquiredType.PRESET_EQ}",
+            SonyTandemV2Table1Codec.buildSetEqPreset(preset, EqEbbInquiredType.PRESET_EQ),
         )
     )
 
@@ -273,18 +272,13 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
         preset: EqPresetId?,
         context: EqWriteContext,
     ): List<HeadphoneCommand> {
-        val type = context.typeFor(profile)
-        val useCustomPayload = context.useCustomPayloadFor(profile, preset)
-        val command = if (useCustomPayload && preset == null) {
-            SonyTandemV2Table1Codec.buildSetCustomEqBandSteps(rawSteps)
-        } else {
-            SonyTandemV2Table1Codec.buildSetEqPreset(
-                preset = preset ?: EqPresetId.CUSTOM,
-                type = type,
-                bandSteps = rawSteps,
-            )
-        }
-        return listOf(command(profile, HeadphoneFeature.EQ, "SET EQ bands type=$type preset=${preset?.name ?: "CUSTOM"}", command))
+        val targetPreset = preset ?: EqPresetId.CUSTOM
+        val command = SonyTandemV2Table1Codec.buildSetEqPreset(
+            preset = targetPreset,
+            type = EqEbbInquiredType.PRESET_EQ,
+            bandSteps = rawSteps,
+        )
+        return listOf(command(profile, HeadphoneFeature.EQ, "SET EQ bands type=${EqEbbInquiredType.PRESET_EQ} preset=${targetPreset.name}", command))
     }
 
     override fun buildSetClearBassCommands(
@@ -292,16 +286,7 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
         level: Int,
         context: EqWriteContext,
     ): List<HeadphoneCommand> =
-        if (profile.eqWriteStrategy != EqWriteStrategy.XM4_COMBINED_EBB &&
-            context.rawBandSteps.isNotEmpty()
-        ) {
-            val rawSteps = context.rawBandSteps.toMutableList()
-            rawSteps[0] = (level.coerceIn(-10, 10) + 10).coerceIn(0, 255)
-            buildSetEqBandCommands(profile, rawSteps, context.bandEditPreset(), context)
-                .map { it.copy(label = "SET Clear Bass as EQ band $level") }
-        } else {
-            listOf(command(profile, HeadphoneFeature.CLEAR_BASS, "SET Clear Bass $level", SonyTandemV2Table1Codec.buildSetClearBass(level)))
-        }
+        listOf(command(profile, HeadphoneFeature.CLEAR_BASS, "SET Clear Bass $level", SonyTandemV2Table1Codec.buildSetClearBass(level)))
 
     override fun buildRefreshNoiseControlCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> =
         when (profile.protocolFor(HeadphoneFeature.NOISE_CONTROL)) {
@@ -486,35 +471,4 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
         return v in 0..100 || v == 0xFF
     }
 
-    private fun EqWriteContext.typeFor(profile: ConnectedHeadphoneProfile): EqEbbInquiredType =
-        if (profile.eqWriteStrategy == EqWriteStrategy.XM4_COMBINED_EBB) EqEbbInquiredType.EBB else presetType
-
-    private fun EqWriteContext.bandStepsFor(
-        profile: ConnectedHeadphoneProfile,
-        preset: EqPresetId,
-    ): List<Int> =
-        rawBandSteps.takeIf {
-            it.isNotEmpty() && when {
-                profile.eqWriteStrategy == EqWriteStrategy.XM4_COMBINED_EBB -> preset in setOf(
-                    EqPresetId.CUSTOM,
-                    EqPresetId.USER_SETTING1,
-                    EqPresetId.USER_SETTING2,
-                )
-                else -> typeFor(profile) in setOf(EqEbbInquiredType.EBB, EqEbbInquiredType.PRESET_EQ)
-            }
-        }.orEmpty()
-
-    private fun EqWriteContext.useCustomPayloadFor(
-        profile: ConnectedHeadphoneProfile,
-        preset: EqPresetId?,
-    ): Boolean =
-        profile.eqWriteStrategy != EqWriteStrategy.XM4_COMBINED_EBB && usesCustomEqPayload && preset == null
-
-    private fun EqWriteContext.bandEditPreset(): EqPresetId =
-        when (currentPreset) {
-            EqPresetId.CUSTOM,
-            EqPresetId.USER_SETTING1,
-            EqPresetId.USER_SETTING2 -> currentPreset
-            else -> EqPresetId.CUSTOM
-        }
 }

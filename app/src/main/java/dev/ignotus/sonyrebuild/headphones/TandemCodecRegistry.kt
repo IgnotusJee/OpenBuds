@@ -100,9 +100,6 @@ object SonyTandemV2Table1Codec : TandemCodec {
     ): ByteArray =
         SonyTandemV2Table1Protocol.buildSetEqPreset(preset, type, bandSteps)
 
-    fun buildSetCustomEqBandSteps(rawSteps: List<Int>): ByteArray =
-        SonyTandemV2Table1Protocol.buildSetCustomEqBandSteps(rawSteps)
-
     fun buildSetClearBass(level: Int): ByteArray =
         SonyTandemV2Table1Protocol.buildSetClearBass(level)
 

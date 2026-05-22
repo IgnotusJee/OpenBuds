@@ -79,13 +79,6 @@ object SonyTandemV2Table1Protocol {
                 bandSteps.map { it.coerceIn(0, 255).toByte() }.toByteArray(),
         )
 
-    fun buildSetCustomEqBandSteps(bandSteps: List<Int>): ByteArray =
-        SonyTandemFrame.message(
-            EQEBB_SET_PARAM,
-            byteArrayOf(EqEbbInquiredType.CUSTOM_EQ.code, bandSteps.size.toByte()) +
-                bandSteps.map { it.coerceIn(0, 255).toByte() }.toByteArray(),
-        )
-
     fun buildSetClearBass(level: Int): ByteArray =
         SonyTandemFrame.message(
             EQEBB_SET_PARAM,

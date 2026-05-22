@@ -169,14 +169,6 @@ class SonyTandemV2Table1ProtocolTest {
     }
 
     @Test
-    fun eqEbbSetParam_customEqBandSteps_matchesReverseCommandShape() {
-        assertArrayEquals(
-            byteArrayOf(0x0E, 0x58, 0x31, 0x03, 0x09, 0x0A, 0x0B),
-            SonyTandemV2Table1Protocol.buildSetCustomEqBandSteps(listOf(9, 10, 11)),
-        )
-    }
-
-    @Test
     fun parser_unknownCommand_keepsRawPayload() {
         val raw = byteArrayOf(0x0E, 0x7F, 0x10, 0x20)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)

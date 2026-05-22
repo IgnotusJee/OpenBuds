@@ -122,11 +122,6 @@ data class HeadphoneCommand(
     override fun hashCode(): Int = 31 * (31 * label.hashCode() + channel.hashCode()) + bytes.contentHashCode()
 }
 
-enum class EqWriteStrategy {
-    STANDARD,
-    XM4_COMBINED_EBB,
-}
-
 data class EqWriteContext(
     val presetType: EqEbbInquiredType,
     val rawBandSteps: List<Int>,
@@ -158,7 +153,6 @@ data class ConnectedHeadphoneProfile(
     val featureProtocolMap: Map<HeadphoneFeature, HeadphoneProtocolVariant> = emptyMap(),
     val featureBindings: Map<HeadphoneFeature, FeatureProtocolBinding> = emptyMap(),
     val protocolEvidence: List<String> = emptyList(),
-    val eqWriteStrategy: EqWriteStrategy = EqWriteStrategy.STANDARD,
     val playbackDispatchStrategy: PlaybackDispatchStrategy = PlaybackDispatchStrategy.TANDEM_FIRST,
 ) {
     fun supports(feature: HeadphoneFeature): Boolean = feature in capabilities.features
@@ -174,7 +168,6 @@ data class ProfileTemplate(
     val series: String?,
     val capabilities: HeadphoneCapabilities,
     val knownStaticProfile: Boolean = true,
-    val eqWriteStrategy: EqWriteStrategy = EqWriteStrategy.STANDARD,
 ) {
     val featureProtocolMap: Map<HeadphoneFeature, HeadphoneProtocolVariant> by lazy {
         buildFeatureProtocolMap()
@@ -249,7 +242,6 @@ data class ProfileTemplate(
                     "reverse:C11518x DeviceCapabilityTableset1/2 dispatch",
                 )
             },
-            eqWriteStrategy = eqWriteStrategy,
             playbackDispatchStrategy = if (knownStaticProfile) {
                 PlaybackDispatchStrategy.TANDEM_FIRST
             } else {
