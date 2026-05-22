@@ -83,6 +83,25 @@ data class UnsupportedEndpointDiagnostics(
     val rawReads: Map<String, String> = emptyMap(),
 )
 
+internal const val V1_MC_ONLY_GATT_PENDING_REASON =
+    "V1 MC-only GATT detected; handshake/control path pending validation"
+
+internal fun tandemEndpointSupportState(services: Collection<UUID>): String? =
+    if (SonyGatt.TANDEM_V2_HPC_SERVICE in services) null else unsupportedTandemEndpointReason(services)
+
+internal fun unsupportedTandemEndpointReason(services: Collection<UUID>): String {
+    val labels = services.map { SonyGatt.serviceLabel(it) }
+    return when {
+        SonyGatt.TANDEM_V1_MC_SERVICE in services ->
+            "$V1_MC_ONLY_GATT_PENDING_REASON. Services: ${labels.joinToString()}"
+        SonyGatt.LE_AUDIO_CAPABILITY_FOR_HPC in services ->
+            "This LE endpoint exposes LE Audio capability, not Tandem V2 HPC control. Try disabling LE Audio / using classic-only mode, then rescan."
+        SonyGatt.BLUETOOTH_PAIRING_COMPLETE_NAME_SERVICE in services ->
+            "This LE endpoint is a pairing/name endpoint, not Tandem V2 HPC control. Services: ${labels.joinToString()}"
+        else -> "Tandem V2 HPC service was not found. Services: ${labels.joinToString()}"
+    }
+}
+
 interface SonyBleClientListener {
     fun onBluetoothUnavailable(reason: String)
     fun onUnsupportedEndpoint(diagnostics: UnsupportedEndpointDiagnostics)
@@ -140,7 +159,9 @@ class SonyBleClient(
                 advertisedServices = serviceList,
                 isLikelyControlEndpoint = sonyAd?.leGattControlFlag == true ||
                     serviceList.any {
-                        it == "TANDEM_V2_HPC_SERVICE" || it == "TANDEM_V2_MC_SERVICE"
+                        it == "TANDEM_V2_HPC_SERVICE" ||
+                            it == "TANDEM_V2_MC_SERVICE" ||
+                            it == "TANDEM_V1_MC_SERVICE"
                     },
                 sonyAd = sonyAd,
             )
@@ -192,7 +213,7 @@ class SonyBleClient(
             val service = gatt.getService(SonyGatt.TANDEM_V2_HPC_SERVICE)
             if (service == null) {
                 val labels = services.joinToString { SonyGatt.serviceLabel(it) }
-                val reason = serviceMissingMessage(services)
+                val reason = unsupportedTandemEndpointReason(services)
                 log("Tandem V2 HPC service missing. Available services=[$labels]")
                 beginUnsupportedEndpointProbe(gatt, services, reason)
                 return
@@ -447,7 +468,7 @@ class SonyBleClient(
         if (SonyGatt.TANDEM_V2_HPC_SERVICE in services) {
             beginTandemHandshake(activeGatt)
         } else {
-            beginUnsupportedEndpointProbe(activeGatt, services, serviceMissingMessage(services))
+            beginUnsupportedEndpointProbe(activeGatt, services, unsupportedTandemEndpointReason(services))
         }
     }
 
@@ -1062,18 +1083,6 @@ class SonyBleClient(
     private fun log(message: String) {
         Log.i(LOG_TAG, message)
         listener.onLog(message)
-    }
-
-    private fun serviceMissingMessage(services: List<UUID>): String {
-        val labels = services.map { SonyGatt.serviceLabel(it) }
-        return when {
-            SonyGatt.LE_AUDIO_CAPABILITY_FOR_HPC in services &&
-                SonyGatt.TANDEM_V2_HPC_SERVICE !in services ->
-                "This LE endpoint exposes LE Audio capability, not Tandem V2 HPC control. Try disabling LE Audio / using classic-only mode, then rescan."
-            SonyGatt.BLUETOOTH_PAIRING_COMPLETE_NAME_SERVICE in services ->
-                "This LE endpoint is a pairing/name endpoint, not Tandem V2 HPC control. Services: ${labels.joinToString()}"
-            else -> "Tandem V2 HPC service was not found. Services: ${labels.joinToString()}"
-        }
     }
 
     private fun android.bluetooth.le.ScanRecord.manufacturerSummary(): String {

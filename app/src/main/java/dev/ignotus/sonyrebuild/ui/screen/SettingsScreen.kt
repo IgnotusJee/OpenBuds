@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.ignotus.sonyrebuild.data.SonyHeadphoneUiState
 import dev.ignotus.sonyrebuild.ui.AppColorMode
+import dev.ignotus.sonyrebuild.ui.InfoLine
 import dev.ignotus.sonyrebuild.ui.ManagerCard
 import dev.ignotus.sonyrebuild.ui.PageColumn
 import dev.ignotus.sonyrebuild.ui.PageHeader
@@ -342,6 +343,20 @@ internal fun SettingsDiagnosticsScreen(
                     )
                 },
             )
+            state.table2Diagnostic?.let { diagnostic ->
+                Text(
+                    text = "Last Table2 response",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+                InfoLine("Channel", diagnostic.channel)
+                InfoLine("Family", diagnostic.family)
+                InfoLine("Command", diagnostic.command.hexByteOrUnknown())
+                InfoLine("Inquired type", diagnostic.inquiredType?.hexByteOrUnknown() ?: "Unknown")
+                InfoLine("Values", diagnostic.values.joinToString(prefix = "[", postfix = "]"))
+                InfoLine("Raw", diagnostic.rawHex)
+            }
             if (state.debugLogs.isEmpty()) {
                 Text(
                     text = "No protocol traffic yet.",
@@ -364,6 +379,9 @@ internal fun SettingsDiagnosticsScreen(
         }
     }
 }
+
+private fun Int.hexByteOrUnknown(): String =
+    if (this in 0..0xFF) "0x%02X".format(this) else "Unknown"
 
 @Composable
 internal fun SettingsModulesScreen(

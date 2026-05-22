@@ -4,6 +4,7 @@ import dev.ignotus.sonyrebuild.headphones.TandemChannel
 import dev.ignotus.sonyrebuild.protocol.SonyGatt
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.util.UUID
@@ -106,6 +107,19 @@ class SonyBleClientChannelTest {
     fun channelFromService_sppHasNoGattService() {
         val sppChannel = TandemChannel.fromServiceUuid(SonyGatt.TANDEM_V2_HPC_SERVICE)
         assertTrue(sppChannel != TandemChannel.SPP_MDR)
+    }
+
+    @Test
+    fun tandemEndpointSupportState_v2HpcIsSupported() {
+        assertNull(tandemEndpointSupportState(listOf(SonyGatt.TANDEM_V2_HPC_SERVICE)))
+    }
+
+    @Test
+    fun unsupportedTandemEndpointReason_v1McOnlyStaysPendingValidation() {
+        val reason = unsupportedTandemEndpointReason(listOf(SonyGatt.TANDEM_V1_MC_SERVICE))
+
+        assertTrue(reason.contains(V1_MC_ONLY_GATT_PENDING_REASON))
+        assertTrue(reason.contains("TANDEM_V1_MC_SERVICE"))
     }
 
     // ── Channel characteristic resolution ────────────────────────────────────

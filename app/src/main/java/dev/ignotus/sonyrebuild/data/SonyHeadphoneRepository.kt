@@ -112,6 +112,15 @@ data class EndpointDiagnosticState(
     val rawReads: Map<String, String> = emptyMap(),
 )
 
+data class Table2DiagnosticState(
+    val channel: String,
+    val family: String,
+    val command: Int,
+    val inquiredType: Int?,
+    val values: List<Int>,
+    val rawHex: String,
+)
+
 data class FeatureStatus(
     val title: String,
     val description: String,
@@ -136,6 +145,7 @@ data class SonyHeadphoneUiState(
     val wearingState: WearingState = WearingState(),
     val playbackStatus: PlaybackStatus = PlaybackStatus.UNKNOWN,
     val endpointDiagnostic: EndpointDiagnosticState? = null,
+    val table2Diagnostic: Table2DiagnosticState? = null,
     val supportedFeatures: List<FeatureStatus> = featureStatusesFor(null),
     val debugLogs: List<String> = emptyList(),
     val debugLogging: Boolean = true,
@@ -159,6 +169,7 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
                 permissionIssue = null,
                 discoveredDevices = emptyList(),
                 endpointDiagnostic = null,
+                table2Diagnostic = null,
             )
         }
         val strictFilter = _state.value.strictSonyScanFilter
@@ -178,13 +189,13 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
             )
         }
         appendLog("Connect requested: ${device.name} (${device.address})")
-        _state.update { it.copy(endpointDiagnostic = null, permissionIssue = null) }
+        _state.update { it.copy(endpointDiagnostic = null, table2Diagnostic = null, permissionIssue = null) }
         client.connect(device)
     }
 
     fun connect(address: String, name: String = "Sony audio device") {
         appendLog("Debug connect requested: $name ($address)")
-        _state.update { it.copy(endpointDiagnostic = null, permissionIssue = null) }
+        _state.update { it.copy(endpointDiagnostic = null, table2Diagnostic = null, permissionIssue = null) }
         client.connect(
             DiscoveredSonyDevice(
                 name = name,
@@ -491,6 +502,7 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
                     publicAddress = diagnostics.publicAddress,
                     rawReads = diagnostics.rawReads,
                 ),
+                table2Diagnostic = null,
                 supportedFeatures = featureStatusesFor(null),
             )
         }
@@ -562,6 +574,7 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
                 eqState = if (connected) it.eqState else EqState(),
                 playbackStatus = if (connected) it.playbackStatus else PlaybackStatus.UNKNOWN,
                 endpointDiagnostic = if (connected) it.endpointDiagnostic else null,
+                table2Diagnostic = if (connected) it.table2Diagnostic else null,
                 permissionIssue = if (connected) it.permissionIssue else null,
                 scanState = if (connected) "Connected" else "Idle",
                 supportedFeatures = featureStatusesFor(profile),
@@ -579,6 +592,7 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
                 connectedProfile = profile,
                 deviceInfo = it.deviceInfo.copy(protocolReady = true),
                 endpointDiagnostic = null,
+                table2Diagnostic = null,
                 permissionIssue = null,
                 supportedFeatures = featureStatusesFor(profile),
             )
@@ -603,10 +617,8 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
             is ParsedTandemResponse.QuickAccess -> applyQuickAccess(parsed)
             is ParsedTandemResponse.WearingStatus -> applyWearingStatus(parsed)
             is ParsedTandemResponse.Unknown -> applyKnownOrUnknown(parsed)
-            is ParsedTandemResponse.Table2Common,
-            is ParsedTandemResponse.Table2Generic -> {
-                appendLog("Table2 ${parsed::class.simpleName} channel=$channel raw=${parsed.raw.hexString()}")
-            }
+            is ParsedTandemResponse.Table2Common -> applyTable2Diagnostic(channel, parsed)
+            is ParsedTandemResponse.Table2Generic -> applyTable2Diagnostic(channel, parsed)
         }
     }
 
@@ -873,6 +885,12 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
         }
     }
 
+    private fun applyTable2Diagnostic(channel: TandemChannel, response: ParsedTandemResponse) {
+        appendLog("Table2 ${response::class.simpleName} channel=$channel raw=${response.raw.hexString()}")
+        val diagnostic = table2DiagnosticStateFor(channel, response) ?: return
+        _state.update { it.copy(table2Diagnostic = diagnostic) }
+    }
+
     private fun applyKnownOrUnknown(response: ParsedTandemResponse.Unknown) {
         when (response.command) {
             PLAY_NTFY_PARAM -> appendLog(
@@ -1009,6 +1027,37 @@ private fun String?.toHeadphoneTransport(): HeadphoneTransport =
         "GATT_HPC" -> HeadphoneTransport.GATT_HPC
         "UNSUPPORTED_LE_ENDPOINT" -> HeadphoneTransport.UNSUPPORTED_LE_ENDPOINT
         else -> HeadphoneTransport.UNKNOWN
+    }
+
+fun table2DiagnosticStateFor(
+    channel: TandemChannel,
+    response: ParsedTandemResponse,
+): Table2DiagnosticState? =
+    when (response) {
+        is ParsedTandemResponse.Table2Common -> Table2DiagnosticState(
+            channel = channel.name,
+            family = response.family,
+            command = response.command,
+            inquiredType = null,
+            values = response.values,
+            rawHex = response.raw.hexString(),
+        )
+        is ParsedTandemResponse.Table2Generic -> Table2DiagnosticState(
+            channel = channel.name,
+            family = response.family,
+            command = response.raw.table2CommandByte(),
+            inquiredType = response.inquiredType,
+            values = response.values,
+            rawHex = response.raw.hexString(),
+        )
+        else -> null
+    }
+
+private fun ByteArray.table2CommandByte(): Int =
+    when {
+        size >= 2 && (this[0].toInt() and 0xFF) in setOf(0x0E, 0x0F) -> this[1].toInt() and 0xFF
+        isNotEmpty() -> this[0].toInt() and 0xFF
+        else -> -1
     }
 
 private fun String.hexToByteArrayOrNull(): ByteArray? {
