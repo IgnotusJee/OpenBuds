@@ -2,11 +2,14 @@ package dev.ignotus.sonyrebuild.headphones
 
 import dev.ignotus.sonyrebuild.ble.DiscoveredSonyDevice
 import dev.ignotus.sonyrebuild.protocol.AmbientSoundMode
+import dev.ignotus.sonyrebuild.protocol.DeviceInfoType
 import dev.ignotus.sonyrebuild.protocol.EqEbbInquiredType
 import dev.ignotus.sonyrebuild.protocol.EqPresetId
 import dev.ignotus.sonyrebuild.protocol.NcAsmInquiredType
 import dev.ignotus.sonyrebuild.protocol.NoiseControlMode
 import dev.ignotus.sonyrebuild.protocol.ParsedTandemResponse
+import dev.ignotus.sonyrebuild.protocol.PlaybackControl
+import dev.ignotus.sonyrebuild.protocol.PlaybackStatus
 import dev.ignotus.sonyrebuild.protocol.PowerInquiredType
 import dev.ignotus.sonyrebuild.protocol.SonyTandemV1Table1Protocol
 import dev.ignotus.sonyrebuild.protocol.unsigned
@@ -110,6 +113,30 @@ class SonyTandemProfileRoutingTest {
     }
 
     // ── WH-1000XM4 ──────────────────────────────────────────────────────────
+
+    @Test
+    fun xm4_supportedFeaturesAreOwnV1OnlyFeatureSet() {
+        val profile = xm4Profile()
+
+        assertEquals(
+            setOf(
+                HeadphoneFeature.DEVICE_INFO,
+                HeadphoneFeature.BATTERY,
+                HeadphoneFeature.NOISE_CONTROL,
+                HeadphoneFeature.AMBIENT_LEVEL,
+                HeadphoneFeature.AMBIENT_VOICE_MODE,
+                HeadphoneFeature.PLAYBACK_CONTROL,
+                HeadphoneFeature.EQ,
+                HeadphoneFeature.CLEAR_BASS,
+            ),
+            profile.capabilities.features,
+        )
+        assertTrue(profile.featureBindings.values.all { it.variant == HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1 })
+        assertTrue(profile.featureBindings.values.all { it.channel == TandemChannel.GATT_V1_MC })
+        assertFalse(profile.supports(HeadphoneFeature.LEA_STATUS))
+        assertFalse(profile.supports(HeadphoneFeature.QUICK_ACCESS))
+        assertFalse(profile.supports(HeadphoneFeature.WEARING_STATUS))
+    }
 
     @Test
     fun xm4_batteryRoutesToV1Table1() {
@@ -219,16 +246,25 @@ class SonyTandemProfileRoutingTest {
     }
 
     @Test
-    fun xm4_playbackRoutesToV2Table1ByDefault() {
+    fun xm4_playbackRoutesToV1Table1() {
         val profile = xm4Profile()
         assertEquals(
-            HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1,
+            HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1,
             profile.protocolFor(HeadphoneFeature.PLAYBACK_CONTROL),
         )
-        assertEquals(
-            TandemChannel.GATT_V2_HPC,
-            SonyTandemHeadphoneAdapter.buildRefreshPlaybackCommands(profile).single().channel,
+        val refresh = SonyTandemHeadphoneAdapter.buildRefreshPlaybackCommands(profile).single()
+        assertArrayEquals(
+            byteArrayOf(0x0E, 0xA2.toByte(), 0x01),
+            refresh.bytes,
         )
+        assertEquals(TandemChannel.GATT_V1_MC, refresh.channel)
+
+        val play = SonyTandemHeadphoneAdapter.buildPlaybackCommands(profile, PlaybackControl.PLAY).single()
+        assertArrayEquals(
+            byteArrayOf(0x0E, 0xA4.toByte(), 0x01, 0x00, 0x07),
+            play.bytes,
+        )
+        assertEquals(TandemChannel.GATT_V1_MC, play.channel)
     }
 
     @Test
@@ -324,6 +360,31 @@ class SonyTandemProfileRoutingTest {
         parsed as ParsedTandemResponse.NoiseControl
         assertEquals(NcAsmInquiredType.V1_TABLE_SET1_NC_ASM, parsed.type)
         assertEquals(NoiseControlMode.NOISE_CANCELLING, parsed.controlMode)
+    }
+
+    @Test
+    fun xm4_deviceInfoResponse_0x05_parsedViaV1() {
+        val profile = xm4Profile()
+        val version = "2.5.1".encodeToByteArray()
+        val raw = byteArrayOf(0x0E, 0x05, 0x02, version.size.toByte()) + version
+        val parsed = SonyTandemHeadphoneAdapter.parse(profile, raw)
+
+        assertTrue("Expected DeviceInfo but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.DeviceInfo)
+        parsed as ParsedTandemResponse.DeviceInfo
+        assertEquals(DeviceInfoType.FW_VERSION, parsed.type)
+        assertEquals("2.5.1", parsed.text)
+    }
+
+    @Test
+    fun xm4_playbackResponse_0xa3_parsedViaV1() {
+        val profile = xm4Profile()
+        val raw = byteArrayOf(0x0E, 0xA3.toByte(), 0x01, 0x00, 0x01)
+        val parsed = SonyTandemHeadphoneAdapter.parse(profile, raw)
+
+        assertTrue("Expected PlaybackAck but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.PlaybackAck)
+        parsed as ParsedTandemResponse.PlaybackAck
+        assertEquals(listOf(1, 0, 1), parsed.values)
+        assertEquals(PlaybackStatus.PLAYING, parsed.status)
     }
 
     // ── Unknown / fallback Sony device ──────────────────────────────────────

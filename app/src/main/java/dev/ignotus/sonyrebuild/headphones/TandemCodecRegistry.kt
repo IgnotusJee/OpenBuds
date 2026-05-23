@@ -82,6 +82,9 @@ object SonyTandemV1Table1Codec : TandemCodec {
     override val variant: HeadphoneProtocolVariant = HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1
     override val defaultChannel: TandemChannel = TandemChannel.GATT_V1_MC
 
+    override fun buildGetDeviceInfo(type: DeviceInfoType): ByteArray =
+        SonyTandemV1Table1Protocol.buildGetDeviceInfo(type)
+
     override fun buildGetBatteryStatus(type: PowerInquiredType): ByteArray =
         SonyTandemV1Table1Protocol.buildGetBatteryStatus(type)
 
@@ -142,6 +145,12 @@ object SonyTandemV1Table1Codec : TandemCodec {
 
     override fun buildSetClearBass(level: Int): ByteArray =
         SonyTandemV1Table1Protocol.buildSetClearBass(level)
+
+    override fun buildGetPlaybackStatus(): ByteArray =
+        SonyTandemV1Table1Protocol.buildGetPlaybackStatus()
+
+    override fun buildPlayback(control: PlaybackControl): ByteArray =
+        SonyTandemV1Table1Protocol.buildPlayback(control)
 
     override fun parse(raw: ByteArray): ParsedTandemResponse =
         SonyTandemV1Table1Protocol.parse(raw)

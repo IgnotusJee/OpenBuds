@@ -3,10 +3,22 @@ package dev.ignotus.sonyrebuild.protocol
 import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.DATA_MDR
 
 object SonyTandemV1Table1Protocol {
+    // ── Connection / device information (V1) ──
+    private const val CONNECT_RET_DEVICE_INFO: Byte = 0x05
+    private const val CONNECT_GET_DEVICE_INFO: Byte = 0x04
+
     // ── Common / Battery (V1) ──
     private const val COMMON_GET_BATTERY_LEVEL: Byte = 0x10
     private const val COMMON_RET_BATTERY_LEVEL: Byte = 0x11
     private const val COMMON_NTFY_BATTERY_LEVEL: Byte = 0x13
+
+    // ── Playback (V1) ──
+    private const val PLAY_GET_STATUS: Byte = 0xA2.toByte()
+    private const val PLAY_RET_STATUS: Byte = 0xA3.toByte()
+    private const val PLAY_SET_STATUS: Byte = 0xA4.toByte()
+    private const val PLAY_NTFY_STATUS: Byte = 0xA5.toByte()
+    private const val PLAYBACK_CONTROLLER: Byte = 0x01
+    private const val VALUE_ENABLE: Byte = 0x00
 
     // ── NC/ASM (V1 / shared) ──
     private const val NCASM_GET_PARAM: Byte = 0x66
@@ -34,6 +46,11 @@ object SonyTandemV1Table1Protocol {
     private const val V1_PRESET_EQ: Byte = 0x01
     private const val V1_EBB: Byte = 0x02
     private const val V1_PRESET_EQ_NONCUSTOMIZABLE: Byte = 0x03
+
+    // ── Device information ──
+
+    fun buildGetDeviceInfo(type: DeviceInfoType): ByteArray =
+        SonyTandemFrame.message(CONNECT_GET_DEVICE_INFO, byteArrayOf(type.code))
 
     // ── Battery ──
 
@@ -115,6 +132,17 @@ object SonyTandemV1Table1Protocol {
             byteArrayOf(V1_EBB, level.coerceIn(-127, 127).toByte()),
         )
 
+    // ── Playback ──
+
+    fun buildGetPlaybackStatus(): ByteArray =
+        SonyTandemFrame.message(PLAY_GET_STATUS, byteArrayOf(PLAYBACK_CONTROLLER))
+
+    fun buildPlayback(control: PlaybackControl): ByteArray =
+        SonyTandemFrame.message(
+            PLAY_SET_STATUS,
+            byteArrayOf(PLAYBACK_CONTROLLER, VALUE_ENABLE, control.code),
+        )
+
     // ── Parse ──
 
     fun parse(raw: ByteArray): ParsedTandemResponse {
@@ -122,20 +150,39 @@ object SonyTandemV1Table1Protocol {
         val command = normalized.getOrNull(1)
         val payload = if (normalized.size > 2) normalized.copyOfRange(2, normalized.size) else byteArrayOf()
         return when (command) {
-            COMMON_RET_BATTERY_LEVEL,
-            COMMON_NTFY_BATTERY_LEVEL -> parseBattery(payload, raw)
+            CONNECT_RET_DEVICE_INFO -> parseDeviceInfo(payload, raw)
+            COMMON_RET_BATTERY_LEVEL -> parseBattery(payload, raw)
+            COMMON_NTFY_BATTERY_LEVEL -> if (looksLikeV1BatteryPayload(payload)) {
+                parseBattery(payload, raw)
+            } else {
+                unknown(command, payload, raw)
+            }
             NCASM_RET_PARAM,
             NCASM_NTFY_PARAM -> parseNoiseControl(command, payload, raw)
             EQEBB_RET_STATUS, EQEBB_NTFY_STATUS,
             EQEBB_RET_PARAM, EQEBB_NTFY_PARAM ->
                 SonyEqEbbPayloadParser.parse(EqEbbPayloadVersion.V1, command, payload, raw)
-            else -> ParsedTandemResponse.Unknown(
-                dataType = normalized.firstOrNull()?.unsigned,
-                command = command?.unsigned,
-                payload = payload,
+            PLAY_RET_STATUS, PLAY_NTFY_STATUS -> ParsedTandemResponse.PlaybackAck(
+                values = payload.unsignedList(),
+                status = parsePlaybackStatus(payload),
                 raw = raw,
             )
+            else -> unknown(command, payload, raw)
         }
+    }
+
+    private fun parseDeviceInfo(payload: ByteArray, raw: ByteArray): ParsedTandemResponse {
+        val type = payload.firstOrNull()?.let { code ->
+            DeviceInfoType.entries.firstOrNull { it.code == code }
+        }
+        val text = when (type) {
+            DeviceInfoType.MODEL_NAME,
+            DeviceInfoType.FW_VERSION,
+            DeviceInfoType.INSTRUCTION_GUIDE -> parseLengthPrefixedString(payload, offset = 1)
+            DeviceInfoType.SERIES_AND_COLOR_INFO -> parseSeriesAndColor(payload)
+            null -> null
+        }
+        return ParsedTandemResponse.DeviceInfo(type, text, raw)
     }
 
     private fun parseBattery(payload: ByteArray, raw: ByteArray): ParsedTandemResponse.Battery {
@@ -188,4 +235,87 @@ object SonyTandemV1Table1Protocol {
             raw = raw,
         )
     }
+
+    private fun parsePlaybackStatus(payload: ByteArray): PlaybackStatus =
+        when (payload.getOrNull(2)?.unsigned) {
+            1 -> PlaybackStatus.PLAYING
+            2 -> PlaybackStatus.PAUSED
+            3 -> PlaybackStatus.STOPPED
+            else -> PlaybackStatus.UNKNOWN
+        }
+
+    private fun parseLengthPrefixedString(payload: ByteArray, offset: Int): String? {
+        val length = payload.getOrNull(offset)?.unsigned ?: return fallbackDeviceInfoString(payload)
+        val start = offset + 1
+        if (length <= 0 || payload.size < start + length) {
+            return fallbackDeviceInfoString(payload)
+        }
+        return payload.copyOfRange(start, start + length)
+            .decodeToString()
+            .trimEnd('\u0000')
+            .takeIf { it.isNotBlank() }
+    }
+
+    private fun fallbackDeviceInfoString(payload: ByteArray): String? =
+        payload.drop(1)
+            .takeIf { it.isNotEmpty() }
+            ?.toByteArray()
+            ?.decodeToString()
+            ?.trimEnd('\u0000')
+            ?.takeIf { it.isNotBlank() }
+
+    private fun parseSeriesAndColor(payload: ByteArray): String? {
+        val series = payload.getOrNull(1)?.unsigned ?: return null
+        val color = payload.getOrNull(2)?.unsigned ?: return null
+        return "${modelSeriesLabel(series)} / ${modelColorLabel(color)}"
+    }
+
+    private fun modelSeriesLabel(code: Int): String =
+        when (code) {
+            0x00 -> "NO_SERIES"
+            0x10 -> "EXTRA_BASS"
+            0x20 -> "HEAR"
+            0x30 -> "PREMIUM"
+            0x40 -> "SPORTS"
+            0x50 -> "CASUAL"
+            else -> "UNKNOWN_SERIES_0x%02X".format(code)
+        }
+
+    private fun modelColorLabel(code: Int): String =
+        when (code) {
+            0x00 -> "Default"
+            0x01 -> "Black"
+            0x02 -> "White"
+            0x03 -> "Silver"
+            0x04 -> "Red"
+            0x05 -> "Blue"
+            0x06 -> "Gold"
+            0x07 -> "Pink"
+            0x08 -> "Gray"
+            0x09 -> "Yellow"
+            0x0A -> "Green"
+            0x0B -> "Violet"
+            0x0C -> "Orange"
+            else -> "UNKNOWN_COLOR_0x%02X".format(code)
+        }
+
+    private fun looksLikeV1BatteryPayload(payload: ByteArray): Boolean {
+        val type = payload.firstOrNull()?.unsigned ?: return false
+        return when (type) {
+            0x00, 0x02 -> payload.size >= 2 && payload[1].percentageOrNull() != null
+            0x01 -> payload.size >= 4 &&
+                payload[1].percentageOrNull() != null &&
+                payload[2].unsigned == 0x00 &&
+                payload[3].percentageOrNull() != null
+            else -> false
+        }
+    }
+
+    private fun unknown(command: Byte?, payload: ByteArray, raw: ByteArray): ParsedTandemResponse.Unknown =
+        ParsedTandemResponse.Unknown(
+            dataType = DATA_MDR.unsigned,
+            command = command?.unsigned,
+            payload = payload,
+            raw = raw,
+        )
 }

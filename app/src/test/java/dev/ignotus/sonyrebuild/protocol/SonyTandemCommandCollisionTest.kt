@@ -136,58 +136,53 @@ class SonyTandemCommandCollisionTest {
     }
 
     @Test
-    fun xm4_0x13_nonOverlappingCommonType_classifiedAsDeviceInfo_routedToV2() {
+    fun xm4_0x13_nonOverlappingCommonType_classifiedAsDeviceInfo_returnsUnknownOnV1Profile() {
         // 0x13 0x09 ... = DISPLAY_FW_VERSION (non-overlapping CommonInquiredType)
-        // classified as DEVICE_INFO → V2 parser → CommonStatus
+        // XM4 no longer routes DEVICE_INFO to V2, so this V2 common status shape is unsupported.
         val profile = xm4Profile()
         val version = "2.5.0".encodeToByteArray()
         val raw = byteArrayOf(0x0E, 0x13, 0x09, version.size.toByte()) + version
         val parsed = SonyTandemHeadphoneAdapter.parse(profile, raw)
 
-        assertTrue("Expected CommonStatus but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.CommonStatus)
-        parsed as ParsedTandemResponse.CommonStatus
-        assertEquals(CommonInquiredType.DISPLAY_FW_VERSION, parsed.type)
-        assertEquals("2.5.0", parsed.text)
+        assertTrue("Expected Unknown but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Unknown)
     }
 
     @Test
-    fun xm4_0x13_staminaType_classifiedAsBattery() {
+    fun xm4_0x13_staminaType_returnsUnknownOnV1BatteryParser() {
         // 0x13 0x0E ... = STAMINA (PowerInquiredType only, non-overlapping)
-        // classified as BATTERY → V1 parser → Battery
+        // classified as BATTERY, but V1 battery notifications only accept known battery payload shapes.
         val profile = xm4Profile()
         val raw = byteArrayOf(0x0E, 0x13, 0x0E, 0x01)
         val parsed = SonyTandemHeadphoneAdapter.parse(profile, raw)
 
-        assertTrue("Expected Battery but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Battery)
-        parsed as ParsedTandemResponse.Battery
-        assertEquals(PowerInquiredType.STAMINA, parsed.kind)
+        assertTrue("Expected Unknown but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Unknown)
     }
 
     @Test
     fun xm4_0x13_autoPowerOff_classifiedAsDeviceInfo() {
         // 0x13 0x04 = overlapping (AUTO_POWER_OFF / BLE_SETUP)
-        // looksLikeV1BatteryPayload → false for type 0x04 → DEVICE_INFO
+        // looksLikeV1BatteryPayload → false for type 0x04 → DEVICE_INFO, unsupported on XM4 V1 profile.
         val profile = xm4Profile()
         val raw = byteArrayOf(0x0E, 0x13, 0x04, 0x00)
         val parsed = SonyTandemHeadphoneAdapter.parse(profile, raw)
 
         assertTrue(
-            "Expected CommonStatus (DEVICE_INFO route) but got ${parsed::class.simpleName}",
-            parsed is ParsedTandemResponse.CommonStatus,
+            "Expected Unknown (unsupported V2 common status route) but got ${parsed::class.simpleName}",
+            parsed is ParsedTandemResponse.Unknown,
         )
     }
 
     @Test
     fun xm4_0x13_powerSaveMode_classifiedAsDeviceInfo() {
         // 0x13 0x06 = overlapping (POWER_SAVE_MODE / DEVICE_SPECIAL_MODE)
-        // looksLikeV1BatteryPayload → false for type 0x06 → DEVICE_INFO
+        // looksLikeV1BatteryPayload → false for type 0x06 → DEVICE_INFO, unsupported on XM4 V1 profile.
         val profile = xm4Profile()
         val raw = byteArrayOf(0x0E, 0x13, 0x06, 0x00)
         val parsed = SonyTandemHeadphoneAdapter.parse(profile, raw)
 
         assertTrue(
-            "Expected CommonStatus (DEVICE_INFO route) but got ${parsed::class.simpleName}",
-            parsed is ParsedTandemResponse.CommonStatus,
+            "Expected Unknown (unsupported V2 common status route) but got ${parsed::class.simpleName}",
+            parsed is ParsedTandemResponse.Unknown,
         )
     }
 

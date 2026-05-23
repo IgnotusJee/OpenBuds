@@ -1,6 +1,8 @@
 package dev.ignotus.sonyrebuild.headphones
 
 import dev.ignotus.sonyrebuild.ble.DiscoveredSonyDevice
+import dev.ignotus.sonyrebuild.headphones.sonydevices.LinkBudsSProfile
+import dev.ignotus.sonyrebuild.headphones.sonydevices.Wh1000Xm4Profile
 import dev.ignotus.sonyrebuild.protocol.AmbientSoundMode
 import dev.ignotus.sonyrebuild.protocol.CommonInquiredType
 import dev.ignotus.sonyrebuild.protocol.DeviceInfoType
@@ -34,105 +36,15 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
     private const val NCASM_RET_PARAM: Byte = 0x67
     private const val NCASM_SET_PARAM: Byte = 0x68
     private const val NCASM_NTFY_PARAM: Byte = 0x69
+    private const val PLAY_RET_STATUS: Byte = 0xA3.toByte()
+    private const val PLAY_NTFY_STATUS: Byte = 0xA5.toByte()
     override val id: String = "sony-tandem"
     override val brand: String = "Sony"
     override val protocolName: String = "Sony Tandem"
 
     val legacyIds: Set<String> = setOf("sony-tandem-v2")
 
-    private val commonFeatures = setOf(
-        HeadphoneFeature.DEVICE_INFO,
-        HeadphoneFeature.BATTERY,
-        HeadphoneFeature.NOISE_CONTROL,
-        HeadphoneFeature.AMBIENT_LEVEL,
-        HeadphoneFeature.AMBIENT_VOICE_MODE,
-        HeadphoneFeature.PLAYBACK_CONTROL,
-        HeadphoneFeature.EQ,
-        HeadphoneFeature.CLEAR_BASS,
-        HeadphoneFeature.LEA_STATUS,
-        HeadphoneFeature.QUICK_ACCESS,
-        HeadphoneFeature.WEARING_STATUS,
-    )
-
-    private val linkBudsSFeatureProtocols =
-        commonFeatures.associateWith { HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1 }
-
-    private val wh1000xm4FeatureProtocols =
-        linkBudsSFeatureProtocols + setOf(
-            HeadphoneFeature.BATTERY,
-            HeadphoneFeature.NOISE_CONTROL,
-            HeadphoneFeature.AMBIENT_LEVEL,
-            HeadphoneFeature.AMBIENT_VOICE_MODE,
-            HeadphoneFeature.EQ,
-            HeadphoneFeature.CLEAR_BASS,
-        ).associateWith { HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1 }
-
-    private val linkBudsS = ProfileTemplate(
-        modelName = "LinkBuds S",
-        series = "LINK_BUDS",
-        capabilities = HeadphoneCapabilities(
-            features = commonFeatures,
-            formFactor = HeadphoneFormFactor.TRUE_WIRELESS,
-            batteryQueries = listOf(
-                PowerInquiredType.LEFT_RIGHT_BATTERY,
-                PowerInquiredType.CRADLE_BATTERY,
-            ),
-            noiseControlQueryTypes = listOf(
-                NcAsmInquiredType.MODE_NC_ASM_DUAL_NC_MODE_SWITCH_AND_ASM_SEAMLESS,
-            ),
-            writableNoiseControlTypes = setOf(
-                NcAsmInquiredType.MODE_NC_ASM_DUAL_NC_MODE_SWITCH_AND_ASM_SEAMLESS,
-            ),
-            eqConfig = EqDeviceConfig(
-                availablePresets = listOf(
-                    EqPresetId.OFF, EqPresetId.BRIGHT, EqPresetId.EXCITED,
-                    EqPresetId.MELLOW, EqPresetId.RELAXED, EqPresetId.VOCAL,
-                    EqPresetId.TREBLE, EqPresetId.BASS, EqPresetId.SPEECH,
-                    EqPresetId.CUSTOM, EqPresetId.USER_SETTING1, EqPresetId.USER_SETTING2,
-                ),
-                writeInquiredType = EqEbbInquiredType.PRESET_EQ,
-                statusQueryTypes = listOf(EqEbbInquiredType.PRESET_EQ, EqEbbInquiredType.CUSTOM_EQ, EqEbbInquiredType.EBB),
-                paramQueryTypes = listOf(EqEbbInquiredType.PRESET_EQ, EqEbbInquiredType.EBB),
-                bandCount = 6,
-                hasClearBass = true,
-            ),
-        ),
-        featureProtocolMap = linkBudsSFeatureProtocols,
-    )
-
-    private val wh1000xm4 = ProfileTemplate(
-        modelName = "WH-1000XM4",
-        series = "PREMIUM",
-        capabilities = HeadphoneCapabilities(
-            features = commonFeatures,
-            formFactor = HeadphoneFormFactor.HEADSET,
-            batteryQueries = listOf(PowerInquiredType.BATTERY),
-            noiseControlQueryTypes = listOf(
-                NcAsmInquiredType.V1_TABLE_SET1_NC_ASM,
-            ),
-            writableNoiseControlTypes = setOf(
-                NcAsmInquiredType.V1_TABLE_SET1_NC_ASM,
-            ),
-            eqConfig = EqDeviceConfig(
-                availablePresets = listOf(
-                    EqPresetId.OFF, EqPresetId.BRIGHT, EqPresetId.EXCITED,
-                    EqPresetId.MELLOW, EqPresetId.RELAXED, EqPresetId.VOCAL,
-                    EqPresetId.TREBLE, EqPresetId.BASS, EqPresetId.SPEECH,
-                    EqPresetId.CUSTOM, EqPresetId.USER_SETTING1, EqPresetId.USER_SETTING2,
-                ),
-                writeInquiredType = EqEbbInquiredType.PRESET_EQ,
-                statusQueryTypes = listOf(EqEbbInquiredType.PRESET_EQ),
-                paramQueryTypes = listOf(EqEbbInquiredType.PRESET_EQ),
-                bandCount = 6,
-                hasClearBass = true,
-            ),
-            queryProtocolInfo = false,
-            queryNoiseControlParams = true,
-        ),
-        featureProtocolMap = wh1000xm4FeatureProtocols,
-    )
-
-    private val templates = listOf(wh1000xm4, linkBudsS)
+    private val templates = listOf(Wh1000Xm4Profile.template, LinkBudsSProfile.template)
 
     private fun command(
         profile: ConnectedHeadphoneProfile,
@@ -502,6 +414,7 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
         NCASM_GET_STATUS, NCASM_RET_STATUS, NCASM_NTFY_STATUS,
         NCASM_GET_PARAM, NCASM_RET_PARAM, NCASM_SET_PARAM,
         NCASM_NTFY_PARAM -> HeadphoneFeature.NOISE_CONTROL
+        PLAY_RET_STATUS, PLAY_NTFY_STATUS -> HeadphoneFeature.PLAYBACK_CONTROL
         else -> HeadphoneFeature.DEVICE_INFO
     }
 

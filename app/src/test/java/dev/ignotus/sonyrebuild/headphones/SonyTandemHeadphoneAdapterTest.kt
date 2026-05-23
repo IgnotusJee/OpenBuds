@@ -1,11 +1,12 @@
 package dev.ignotus.sonyrebuild.headphones
 
 import dev.ignotus.sonyrebuild.ble.DiscoveredSonyDevice
-import dev.ignotus.sonyrebuild.protocol.CommonInquiredType
+import dev.ignotus.sonyrebuild.protocol.DeviceInfoType
 import dev.ignotus.sonyrebuild.protocol.EqEbbInquiredType
 import dev.ignotus.sonyrebuild.protocol.NcAsmInquiredType
 import dev.ignotus.sonyrebuild.protocol.NoiseControlMode
 import dev.ignotus.sonyrebuild.protocol.ParsedTandemResponse
+import dev.ignotus.sonyrebuild.protocol.PlaybackStatus
 import dev.ignotus.sonyrebuild.protocol.PowerInquiredType
 import dev.ignotus.sonyrebuild.protocol.SonyTandemV1Table1Protocol
 import org.junit.Assert.assertArrayEquals
@@ -28,9 +29,12 @@ class SonyTandemHeadphoneAdapterTest {
         assertEquals("WH-1000XM4", profile.modelName)
         assertEquals("PREMIUM", profile.series)
         assertTrue(profile.supports(HeadphoneFeature.NOISE_CONTROL))
+        assertFalse(profile.supports(HeadphoneFeature.LEA_STATUS))
+        assertFalse(profile.supports(HeadphoneFeature.QUICK_ACCESS))
+        assertFalse(profile.supports(HeadphoneFeature.WEARING_STATUS))
         assertEquals(listOf(PowerInquiredType.BATTERY), profile.capabilities.batteryQueries)
         assertEquals(HeadphoneFormFactor.HEADSET, profile.capabilities.formFactor)
-        // XM4: battery, NC/ASM, ambient level, ambient voice → V1 Table1
+        // XM4: all supported Tandem features use V1 Table1.
         assertEquals(
             HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1,
             profile.protocolFor(HeadphoneFeature.BATTERY),
@@ -47,7 +51,6 @@ class SonyTandemHeadphoneAdapterTest {
             HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1,
             profile.protocolFor(HeadphoneFeature.AMBIENT_VOICE_MODE),
         )
-        // XM4: EQ, Clear Bass → V1 Table1; playback → V2 Table1
         assertEquals(
             HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1,
             profile.protocolFor(HeadphoneFeature.EQ),
@@ -57,7 +60,7 @@ class SonyTandemHeadphoneAdapterTest {
             profile.protocolFor(HeadphoneFeature.CLEAR_BASS),
         )
         assertEquals(
-            HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1,
+            HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1,
             profile.protocolFor(HeadphoneFeature.PLAYBACK_CONTROL),
         )
     }
@@ -69,18 +72,31 @@ class SonyTandemHeadphoneAdapterTest {
         val labels = commands.map { it.label }
 
         assertFalse(labels.any { it == "GET protocol info" })
+        assertTrue(labels.any { it == "GET device info MODEL_NAME" })
+        assertTrue(labels.any { it == "GET device info FW_VERSION" })
         assertTrue(labels.any { it == "GET battery BATTERY" })
         assertFalse(labels.any { it == "GET battery LEFT_RIGHT_BATTERY" })
         assertFalse(labels.any { it == "GET battery CRADLE_BATTERY" })
         assertFalse(labels.any { it == "GET EQ param CUSTOM_EQ" })
         assertTrue(labels.any { it == "GET EQ param PRESET_EQ" })
         assertTrue(labels.any { it == "GET playback status" })
-        assertTrue(labels.any { it == "GET display firmware version" })
+        assertFalse(labels.any { it == "GET display firmware version" })
+        assertFalse(labels.any { it.contains("LEA") })
+        assertFalse(labels.any { it.contains("Quick Access") })
+        assertFalse(labels.any { it.contains("Wearing") })
         // XM4 NC refresh now routes through V1 path → label is "GET NC/ASM param V1"
         assertTrue(commands.any { it.label == "GET NC/ASM param V1" })
         assertArrayEquals(
+            byteArrayOf(0x0E, 0x04, 0x01),
+            commands.first { it.label == "GET device info MODEL_NAME" }.bytes,
+        )
+        assertArrayEquals(
             byteArrayOf(0x0E, 0x10, 0x00),
             commands.first { it.label == "GET battery BATTERY" }.bytes,
+        )
+        assertArrayEquals(
+            byteArrayOf(0x0E, 0xA2.toByte(), 0x01),
+            commands.first { it.label == "GET playback status" }.bytes,
         )
         assertFalse(commands.any { it.bytes.contentEquals(byteArrayOf(0x0E, 0x22, 0x00)) })
     }
@@ -164,16 +180,27 @@ class SonyTandemHeadphoneAdapterTest {
     }
 
     @Test
-    fun parse_xm4DisplayFirmwareResponse_classifiedAsDeviceInfo_routesToV2() {
+    fun parse_xm4FirmwareVersionDeviceInfo_routesViaV1() {
         val profile = SonyTandemHeadphoneAdapter.match(xm4Device(), "WH-1000XM4")!!
         val version = "2.5.0".encodeToByteArray()
-        val raw = byteArrayOf(0x0E, 0x13, 0x09, version.size.toByte()) + version
+        val raw = byteArrayOf(0x0E, 0x05, 0x02, version.size.toByte()) + version
         val parsed = SonyTandemHeadphoneAdapter.parse(profile, raw)
 
-        assertTrue("Expected CommonStatus but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.CommonStatus)
-        parsed as ParsedTandemResponse.CommonStatus
-        assertEquals(CommonInquiredType.DISPLAY_FW_VERSION, parsed.type)
+        assertTrue("Expected DeviceInfo but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.DeviceInfo)
+        parsed as ParsedTandemResponse.DeviceInfo
+        assertEquals(DeviceInfoType.FW_VERSION, parsed.type)
         assertEquals("2.5.0", parsed.text)
+    }
+
+    @Test
+    fun parse_xm4PlaybackResponse_routesViaV1() {
+        val profile = SonyTandemHeadphoneAdapter.match(xm4Device(), "WH-1000XM4")!!
+        val raw = byteArrayOf(0x0E, 0xA3.toByte(), 0x01, 0x00, 0x02)
+        val parsed = SonyTandemHeadphoneAdapter.parse(profile, raw)
+
+        assertTrue("Expected PlaybackAck but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.PlaybackAck)
+        parsed as ParsedTandemResponse.PlaybackAck
+        assertEquals(PlaybackStatus.PAUSED, parsed.status)
     }
 
     @Test
@@ -200,25 +227,12 @@ class SonyTandemHeadphoneAdapterTest {
     // ── 0x13 collision tests ──
 
     @Test
-    fun parse_xm4V2CommonStatus0x01_notRoutedAsBattery() {
+    fun parse_xm4NonBattery0x13Payload_notRoutedAsBattery() {
         val profile = SonyTandemHeadphoneAdapter.match(xm4Device(), "WH-1000XM4")!!
         val raw = byteArrayOf(0x0E, 0x13, 0x01, 0x00, 0x01)
         val parsed = SonyTandemHeadphoneAdapter.parse(profile, raw)
 
-        assertTrue("Expected CommonStatus but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.CommonStatus)
-        parsed as ParsedTandemResponse.CommonStatus
-        assertEquals(CommonInquiredType.CONNECTION_STATUS, parsed.type)
-    }
-
-    @Test
-    fun parse_xm4V2CommonStatus0x02_notRoutedAsBattery() {
-        val profile = SonyTandemHeadphoneAdapter.match(xm4Device(), "WH-1000XM4")!!
-        val raw = byteArrayOf(0x0E, 0x13, 0x02, 0x00, 0x01)
-        val parsed = SonyTandemHeadphoneAdapter.parse(profile, raw)
-
-        assertTrue("Expected CommonStatus but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.CommonStatus)
-        parsed as ParsedTandemResponse.CommonStatus
-        assertEquals(CommonInquiredType.AUDIO_CODEC, parsed.type)
+        assertTrue("Expected Unknown but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Unknown)
     }
 
     @Test

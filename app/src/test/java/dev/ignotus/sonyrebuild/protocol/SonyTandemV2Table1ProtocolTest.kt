@@ -40,6 +40,14 @@ class SonyTandemV2Table1ProtocolTest {
     }
 
     @Test
+    fun v1ConnectGetDeviceInfo_modelName_matchesReverseCommandShape() {
+        assertArrayEquals(
+            byteArrayOf(0x0E, 0x04, 0x01),
+            SonyTandemV1Table1Protocol.buildGetDeviceInfo(DeviceInfoType.MODEL_NAME),
+        )
+    }
+
+    @Test
     fun commonGetStatus_displayFirmwareVersion_matchesExportedCommandShape() {
         assertArrayEquals(
             byteArrayOf(0x0E, 0x12, 0x09),
@@ -146,6 +154,22 @@ class SonyTandemV2Table1ProtocolTest {
     }
 
     @Test
+    fun v1PlaySetStatus_play_matchesReverseCommandShape() {
+        assertArrayEquals(
+            byteArrayOf(0x0E, 0xA4.toByte(), 0x01, 0x00, 0x07),
+            SonyTandemV1Table1Protocol.buildPlayback(PlaybackControl.PLAY),
+        )
+    }
+
+    @Test
+    fun v1PlayGetStatus_matchesReverseCommandShape() {
+        assertArrayEquals(
+            byteArrayOf(0x0E, 0xA2.toByte(), 0x01),
+            SonyTandemV1Table1Protocol.buildGetPlaybackStatus(),
+        )
+    }
+
+    @Test
     fun eqEbbSetParam_bassPreset_matchesReverseCommandShape() {
         assertArrayEquals(
             byteArrayOf(0x0E, 0x58, 0x00, 0x16, 0x00),
@@ -242,6 +266,29 @@ class SonyTandemV2Table1ProtocolTest {
         parsed as ParsedTandemResponse.Battery
         assertEquals(PowerInquiredType.BATTERY, parsed.kind)
         assertEquals(listOf(88), parsed.values)
+    }
+
+    @Test
+    fun parser_v1DeviceInfoResponse_extractsFirmwareVersion() {
+        val version = "2.5.1".encodeToByteArray()
+        val raw = byteArrayOf(0x0E, 0x05, 0x02, version.size.toByte()) + version
+        val parsed = SonyTandemV1Table1Protocol.parse(raw)
+
+        assertTrue(parsed is ParsedTandemResponse.DeviceInfo)
+        parsed as ParsedTandemResponse.DeviceInfo
+        assertEquals(DeviceInfoType.FW_VERSION, parsed.type)
+        assertEquals("2.5.1", parsed.text)
+    }
+
+    @Test
+    fun parser_v1PlaybackResponse_extractsStatus() {
+        val raw = byteArrayOf(0x0E, 0xA3.toByte(), 0x01, 0x00, 0x03)
+        val parsed = SonyTandemV1Table1Protocol.parse(raw)
+
+        assertTrue(parsed is ParsedTandemResponse.PlaybackAck)
+        parsed as ParsedTandemResponse.PlaybackAck
+        assertEquals(listOf(1, 0, 3), parsed.values)
+        assertEquals(PlaybackStatus.STOPPED, parsed.status)
     }
 
     @Test
