@@ -371,14 +371,9 @@ object SonyTandemV2Table1Protocol {
         } else {
             null
         }
-        val ebbCombinedPreset = if (isParamResponse && type == EqEbbInquiredType.EBB &&
+        val ebbHasPresetField = isParamResponse && type == EqEbbInquiredType.EBB &&
             payload.size >= 4 &&
             payload.getOrNull(2)?.unsigned?.let { count -> payload.size == count + 3 } == true
-        ) {
-            payload.getOrNull(1)?.let { code -> EqPresetId.entries.firstOrNull { it.code == code } }
-        } else {
-            null
-        }
         val preset = if (isParamResponse) when (type) {
             EqEbbInquiredType.PRESET_EQ,
             EqEbbInquiredType.PRESET_EQ_NONCUSTOMIZABLE,
@@ -386,14 +381,18 @@ object SonyTandemV2Table1Protocol {
             EqEbbInquiredType.PRESET_EQ_AND_ULT_MODE -> payload.getOrNull(1)?.let { code ->
                 EqPresetId.entries.firstOrNull { it.code == code }
             }
-            EqEbbInquiredType.EBB -> ebbCombinedPreset
+            EqEbbInquiredType.EBB -> if (ebbHasPresetField) {
+                payload.getOrNull(1)?.let { code ->
+                    EqPresetId.entries.firstOrNull { it.code == code }
+                }
+            } else null
             else -> null
         } else {
             null
         }
         val bandCountOffset = when (type) {
             EqEbbInquiredType.CUSTOM_EQ -> 1
-            EqEbbInquiredType.EBB -> if (ebbCombinedPreset != null) 2 else 1
+            EqEbbInquiredType.EBB -> if (ebbHasPresetField) 2 else 1
             EqEbbInquiredType.PRESET_EQ_AND_ULT_MODE -> 3
             null -> 0
             else -> 2
@@ -405,10 +404,12 @@ object SonyTandemV2Table1Protocol {
             type = type,
             enabled = enabled,
             preset = preset,
-            clearBass = if (type == EqEbbInquiredType.EBB && isParamResponse && ebbCombinedPreset == null) {
-                payload.getOrNull(1)?.toInt()
-            } else {
-                null
+            clearBass = when {
+                type == EqEbbInquiredType.EBB && isParamResponse && !ebbHasPresetField ->
+                    payload.getOrNull(1)?.toInt()
+                type == EqEbbInquiredType.EBB && isParamResponse && ebbHasPresetField && bandSteps.isNotEmpty() ->
+                    bandSteps[0]
+                else -> null
             },
             bandSteps = bandSteps,
             values = values,

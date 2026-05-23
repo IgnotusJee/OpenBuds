@@ -70,15 +70,19 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
             writableNoiseControlTypes = setOf(
                 NcAsmInquiredType.MODE_NC_ASM_DUAL_NC_MODE_SWITCH_AND_ASM_SEAMLESS,
             ),
-            eqStatusTypes = listOf(
-                EqEbbInquiredType.PRESET_EQ,
-                EqEbbInquiredType.CUSTOM_EQ,
-                EqEbbInquiredType.EBB,
-            ),
-            eqParamTypes = listOf(
-                EqEbbInquiredType.PRESET_EQ,
-                EqEbbInquiredType.CUSTOM_EQ,
-                EqEbbInquiredType.EBB,
+            eqConfig = EqDeviceConfig(
+                availablePresets = listOf(
+                    EqPresetId.OFF, EqPresetId.BRIGHT, EqPresetId.EXCITED,
+                    EqPresetId.MELLOW, EqPresetId.RELAXED, EqPresetId.VOCAL,
+                    EqPresetId.TREBLE, EqPresetId.BASS, EqPresetId.SPEECH,
+                    EqPresetId.CUSTOM, EqPresetId.USER_SETTING1, EqPresetId.USER_SETTING2,
+                ),
+                writeInquiredType = EqEbbInquiredType.PRESET_EQ,
+                includeBandsOnPresetWrite = false,
+                statusQueryTypes = listOf(EqEbbInquiredType.PRESET_EQ, EqEbbInquiredType.CUSTOM_EQ, EqEbbInquiredType.EBB),
+                paramQueryTypes = listOf(EqEbbInquiredType.PRESET_EQ, EqEbbInquiredType.EBB),
+                bandCount = 6,
+                hasClearBass = true,
             ),
         ),
     )
@@ -96,13 +100,19 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
             writableNoiseControlTypes = setOf(
                 NcAsmInquiredType.V1_TABLE_SET1_NC_ASM,
             ),
-            eqStatusTypes = listOf(
-                EqEbbInquiredType.PRESET_EQ,
-                EqEbbInquiredType.CUSTOM_EQ,
-                EqEbbInquiredType.EBB,
-            ),
-            eqParamTypes = listOf(
-                EqEbbInquiredType.EBB,
+            eqConfig = EqDeviceConfig(
+                availablePresets = listOf(
+                    EqPresetId.OFF, EqPresetId.BRIGHT, EqPresetId.EXCITED,
+                    EqPresetId.MELLOW, EqPresetId.RELAXED, EqPresetId.VOCAL,
+                    EqPresetId.TREBLE, EqPresetId.BASS, EqPresetId.SPEECH,
+                    EqPresetId.CUSTOM, EqPresetId.USER_SETTING1, EqPresetId.USER_SETTING2,
+                ),
+                writeInquiredType = EqEbbInquiredType.EBB,
+                includeBandsOnPresetWrite = true,
+                statusQueryTypes = listOf(EqEbbInquiredType.PRESET_EQ, EqEbbInquiredType.CUSTOM_EQ, EqEbbInquiredType.EBB),
+                paramQueryTypes = listOf(EqEbbInquiredType.EBB),
+                bandCount = 6,
+                hasClearBass = true,
             ),
             queryProtocolInfo = false,
             queryNoiseControlParams = true,
@@ -140,8 +150,15 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
                 batteryQueries = listOf(PowerInquiredType.BATTERY),
                 noiseControlQueryTypes = emptyList(),
                 writableNoiseControlTypes = emptySet(),
-                eqStatusTypes = emptyList(),
-                eqParamTypes = emptyList(),
+                eqConfig = EqDeviceConfig(
+                    availablePresets = listOf(EqPresetId.OFF),
+                    writeInquiredType = EqEbbInquiredType.PRESET_EQ,
+                    includeBandsOnPresetWrite = false,
+                    statusQueryTypes = emptyList(),
+                    paramQueryTypes = emptyList(),
+                    bandCount = 0,
+                    hasClearBass = false,
+                ),
             ),
             knownStaticProfile = false,
         ).toProfile(id, brand, protocolName, device.name)
@@ -257,14 +274,17 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
         profile: ConnectedHeadphoneProfile,
         preset: EqPresetId,
         context: EqWriteContext,
-    ): List<HeadphoneCommand> = listOf(
-        command(
-            profile,
-            HeadphoneFeature.EQ,
-            "SET EQ preset ${preset.name} type=${EqEbbInquiredType.PRESET_EQ}",
-            SonyTandemV2Table1Codec.buildSetEqPreset(preset, EqEbbInquiredType.PRESET_EQ),
+    ): List<HeadphoneCommand> {
+        val engine = EqProtocolEngine(profile.capabilities.eqConfig)
+        return listOf(
+            command(
+                profile,
+                HeadphoneFeature.EQ,
+                "SET EQ preset ${preset.name} type=${profile.capabilities.eqConfig.writeInquiredType}",
+                engine.buildSetPreset(preset, context.rawBandSteps),
+            )
         )
-    )
+    }
 
     override fun buildSetEqBandCommands(
         profile: ConnectedHeadphoneProfile,
@@ -272,21 +292,34 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
         preset: EqPresetId?,
         context: EqWriteContext,
     ): List<HeadphoneCommand> {
+        val engine = EqProtocolEngine(profile.capabilities.eqConfig)
         val targetPreset = preset ?: EqPresetId.CUSTOM
-        val command = SonyTandemV2Table1Codec.buildSetEqPreset(
-            preset = targetPreset,
-            type = EqEbbInquiredType.PRESET_EQ,
-            bandSteps = rawSteps,
+        val writeType = profile.capabilities.eqConfig.writeInquiredType
+        return listOf(
+            command(
+                profile,
+                HeadphoneFeature.EQ,
+                "SET EQ bands type=$writeType preset=${targetPreset.name}",
+                engine.buildSetBands(rawSteps, targetPreset),
+            )
         )
-        return listOf(command(profile, HeadphoneFeature.EQ, "SET EQ bands type=${EqEbbInquiredType.PRESET_EQ} preset=${targetPreset.name}", command))
     }
 
     override fun buildSetClearBassCommands(
         profile: ConnectedHeadphoneProfile,
         level: Int,
         context: EqWriteContext,
-    ): List<HeadphoneCommand> =
-        listOf(command(profile, HeadphoneFeature.CLEAR_BASS, "SET Clear Bass $level", SonyTandemV2Table1Codec.buildSetClearBass(level)))
+    ): List<HeadphoneCommand> {
+        val engine = EqProtocolEngine(profile.capabilities.eqConfig)
+        return listOf(
+            command(
+                profile,
+                HeadphoneFeature.CLEAR_BASS,
+                "SET Clear Bass $level",
+                engine.buildSetClearBass(level),
+            )
+        )
+    }
 
     override fun buildRefreshNoiseControlCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> =
         when (profile.protocolFor(HeadphoneFeature.NOISE_CONTROL)) {
@@ -311,15 +344,12 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
             }
         }
 
-    override fun buildRefreshEqCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> =
-        buildList {
-            profile.capabilities.eqStatusTypes.forEach {
-                add(command(profile, HeadphoneFeature.EQ, "GET EQ status $it", SonyTandemV2Table1Codec.buildGetEqEbbStatus(it)))
-            }
-            profile.capabilities.eqParamTypes.forEach {
-                add(command(profile, HeadphoneFeature.EQ, "GET EQ param $it", SonyTandemV2Table1Codec.buildGetEqEbbParam(it)))
-            }
+    override fun buildRefreshEqCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> {
+        val engine = EqProtocolEngine(profile.capabilities.eqConfig)
+        return engine.buildRefreshCommands { label, bytes ->
+            command(profile, HeadphoneFeature.EQ, label, bytes)
         }
+    }
 
     override fun buildRefreshBatteryCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> =
         if (!profile.supports(HeadphoneFeature.BATTERY)) {

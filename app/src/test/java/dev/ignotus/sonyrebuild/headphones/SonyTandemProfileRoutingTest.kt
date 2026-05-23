@@ -87,12 +87,7 @@ class SonyTandemProfileRoutingTest {
     @Test
     fun linkBudsS_eqPresetWrite_usesOfficialPresetPayloadWithoutCachedBands() {
         val profile = linkBudsSProfile()
-        val context = EqWriteContext(
-            presetType = EqEbbInquiredType.PRESET_EQ,
-            rawBandSteps = listOf(0x13, 0x0A, 0x0A, 0x0A, 0x0B, 0x0C),
-            usesCustomEqPayload = false,
-            currentPreset = EqPresetId.USER_SETTING2,
-        )
+        val context = EqWriteContext(rawBandSteps = listOf(0x13, 0x0A, 0x0A, 0x0A, 0x0B, 0x0C))
 
         val command = SonyTandemHeadphoneAdapter.buildSetEqPresetCommands(profile, EqPresetId.BASS, context).single()
 
@@ -104,12 +99,7 @@ class SonyTandemProfileRoutingTest {
     fun linkBudsS_eqBandWrite_usesOfficialPresetEqBandPayload() {
         val profile = linkBudsSProfile()
         val rawSteps = listOf(0x13, 0x0A, 0x0A, 0x0A, 0x0B, 0x0C)
-        val context = EqWriteContext(
-            presetType = EqEbbInquiredType.PRESET_EQ,
-            rawBandSteps = rawSteps,
-            usesCustomEqPayload = true,
-            currentPreset = EqPresetId.USER_SETTING2,
-        )
+        val context = EqWriteContext(rawBandSteps = rawSteps)
 
         val command = SonyTandemHeadphoneAdapter.buildSetEqBandCommands(profile, rawSteps, EqPresetId.USER_SETTING2, context).single()
 
@@ -221,12 +211,7 @@ class SonyTandemProfileRoutingTest {
             HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1,
             profile.protocolFor(HeadphoneFeature.CLEAR_BASS),
         )
-        val context = EqWriteContext(
-            presetType = EqEbbInquiredType.EBB,
-            rawBandSteps = emptyList(),
-            usesCustomEqPayload = false,
-            currentPreset = null,
-        )
+        val context = EqWriteContext(rawBandSteps = emptyList())
         assertEquals(
             TandemChannel.GATT_V2_HPC,
             SonyTandemHeadphoneAdapter.buildSetClearBassCommands(profile, level = 3, context).single().channel,
@@ -255,60 +240,48 @@ class SonyTandemProfileRoutingTest {
         // XM4 queries EBB param only (no CUSTOM_EQ param)
         assertTrue(labels.any { it == "GET EQ param EBB" })
         val paramLabels = labels.filter { it.startsWith("GET EQ param") }
+        assertEquals(1, paramLabels.size)
         assertFalse(paramLabels.any { it.contains("CUSTOM_EQ") })
+        assertFalse(paramLabels.any { it.contains("PRESET_EQ") })
     }
 
     @Test
-    fun xm4_eqPresetWrite_usesOfficialPresetEqPayloads() {
+    fun xm4_eqPresetWrite_usesEbbTypeWithBandData() {
         val profile = xm4Profile()
-        val context = EqWriteContext(
-            presetType = EqEbbInquiredType.EBB,
-            rawBandSteps = listOf(0x11, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A),
-            usesCustomEqPayload = false,
-            currentPreset = EqPresetId.BASS,
-        )
+        val context = EqWriteContext(rawBandSteps = listOf(0x11, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A))
 
         assertArrayEquals(
-            byteArrayOf(0x0E, 0x58, 0x00, 0x16, 0x00),
+            byteArrayOf(0x0E, 0x58, 0x01, 0x16, 0x06, 0x11, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A),
             SonyTandemHeadphoneAdapter.buildSetEqPresetCommands(profile, EqPresetId.BASS, context).single().bytes,
         )
         assertArrayEquals(
-            byteArrayOf(0x0E, 0x58, 0x00, 0x13, 0x00),
+            byteArrayOf(0x0E, 0x58, 0x01, 0x13, 0x06, 0x11, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A),
             SonyTandemHeadphoneAdapter.buildSetEqPresetCommands(profile, EqPresetId.RELAXED, context).single().bytes,
         )
     }
 
     @Test
-    fun xm4_userEqWrites_neverUseEbbPresetPayload() {
+    fun xm4_userEqWrites_useEbbTypeWithCurrentBands() {
         val profile = xm4Profile()
         val rawSteps = listOf(0x11, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A)
-        val context = EqWriteContext(
-            presetType = EqEbbInquiredType.EBB,
-            rawBandSteps = rawSteps,
-            usesCustomEqPayload = false,
-            currentPreset = EqPresetId.BASS,
-        )
+        val context = EqWriteContext(rawBandSteps = rawSteps)
 
         val userPreset = SonyTandemHeadphoneAdapter.buildSetEqPresetCommands(profile, EqPresetId.USER_SETTING1, context).single()
         val customBands = SonyTandemHeadphoneAdapter.buildSetEqBandCommands(profile, rawSteps, EqPresetId.CUSTOM, context).single()
 
-        assertArrayEquals(byteArrayOf(0x0E, 0x58, 0x00, 0xA1.toByte(), 0x00), userPreset.bytes)
         assertArrayEquals(
-            byteArrayOf(0x0E, 0x58, 0x00, 0xA0.toByte(), 0x06, 0x11, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A),
+            byteArrayOf(0x0E, 0x58, 0x01, 0xA1.toByte(), 0x06, 0x11, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A),
+            userPreset.bytes,
+        )
+        assertArrayEquals(
+            byteArrayOf(0x0E, 0x58, 0x01, 0xA0.toByte(), 0x06, 0x11, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A),
             customBands.bytes,
         )
-        assertFalse(userPreset.bytes[2] == EqEbbInquiredType.EBB.code)
-        assertFalse(customBands.bytes[2] == EqEbbInquiredType.EBB.code)
     }
 
     @Test
     fun clearBassWrite_alwaysUsesOfficialEbbLevelPayload() {
-        val context = EqWriteContext(
-            presetType = EqEbbInquiredType.PRESET_EQ,
-            rawBandSteps = listOf(0x13, 0x0A, 0x0A, 0x0A, 0x0B, 0x0C),
-            usesCustomEqPayload = false,
-            currentPreset = EqPresetId.USER_SETTING2,
-        )
+        val context = EqWriteContext(rawBandSteps = listOf(0x13, 0x0A, 0x0A, 0x0A, 0x0B, 0x0C))
 
         assertArrayEquals(
             byteArrayOf(0x0E, 0x58, 0x01, 0x03),

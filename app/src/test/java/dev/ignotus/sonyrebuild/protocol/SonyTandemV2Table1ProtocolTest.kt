@@ -411,7 +411,7 @@ class SonyTandemV2Table1ProtocolTest {
         parsed as ParsedTandemResponse.EqEbb
         assertEquals(EqEbbInquiredType.EBB, parsed.type)
         assertEquals(EqPresetId.BASS, parsed.preset)
-        assertEquals(null, parsed.clearBass)
+        assertEquals(17, parsed.clearBass)
         assertEquals(listOf(17, 10, 10, 10, 10, 10), parsed.bandSteps)
     }
 

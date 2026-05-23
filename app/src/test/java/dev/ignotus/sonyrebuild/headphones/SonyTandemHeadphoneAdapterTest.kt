@@ -135,7 +135,7 @@ class SonyTandemHeadphoneAdapterTest {
             ),
             profile.capabilities.batteryQueries,
         )
-        assertTrue(profile.capabilities.eqStatusTypes.contains(EqEbbInquiredType.CUSTOM_EQ))
+        assertTrue(profile.capabilities.eqConfig.statusQueryTypes.contains(EqEbbInquiredType.CUSTOM_EQ))
     }
 
     @Test

@@ -64,6 +64,7 @@ import dev.ignotus.sonyrebuild.ble.DiscoveredSonyDevice
 import dev.ignotus.sonyrebuild.data.FeatureStatus
 import dev.ignotus.sonyrebuild.data.SonyHeadphoneUiState
 import dev.ignotus.sonyrebuild.headphones.ConnectedHeadphoneProfile
+import dev.ignotus.sonyrebuild.headphones.EqUiCapability
 import dev.ignotus.sonyrebuild.headphones.HeadphoneFeature
 import dev.ignotus.sonyrebuild.headphones.HeadphoneFormFactor
 import dev.ignotus.sonyrebuild.protocol.EqPresetId
@@ -493,6 +494,7 @@ internal fun QuickControlCard(
             onSetAmbientVoiceMode = onSetAmbientVoiceMode,
         )
         EqControlCard(
+            capability = state.eqUiCapability,
             selectedPreset = state.eqState.preset,
             clearBass = state.eqState.clearBass ?: 0,
             bandSteps = state.eqState.bandSteps,
@@ -529,6 +531,7 @@ internal fun QuickControlCard(
 
 @Composable
 internal fun EqControlCard(
+    capability: EqUiCapability?,
     selectedPreset: EqPresetId?,
     clearBass: Int,
     bandSteps: List<Int>,
@@ -541,21 +544,8 @@ internal fun EqControlCard(
     onSetClearBass: (Int) -> Unit,
     onSetCustomEqBand: (Int, Int) -> Unit,
 ) {
-    val bandLabels = listOf("400 Hz", "1 kHz", "2.5 kHz", "6.3 kHz", "16 kHz")
-    val presets = listOf(
-        EqPresetId.OFF,
-        EqPresetId.BRIGHT,
-        EqPresetId.EXCITED,
-        EqPresetId.MELLOW,
-        EqPresetId.RELAXED,
-        EqPresetId.VOCAL,
-        EqPresetId.TREBLE,
-        EqPresetId.BASS,
-        EqPresetId.SPEECH,
-        EqPresetId.CUSTOM,
-        EqPresetId.USER_SETTING1,
-        EqPresetId.USER_SETTING2,
-    )
+    val bandLabels = capability?.bandLabels ?: emptyList()
+    val presets = capability?.availablePresets ?: emptyList()
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),

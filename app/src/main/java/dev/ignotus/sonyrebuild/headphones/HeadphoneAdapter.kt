@@ -18,32 +18,6 @@ enum class HeadphoneProtocolVariant {
     UNKNOWN,
 }
 
-sealed interface HeadphoneOperation {
-    data object RefreshBasics : HeadphoneOperation
-    data class RefreshFeature(val feature: HeadphoneFeature) : HeadphoneOperation
-    data class SetNoiseControl(
-        val mode: NoiseControlMode,
-        val ambientLevel: Int,
-        val ambientMode: AmbientSoundMode,
-    ) : HeadphoneOperation
-    data class SetEqPreset(
-        val preset: EqPresetId,
-        val context: EqWriteContext,
-    ) : HeadphoneOperation
-    data class SetEqBands(
-        val rawSteps: List<Int>,
-        val preset: EqPresetId?,
-        val context: EqWriteContext,
-    ) : HeadphoneOperation
-    data class SetClearBass(val level: Int, val context: EqWriteContext) : HeadphoneOperation
-    data class Playback(val control: PlaybackControl) : HeadphoneOperation
-}
-
-interface HeadphoneFeatureCodec {
-    val feature: HeadphoneFeature
-    val protocolVariant: HeadphoneProtocolVariant
-}
-
 enum class HeadphoneFormFactor {
     HEADSET,
     TRUE_WIRELESS,
@@ -123,10 +97,7 @@ data class HeadphoneCommand(
 }
 
 data class EqWriteContext(
-    val presetType: EqEbbInquiredType,
-    val rawBandSteps: List<Int>,
-    val usesCustomEqPayload: Boolean,
-    val currentPreset: EqPresetId?,
+    val rawBandSteps: List<Int> = emptyList(),
 )
 
 data class HeadphoneCapabilities(
@@ -135,8 +106,15 @@ data class HeadphoneCapabilities(
     val batteryQueries: List<PowerInquiredType>,
     val noiseControlQueryTypes: List<NcAsmInquiredType>,
     val writableNoiseControlTypes: Set<NcAsmInquiredType>,
-    val eqStatusTypes: List<EqEbbInquiredType>,
-    val eqParamTypes: List<EqEbbInquiredType>,
+    val eqConfig: EqDeviceConfig = EqDeviceConfig(
+        availablePresets = listOf(EqPresetId.OFF),
+        writeInquiredType = EqEbbInquiredType.PRESET_EQ,
+        includeBandsOnPresetWrite = false,
+        statusQueryTypes = emptyList(),
+        paramQueryTypes = emptyList(),
+        bandCount = 0,
+        hasClearBass = false,
+    ),
     val queryProtocolInfo: Boolean = true,
     val queryNoiseControlParams: Boolean = true,
 )
@@ -208,7 +186,7 @@ data class ProfileTemplate(
         HeadphoneFeature.AMBIENT_LEVEL,
         HeadphoneFeature.AMBIENT_VOICE_MODE -> capabilities.noiseControlQueryTypes
         HeadphoneFeature.EQ,
-        HeadphoneFeature.CLEAR_BASS -> capabilities.eqStatusTypes + capabilities.eqParamTypes
+        HeadphoneFeature.CLEAR_BASS -> capabilities.eqConfig.statusQueryTypes + capabilities.eqConfig.paramQueryTypes
         else -> emptyList()
     }
 
@@ -249,6 +227,9 @@ data class ProfileTemplate(
             },
         )
 }
+
+val ConnectedHeadphoneProfile.eqUiCapability: EqUiCapability
+    get() = EqProtocolEngine.uiCapability(capabilities.eqConfig)
 
 interface HeadphoneAdapter {
     val id: String

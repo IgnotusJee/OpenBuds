@@ -6,8 +6,6 @@ object SonyTandemV1Table1Protocol {
     private const val COMMON_GET_BATTERY_LEVEL: Byte = 0x10
     private const val COMMON_RET_BATTERY_LEVEL: Byte = 0x11
     private const val COMMON_NTFY_BATTERY_LEVEL: Byte = 0x13
-    private const val EQEBB_GET_STATUS: Byte = 0x52
-    private const val EQEBB_GET_PARAM: Byte = 0x56
     private const val NCASM_GET_PARAM: Byte = 0x66
     private const val NCASM_RET_PARAM: Byte = 0x67
     private const val NCASM_SET_PARAM: Byte = 0x68
@@ -22,12 +20,6 @@ object SonyTandemV1Table1Protocol {
 
     fun buildGetBatteryStatus(type: PowerInquiredType = PowerInquiredType.BATTERY): ByteArray =
         SonyTandemFrame.message(COMMON_GET_BATTERY_LEVEL, byteArrayOf(type.code))
-
-    fun buildGetEqEbbStatus(type: EqEbbInquiredType): ByteArray =
-        SonyTandemFrame.message(EQEBB_GET_STATUS, byteArrayOf(type.code))
-
-    fun buildGetEqEbbParam(type: EqEbbInquiredType): ByteArray =
-        SonyTandemFrame.message(EQEBB_GET_PARAM, byteArrayOf(type.code))
 
     fun buildGetNcAsmParam(): ByteArray =
         SonyTandemFrame.message(

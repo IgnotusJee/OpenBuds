@@ -14,7 +14,9 @@ import dev.ignotus.sonyrebuild.ble.SonyBleClientListener
 import dev.ignotus.sonyrebuild.ble.SonyBleConnectionInfo
 import dev.ignotus.sonyrebuild.ble.UnsupportedEndpointDiagnostics
 import dev.ignotus.sonyrebuild.headphones.ConnectedHeadphoneProfile
+import dev.ignotus.sonyrebuild.headphones.EqUiCapability
 import dev.ignotus.sonyrebuild.headphones.EqWriteContext
+import dev.ignotus.sonyrebuild.headphones.eqUiCapability
 import dev.ignotus.sonyrebuild.headphones.HeadphoneAdapterRegistry
 import dev.ignotus.sonyrebuild.headphones.HeadphoneCommand
 import dev.ignotus.sonyrebuild.headphones.HeadphoneFeature
@@ -140,6 +142,7 @@ data class SonyHeadphoneUiState(
     val batteryState: BatteryState = BatteryState(),
     val noiseControlState: NoiseControlState = NoiseControlState(),
     val eqState: EqState = EqState(),
+    val eqUiCapability: EqUiCapability? = null,
     val leaState: LeaState = LeaState(),
     val quickAccessState: QuickAccessState = QuickAccessState(),
     val wearingState: WearingState = WearingState(),
@@ -342,7 +345,7 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
         val profile = ensureConnectedProfile()
         val context = currentEqWriteContext()
         _state.update {
-            it.copy(eqState = it.eqState.copy(clearBass = clamped))
+            it.copy(eqState = it.eqState.withClearBassSynced(clamped))
         }
         HeadphoneAdapterRegistry.buildSetClearBassCommands(profile, clamped, context)
             .forEach(::sendCommand)
@@ -455,13 +458,7 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
     }
 
     private fun currentEqWriteContext(): EqWriteContext {
-        val eq = _state.value.eqState
-        return EqWriteContext(
-            presetType = eq.presetType,
-            rawBandSteps = eq.rawBandSteps,
-            usesCustomEqPayload = eq.usesCustomEqPayload,
-            currentPreset = eq.preset,
-        )
+        return EqWriteContext(rawBandSteps = _state.value.eqState.rawBandSteps)
     }
 
     override fun onBluetoothUnavailable(reason: String) {
@@ -483,6 +480,7 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
                 batteryState = BatteryState(),
                 noiseControlState = NoiseControlState(),
                 eqState = EqState(),
+                eqUiCapability = null,
                 playbackStatus = PlaybackStatus.UNKNOWN,
                 endpointDiagnostic = EndpointDiagnosticState(
                     reason = diagnostics.reason,
@@ -562,6 +560,7 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
                 },
                 noiseControlState = if (connected) it.noiseControlState else NoiseControlState(),
                 eqState = if (connected) it.eqState else EqState(),
+                eqUiCapability = if (connected) profile?.eqUiCapability else null,
                 playbackStatus = if (connected) it.playbackStatus else PlaybackStatus.UNKNOWN,
                 endpointDiagnostic = if (connected) it.endpointDiagnostic else null,
                 table2Diagnostic = if (connected) it.table2Diagnostic else null,
@@ -580,6 +579,7 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
             it.copy(
                 connectionInfo = info,
                 connectedProfile = profile,
+                eqUiCapability = profile?.eqUiCapability,
                 deviceInfo = it.deviceInfo.copy(protocolReady = true),
                 endpointDiagnostic = null,
                 table2Diagnostic = null,
@@ -909,6 +909,7 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
         _state.update {
             it.copy(
                 connectedProfile = profile,
+                eqUiCapability = profile.eqUiCapability,
                 supportedFeatures = featureStatusesFor(profile),
             )
         }
@@ -985,21 +986,6 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
                 }
             )
 
-        fun displayEqStep(rawStep: Int): Int =
-            (rawStep - EQ_BAND_STEP_CENTER).coerceIn(-10, 10)
-
-        fun displayEqBands(rawSteps: List<Int>): List<Int> {
-            val displaySteps = rawSteps.map(::displayEqStep)
-            return if (displaySteps.size > EQ_FIRST_FREQUENCY_RAW_INDEX) {
-                displaySteps.drop(EQ_FIRST_FREQUENCY_RAW_INDEX)
-            } else {
-                displaySteps
-            }
-        }
-
-        fun displayEqStepToRaw(displayStep: Int): Int =
-            (displayStep.coerceIn(-10, 10) + EQ_BAND_STEP_CENTER).coerceIn(0, 255)
-
         fun parseModelColor(seriesAndColor: String?): String? =
             seriesAndColor
                 ?.substringAfter("/", "")
@@ -1075,6 +1061,38 @@ private fun EqState.bandEditPreset(): EqPresetId =
         EqPresetId.USER_SETTING2 -> preset
         else -> EqPresetId.CUSTOM
     }
+
+internal fun EqState.withClearBassSynced(level: Int): EqState {
+    val clamped = level.coerceIn(-10, 10)
+    val syncedRawSteps = rawBandSteps.takeIf { it.size > EQ_CLEAR_BASS_RAW_INDEX }
+        ?.toMutableList()
+        ?.also { it[EQ_CLEAR_BASS_RAW_INDEX] = displayEqStepToRaw(clamped) }
+        ?: rawBandSteps
+    return copy(
+        clearBass = clamped,
+        rawBandSteps = syncedRawSteps,
+        bandSteps = if (syncedRawSteps !== rawBandSteps) {
+            displayEqBands(syncedRawSteps)
+        } else {
+            bandSteps
+        },
+    )
+}
+
+internal fun displayEqStep(rawStep: Int): Int =
+    (rawStep - EQ_BAND_STEP_CENTER).coerceIn(-10, 10)
+
+internal fun displayEqBands(rawSteps: List<Int>): List<Int> {
+    val displaySteps = rawSteps.map(::displayEqStep)
+    return if (displaySteps.size > EQ_FIRST_FREQUENCY_RAW_INDEX) {
+        displaySteps.drop(EQ_FIRST_FREQUENCY_RAW_INDEX)
+    } else {
+        displaySteps
+    }
+}
+
+internal fun displayEqStepToRaw(displayStep: Int): Int =
+    (displayStep.coerceIn(-10, 10) + EQ_BAND_STEP_CENTER).coerceIn(0, 255)
 
 fun featureStatusesFor(profile: ConnectedHeadphoneProfile?): List<FeatureStatus> = listOf(
     FeatureStatus("扫描与连接", profile?.let { "${it.protocolName} via ${it.transport}" } ?: "BLE scan, GATT/SPP discovery", true),
