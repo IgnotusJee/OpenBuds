@@ -352,7 +352,7 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
 
     override fun buildRefreshPlaybackCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> =
         codecFor(profile, HeadphoneFeature.PLAYBACK_CONTROL)
-            .buildGetPlaybackStatus()
+            .buildGetPlaybackStatus(profile.capabilities.playbackControlType)
             ?.let { listOf(command(profile, HeadphoneFeature.PLAYBACK_CONTROL, "GET playback status", it)) }
             .orEmpty()
 
@@ -371,7 +371,7 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
 
     override fun buildPlaybackCommands(profile: ConnectedHeadphoneProfile, control: PlaybackControl): List<HeadphoneCommand> =
         codecFor(profile, HeadphoneFeature.PLAYBACK_CONTROL)
-            .buildPlayback(control)
+            .buildPlayback(control, profile.capabilities.playbackControlType)
             ?.let { listOf(command(profile, HeadphoneFeature.PLAYBACK_CONTROL, "PLAYBACK ${control.name}", it)) }
             .orEmpty()
 

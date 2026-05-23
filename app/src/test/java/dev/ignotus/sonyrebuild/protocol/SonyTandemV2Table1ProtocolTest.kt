@@ -146,10 +146,21 @@ class SonyTandemV2Table1ProtocolTest {
     }
 
     @Test
-    fun playSetStatus_play_matchesExportedCommandShape() {
+    fun playSetStatus_play_matchesReverseDefaultCommandShape() {
+        assertArrayEquals(
+            byteArrayOf(0x0E, 0xA4.toByte(), 0x01, 0x00, 0x07),
+            SonyTandemV2Table1Protocol.buildPlayback(PlaybackControl.PLAY),
+        )
+    }
+
+    @Test
+    fun playSetStatus_play_supportsFunctionChangeType() {
         assertArrayEquals(
             byteArrayOf(0x0E, 0xA4.toByte(), 0x03, 0x00, 0x07),
-            SonyTandemV2Table1Protocol.buildPlayback(PlaybackControl.PLAY),
+            SonyTandemV2Table1Protocol.buildPlayback(
+                PlaybackControl.PLAY,
+                PlayInquiredType.PLAYBACK_CONTROL_WITH_FUNCTION_CHANGE,
+            ),
         )
     }
 

@@ -50,7 +50,6 @@ object SonyTandemV2Table1Protocol {
     private const val NC_VALUE_OFF: Byte = 0x00
     private const val NC_VALUE_ON_SINGLE: Byte = 0x01
     private const val NC_VALUE_ON_DUAL: Byte = 0x02
-    private const val PLAYBACK_CONTROL_WITH_FUNCTION_CHANGE: Byte = 0x03
 
     fun buildGetProtocolInfo(): ByteArray =
         SonyTandemFrame.message(CONNECT_GET_PROTOCOL_INFO)
@@ -220,10 +219,13 @@ object SonyTandemV2Table1Protocol {
             ),
         )
 
-    fun buildPlayback(control: PlaybackControl): ByteArray =
+    fun buildPlayback(
+        control: PlaybackControl,
+        type: PlayInquiredType = PlayInquiredType.PLAYBACK_CONTROL_WITH_CALL_VOLUME_ADJUSTMENT,
+    ): ByteArray =
         SonyTandemFrame.message(
             PLAY_SET_STATUS,
-            byteArrayOf(PLAYBACK_CONTROL_WITH_FUNCTION_CHANGE, VALUE_ENABLE, control.code),
+            byteArrayOf(type.code, VALUE_ENABLE, control.code),
         )
 
     fun parse(raw: ByteArray): ParsedTandemResponse {

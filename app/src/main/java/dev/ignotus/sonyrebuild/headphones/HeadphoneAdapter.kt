@@ -8,6 +8,7 @@ import dev.ignotus.sonyrebuild.protocol.NcAsmInquiredType
 import dev.ignotus.sonyrebuild.protocol.NoiseControlMode
 import dev.ignotus.sonyrebuild.protocol.ParsedTandemResponse
 import dev.ignotus.sonyrebuild.protocol.PlaybackControl
+import dev.ignotus.sonyrebuild.protocol.PlayInquiredType
 import dev.ignotus.sonyrebuild.protocol.PowerInquiredType
 
 enum class HeadphoneProtocolVariant {
@@ -116,6 +117,7 @@ data class HeadphoneCapabilities(
         bandCount = 0,
         hasClearBass = false,
     ),
+    val playbackControlType: PlayInquiredType = PlayInquiredType.PLAYBACK_CONTROL_WITH_CALL_VOLUME_ADJUSTMENT,
     val queryProtocolInfo: Boolean = true,
     val queryNoiseControlParams: Boolean = true,
 )
@@ -188,6 +190,7 @@ data class ProfileTemplate(
         HeadphoneFeature.AMBIENT_VOICE_MODE -> capabilities.noiseControlQueryTypes
         HeadphoneFeature.EQ,
         HeadphoneFeature.CLEAR_BASS -> capabilities.eqConfig.statusQueryTypes + capabilities.eqConfig.paramQueryTypes
+        HeadphoneFeature.PLAYBACK_CONTROL -> listOf(capabilities.playbackControlType)
         else -> emptyList()
     }
 
@@ -195,6 +198,7 @@ data class ProfileTemplate(
         HeadphoneFeature.NOISE_CONTROL,
         HeadphoneFeature.AMBIENT_LEVEL,
         HeadphoneFeature.AMBIENT_VOICE_MODE -> capabilities.writableNoiseControlTypes
+        HeadphoneFeature.PLAYBACK_CONTROL -> setOf(capabilities.playbackControlType)
         else -> emptySet()
     }
 

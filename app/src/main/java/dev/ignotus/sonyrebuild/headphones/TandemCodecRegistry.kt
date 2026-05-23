@@ -9,6 +9,7 @@ import dev.ignotus.sonyrebuild.protocol.NcAsmInquiredType
 import dev.ignotus.sonyrebuild.protocol.NoiseControlMode
 import dev.ignotus.sonyrebuild.protocol.ParsedTandemResponse
 import dev.ignotus.sonyrebuild.protocol.PlaybackControl
+import dev.ignotus.sonyrebuild.protocol.PlayInquiredType
 import dev.ignotus.sonyrebuild.protocol.PowerInquiredType
 import dev.ignotus.sonyrebuild.protocol.SonyTandemV1Table1Protocol
 import dev.ignotus.sonyrebuild.protocol.SonyTandemV1Table2Protocol
@@ -48,8 +49,13 @@ interface TandemCodec {
     fun buildSetNcOnOff(enabled: Boolean): ByteArray? = null
     fun buildSetAmbientSound(enabled: Boolean, mode: AmbientSoundMode): ByteArray? = null
     fun buildSetAmbientLevel(level: Int, enabled: Boolean, mode: AmbientSoundMode): ByteArray? = null
-    fun buildGetPlaybackStatus(): ByteArray? = null
-    fun buildPlayback(control: PlaybackControl): ByteArray? = null
+    fun buildGetPlaybackStatus(
+        type: PlayInquiredType = PlayInquiredType.PLAYBACK_CONTROL_WITH_CALL_VOLUME_ADJUSTMENT,
+    ): ByteArray? = null
+    fun buildPlayback(
+        control: PlaybackControl,
+        type: PlayInquiredType = PlayInquiredType.PLAYBACK_CONTROL_WITH_CALL_VOLUME_ADJUSTMENT,
+    ): ByteArray? = null
     fun buildGetLeaStatus(type: LeaInquiredType): ByteArray? = null
     fun buildGetLeaPairedHistory(type: LeaInquiredType): ByteArray? = null
     fun buildGetQuickAccess(): ByteArray? = null
@@ -150,10 +156,10 @@ object SonyTandemV1Table1Codec : TandemCodec {
     override fun buildSetClearBass(level: Int): ByteArray =
         SonyTandemV1Table1Protocol.buildSetClearBass(level)
 
-    override fun buildGetPlaybackStatus(): ByteArray =
+    override fun buildGetPlaybackStatus(type: PlayInquiredType): ByteArray =
         SonyTandemV1Table1Protocol.buildGetPlaybackStatus()
 
-    override fun buildPlayback(control: PlaybackControl): ByteArray =
+    override fun buildPlayback(control: PlaybackControl, type: PlayInquiredType): ByteArray =
         SonyTandemV1Table1Protocol.buildPlayback(control)
 
     override fun parse(raw: ByteArray): ParsedTandemResponse =
@@ -261,11 +267,11 @@ object SonyTandemV2Table1Codec : TandemCodec {
     override fun buildSetAmbientLevel(level: Int, enabled: Boolean, mode: AmbientSoundMode): ByteArray =
         SonyTandemV2Table1Protocol.buildSetAmbientLevel(level, enabled, mode)
 
-    override fun buildGetPlaybackStatus(): ByteArray =
-        SonyTandemV2Table1Protocol.buildGetPlaybackStatus()
+    override fun buildGetPlaybackStatus(type: PlayInquiredType): ByteArray =
+        SonyTandemV2Table1Protocol.buildGetPlaybackStatus(type)
 
-    override fun buildPlayback(control: PlaybackControl): ByteArray =
-        SonyTandemV2Table1Protocol.buildPlayback(control)
+    override fun buildPlayback(control: PlaybackControl, type: PlayInquiredType): ByteArray =
+        SonyTandemV2Table1Protocol.buildPlayback(control, type)
 
     override fun buildGetLeaStatus(type: LeaInquiredType): ByteArray =
         SonyTandemV2Table1Protocol.buildGetLeaStatus(type)

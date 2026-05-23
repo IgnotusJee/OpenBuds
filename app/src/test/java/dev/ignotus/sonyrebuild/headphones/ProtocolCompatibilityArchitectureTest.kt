@@ -65,6 +65,7 @@ class ProtocolCompatibilityArchitectureTest {
         val command = HeadphoneAdapterRegistry.buildPlaybackCommands(profile, PlaybackControl.PLAY).single()
         assertEquals(TandemChannel.GATT_V2_HPC, command.channel)
         assertEquals(0xA4, command.bytes[1].toInt() and 0xFF)
+        assertEquals(0x01, command.bytes[2].toInt() and 0xFF)
     }
 
     @Test

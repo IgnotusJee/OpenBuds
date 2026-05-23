@@ -6,6 +6,9 @@ import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
 import dev.ignotus.sonyrebuild.ble.DiscoveredSonyDevice
@@ -45,6 +48,14 @@ import kotlinx.coroutines.flow.update
 private const val EQ_BAND_STEP_CENTER = 10
 private const val EQ_CLEAR_BASS_RAW_INDEX = 0
 private const val EQ_FIRST_FREQUENCY_RAW_INDEX = 1
+private const val PLAYBACK_STALE_RESPONSE_WINDOW_MS = 2_500L
+private const val PLAYBACK_REFRESH_AFTER_COMMAND_MS = 1_200L
+private const val PLAYBACK_RECONCILE_AFTER_COMMAND_MS = 2_800L
+
+private data class PendingPlaybackStatus(
+    val expected: PlaybackStatus,
+    val ignoreOppositeUntilMs: Long,
+)
 
 data class DeviceInfoState(
     val modelName: String? = null,
@@ -162,7 +173,11 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
     private val client = SonyBleClient(appContext, this)
     private val mediaController = MediaPlaybackController(appContext)
     private val modelImageCatalog = SonyModelImageCatalog(appContext)
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val playbackRefreshRunnable = Runnable { refreshPlaybackStatusAfterCommand() }
+    private val playbackReconcileRunnable = Runnable { refreshPlaybackStatusAfterCommand() }
     private val _state = MutableStateFlow(SonyHeadphoneUiState())
+    private var pendingPlaybackStatus: PendingPlaybackStatus? = null
 
     val state: StateFlow<SonyHeadphoneUiState> = _state.asStateFlow()
 
@@ -402,21 +417,28 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
 
     fun playbackPrevious() {
         if (!canWrite(HeadphoneFeature.PLAYBACK_CONTROL)) return
+        clearPendingPlaybackTransition()
         dispatchPlayback(PlaybackControl.TRACK_DOWN, mediaFallback = { mediaController.previous() })
-        refreshPlaybackState()
+        schedulePlaybackStateRefresh()
     }
 
     fun playbackPlayPause() {
         if (!canWrite(HeadphoneFeature.PLAYBACK_CONTROL)) return
         val wasPlaying = _state.value.playbackStatus == PlaybackStatus.PLAYING
         val control = if (wasPlaying) PlaybackControl.PAUSE else PlaybackControl.PLAY
+        beginPlaybackStatusTransition(
+            if (control == PlaybackControl.PAUSE) PlaybackStatus.PAUSED else PlaybackStatus.PLAYING
+        )
         dispatchPlayback(control, mediaFallback = { mediaController.playPause() })
+        schedulePlaybackStateRefresh()
+        schedulePlaybackStateReconcile()
     }
 
     fun playbackNext() {
         if (!canWrite(HeadphoneFeature.PLAYBACK_CONTROL)) return
+        clearPendingPlaybackTransition()
         dispatchPlayback(PlaybackControl.TRACK_UP, mediaFallback = { mediaController.next() })
-        refreshPlaybackState()
+        schedulePlaybackStateRefresh()
     }
 
     fun setDebugLogging(enabled: Boolean) {
@@ -528,6 +550,10 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
     }
 
     override fun onConnectionStateChanged(connected: Boolean, device: DiscoveredSonyDevice?) {
+        if (!connected) {
+            clearPendingPlaybackTransition()
+            mainHandler.removeCallbacks(playbackRefreshRunnable)
+        }
         _state.update {
             val deviceInfo = if (connected) {
                 it.deviceInfo.withResolvedModelImage(device)
@@ -592,7 +618,6 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
             )
         }
         appendLog("Tandem channel ready: transport=${info.transport}, mtu=${info.mtu}, writable=${info.writableValueLength}")
-        updatePlaybackStatusFromAudioManager()
         refreshBasics()
     }
 
@@ -792,6 +817,39 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
             .forEach(::sendCommandIfReady)
     }
 
+    private fun refreshPlaybackStatusAfterCommand() {
+        if (_state.value.connectedDevice == null) return
+        if (shouldUseTandemPlaybackStatus()) {
+            refreshPlaybackState()
+        } else {
+            updatePlaybackStatusFromAudioManager(force = true)
+        }
+    }
+
+    private fun schedulePlaybackStateRefresh() {
+        mainHandler.removeCallbacks(playbackRefreshRunnable)
+        mainHandler.postDelayed(playbackRefreshRunnable, PLAYBACK_REFRESH_AFTER_COMMAND_MS)
+    }
+
+    private fun schedulePlaybackStateReconcile() {
+        mainHandler.removeCallbacks(playbackReconcileRunnable)
+        mainHandler.postDelayed(playbackReconcileRunnable, PLAYBACK_RECONCILE_AFTER_COMMAND_MS)
+    }
+
+    private fun clearPendingPlaybackTransition() {
+        pendingPlaybackStatus = null
+        mainHandler.removeCallbacks(playbackReconcileRunnable)
+    }
+
+    private fun beginPlaybackStatusTransition(expected: PlaybackStatus) {
+        mainHandler.removeCallbacks(playbackReconcileRunnable)
+        pendingPlaybackStatus = PendingPlaybackStatus(
+            expected = expected,
+            ignoreOppositeUntilMs = SystemClock.elapsedRealtime() + PLAYBACK_STALE_RESPONSE_WINDOW_MS,
+        )
+        _state.update { it.copy(playbackStatus = expected) }
+    }
+
     private fun updateEqBands(rawSteps: List<Int>, preset: EqPresetId? = _state.value.eqState.preset) {
         _state.update {
             it.copy(
@@ -835,7 +893,7 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
     private fun applyPlayback(response: ParsedTandemResponse.PlaybackAck) {
         appendLog("Playback notification ${response.values} status=${response.status}")
         if (response.status != PlaybackStatus.UNKNOWN) {
-            _state.update { it.copy(playbackStatus = response.status) }
+            applyPlaybackStatus(response.status, source = "Tandem")
         } else {
             updatePlaybackStatusFromAudioManager()
         }
@@ -908,8 +966,36 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
         }
     }
 
-    private fun updatePlaybackStatusFromAudioManager() {
-        _state.update { it.copy(playbackStatus = mediaController.currentFallbackStatus()) }
+    private fun updatePlaybackStatusFromAudioManager(force: Boolean = false) {
+        if (!force && shouldUseTandemPlaybackStatus()) return
+        applyPlaybackStatus(mediaController.currentFallbackStatus(), source = "AudioManager")
+    }
+
+    private fun shouldUseTandemPlaybackStatus(): Boolean {
+        val current = _state.value
+        val profile = current.connectedProfile ?: return false
+        return current.deviceInfo.protocolReady &&
+            profile.supports(HeadphoneFeature.PLAYBACK_CONTROL) &&
+            profile.playbackDispatchStrategy != PlaybackDispatchStrategy.ANDROID_MEDIA_FALLBACK
+    }
+
+    private fun applyPlaybackStatus(status: PlaybackStatus, source: String) {
+        val pending = pendingPlaybackStatus
+        if (pending != null) {
+            val now = SystemClock.elapsedRealtime()
+            if (now <= pending.ignoreOppositeUntilMs) {
+                if (status != pending.expected) {
+                    appendLog(
+                        "Ignored stale playback status $status from $source while waiting for ${pending.expected}"
+                    )
+                    return
+                }
+                _state.update { it.copy(playbackStatus = status) }
+                return
+            }
+            pendingPlaybackStatus = null
+        }
+        _state.update { it.copy(playbackStatus = status) }
     }
 
     private fun ensureConnectedProfile(): ConnectedHeadphoneProfile {
