@@ -40,6 +40,14 @@ class SonyTandemV2Table1ProtocolTest {
     }
 
     @Test
+    fun v1EqExtendedInfoGet_matchesCapturedXm4CommandShape() {
+        assertArrayEquals(
+            byteArrayOf(0x0E, 0x5A, 0x01),
+            SonyTandemV1Table1Protocol.buildGetEqEbbExtendedInfo(EqEbbInquiredType.PRESET_EQ),
+        )
+    }
+
+    @Test
     fun v1ConnectGetDeviceInfo_modelName_matchesReverseCommandShape() {
         assertArrayEquals(
             byteArrayOf(0x0E, 0x04, 0x01),
@@ -458,7 +466,7 @@ class SonyTandemV2Table1ProtocolTest {
     }
 
     @Test
-    fun parser_xm4EbbCombinedEqParam_extractsPresetAndBands() {
+    fun parser_v2EbbCombinedEqParam_extractsPresetAndBands() {
         val raw = byteArrayOf(0x0E, 0x57, 0x01, 0x16, 0x06, 0x11, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
@@ -468,6 +476,57 @@ class SonyTandemV2Table1ProtocolTest {
         assertEquals(EqPresetId.BASS, parsed.preset)
         assertEquals(17, parsed.clearBass)
         assertEquals(listOf(17, 10, 10, 10, 10, 10), parsed.bandSteps)
+    }
+
+    @Test
+    fun parser_v1Xm4PresetEqParam_extractsPresetAndBands() {
+        val raw = byteArrayOf(0x0E, 0x57, 0x01, 0xA2.toByte(), 0x06, 0x0A, 0x0A, 0x0A, 0x0A, 0x08, 0x11)
+        val parsed = SonyTandemV1Table1Protocol.parse(raw)
+
+        assertTrue(parsed is ParsedTandemResponse.EqEbb)
+        parsed as ParsedTandemResponse.EqEbb
+        assertEquals(EqEbbInquiredType.PRESET_EQ, parsed.type)
+        assertEquals(EqPresetId.USER_SETTING2, parsed.preset)
+        assertEquals(listOf(10, 10, 10, 10, 8, 17), parsed.bandSteps)
+    }
+
+    @Test
+    fun parser_v1Xm4EqExtendedInfo_extractsBandMetadata() {
+        val raw = byteArrayOf(
+            0x0E,
+            0x5B,
+            0x01,
+            0x06,
+            0x10,
+            0x00,
+            0x01,
+            0x01,
+            0x01,
+            0x90.toByte(),
+            0x01,
+            0x03,
+            0xE8.toByte(),
+            0x01,
+            0x09,
+            0xC4.toByte(),
+            0x01,
+            0x18,
+            0x9C.toByte(),
+            0x01,
+            0x3D,
+            0x2E,
+        )
+        val parsed = SonyTandemV1Table1Protocol.parse(raw)
+
+        assertTrue(parsed is ParsedTandemResponse.EqEbbExtendedInfo)
+        parsed as ParsedTandemResponse.EqEbbExtendedInfo
+        assertEquals(EqEbbInquiredType.PRESET_EQ, parsed.type)
+        assertEquals(6, parsed.bands.size)
+        assertEquals(EqBandInformationType.SPECIFIC_INFORMATION, parsed.bands[0].type)
+        assertEquals(1, parsed.bands[0].value)
+        assertEquals(EqBandInformationType.HZ, parsed.bands[1].type)
+        assertEquals(400, parsed.bands[1].value)
+        assertEquals(15_662, parsed.bands[5].value)
     }
 
     @Test

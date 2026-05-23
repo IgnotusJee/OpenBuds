@@ -40,6 +40,13 @@ enum class EqEbbInquiredType(val code: Byte) {
     TURN_KEY_EQ(0x32),
 }
 
+enum class EqBandInformationType(val code: Byte) {
+    NO_INFORMATION(0x00),
+    HZ(0x01),
+    KHZ(0x02),
+    SPECIFIC_INFORMATION(0x10),
+}
+
 enum class EqPresetId(val code: Byte, val displayName: String) {
     OFF(0x00, "Off"),
     ROCK(0x01, "Rock"),

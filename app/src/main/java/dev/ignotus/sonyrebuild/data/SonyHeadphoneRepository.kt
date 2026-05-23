@@ -461,7 +461,8 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
     }
 
     private fun currentEqWriteContext(): EqWriteContext {
-        return EqWriteContext(rawBandSteps = _state.value.eqState.rawBandSteps)
+        val eqState = _state.value.eqState
+        return EqWriteContext(rawBandSteps = eqState.rawBandSteps, preset = eqState.preset)
     }
 
     override fun onBluetoothUnavailable(reason: String) {
@@ -603,6 +604,7 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
             is ParsedTandemResponse.CommonStatus -> applyCommonStatus(parsed)
             is ParsedTandemResponse.Battery -> applyBattery(parsed)
             is ParsedTandemResponse.EqEbb -> applyEqEbb(parsed)
+            is ParsedTandemResponse.EqEbbExtendedInfo -> applyEqEbbExtendedInfo(parsed)
             is ParsedTandemResponse.NoiseControl -> applyNoise(parsed)
             is ParsedTandemResponse.PlaybackAck -> applyPlayback(parsed)
             is ParsedTandemResponse.LeaStatus -> applyLeaStatus(parsed)
@@ -750,6 +752,12 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
                 )
             )
         }
+    }
+
+    private fun applyEqEbbExtendedInfo(response: ParsedTandemResponse.EqEbbExtendedInfo) {
+        appendLog(
+            "EQ/EBB extended type=${response.type} bands=${response.bands} values=${response.values}"
+        )
     }
 
     private fun sendEqBandSteps(label: String, rawSteps: List<Int>, preset: EqPresetId?) {

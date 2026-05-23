@@ -27,6 +27,8 @@ object SonyTandemV2Table1Protocol {
     private const val EQEBB_RET_PARAM: Byte = 0x57
     private const val EQEBB_SET_PARAM: Byte = 0x58
     private const val EQEBB_NTFY_PARAM: Byte = 0x59
+    private const val EQEBB_GET_EXTENDED_INFO: Byte = 0x5A
+    private const val EQEBB_RET_EXTENDED_INFO: Byte = 0x5B
     private const val NCASM_GET_STATUS: Byte = 0x62
     private const val NCASM_RET_STATUS: Byte = 0x63
     private const val NCASM_NTFY_STATUS: Byte = 0x65
@@ -73,6 +75,9 @@ object SonyTandemV2Table1Protocol {
 
     fun buildGetEqEbbParam(typeCode: Byte): ByteArray =
         SonyTandemFrame.message(EQEBB_GET_PARAM, byteArrayOf(typeCode))
+
+    fun buildGetEqEbbExtendedInfo(type: EqEbbInquiredType): ByteArray =
+        SonyTandemFrame.message(EQEBB_GET_EXTENDED_INFO, byteArrayOf(type.code))
 
     fun buildSetEqPreset(
         preset: EqPresetId,
@@ -239,6 +244,7 @@ object SonyTandemV2Table1Protocol {
             POWER_RET_STATUS, POWER_NTFY_STATUS -> parseBattery(payload, raw)
             EQEBB_RET_STATUS, EQEBB_NTFY_STATUS,
             EQEBB_RET_PARAM, EQEBB_NTFY_PARAM -> parseEqEbb(command, payload, raw)
+            EQEBB_RET_EXTENDED_INFO -> SonyEqEbbPayloadParser.parseExtendedInfo(EqEbbPayloadVersion.V2, payload, raw)
             NCASM_RET_STATUS, NCASM_NTFY_STATUS -> parseNoiseControl(command, payload, raw)
             NCASM_RET_PARAM, NCASM_NTFY_PARAM -> parseNoiseControl(command, payload, raw)
             PLAY_RET_STATUS, PLAY_NTFY_STATUS -> ParsedTandemResponse.PlaybackAck(

@@ -29,6 +29,8 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
     private const val EQEBB_RET_PARAM: Byte = 0x57
     private const val EQEBB_SET_PARAM: Byte = 0x58
     private const val EQEBB_NTFY_PARAM: Byte = 0x59
+    private const val EQEBB_GET_EXTENDED_INFO: Byte = 0x5A
+    private const val EQEBB_RET_EXTENDED_INFO: Byte = 0x5B
     private const val NCASM_GET_STATUS: Byte = 0x62
     private const val NCASM_RET_STATUS: Byte = 0x63
     private const val NCASM_NTFY_STATUS: Byte = 0x65
@@ -257,15 +259,55 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
         context: EqWriteContext,
     ): List<HeadphoneCommand> {
         val engine = EqProtocolEngine(profile.capabilities.eqConfig, codecFor(profile, HeadphoneFeature.CLEAR_BASS))
-        return listOf(
-            command(
-                profile,
-                HeadphoneFeature.CLEAR_BASS,
-                "SET Clear Bass $level",
-                engine.buildSetClearBass(level),
+        return when (profile.capabilities.eqConfig.clearBassWriteMode) {
+            ClearBassWriteMode.EBB_PARAM -> listOf(
+                command(
+                    profile,
+                    HeadphoneFeature.CLEAR_BASS,
+                    "SET Clear Bass $level",
+                    engine.buildSetClearBass(level),
+                )
             )
-        )
+            ClearBassWriteMode.PRESET_EQ_BANDS -> {
+                val targetPreset = context.userEqPresetOrDefault()
+                val rawSteps = mergedClearBassRawSteps(profile.capabilities.eqConfig, context.rawBandSteps, level)
+                listOf(
+                    command(
+                        profile,
+                        HeadphoneFeature.CLEAR_BASS,
+                        "SET Clear Bass $level via EQ bands preset=${targetPreset.name}",
+                        engine.buildSetBands(rawSteps, targetPreset),
+                    )
+                )
+            }
+        }
     }
+
+    private fun EqWriteContext.userEqPresetOrDefault(): EqPresetId =
+        when (preset) {
+            EqPresetId.CUSTOM,
+            EqPresetId.USER_SETTING1,
+            EqPresetId.USER_SETTING2 -> preset
+            else -> EqPresetId.CUSTOM
+        }
+
+    private fun mergedClearBassRawSteps(
+        config: EqDeviceConfig,
+        currentRawSteps: List<Int>,
+        level: Int,
+    ): List<Int> {
+        val bandCount = config.bandCount.takeIf { it > 0 } ?: currentRawSteps.size.coerceAtLeast(1)
+        val rawSteps = if (currentRawSteps.size == bandCount) {
+            currentRawSteps.toMutableList()
+        } else {
+            MutableList(bandCount) { EqProtocolEngine.BAND_STEP_CENTER }
+        }
+        rawSteps[0] = clearBassDisplayStepToRaw(level)
+        return rawSteps
+    }
+
+    private fun clearBassDisplayStepToRaw(level: Int): Int =
+        (level.coerceIn(-10, 10) + EqProtocolEngine.BAND_STEP_CENTER).coerceIn(0, 255)
 
     override fun buildRefreshNoiseControlCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> =
         buildList {
@@ -339,7 +381,8 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
         raw: ByteArray,
     ): ParsedTandemResponse {
         if (raw.firstOrNull() == DATA_MDR_NO2) {
-            return SonyTandemV2Table2Codec.parse(raw)
+            val variant = table2VariantForResponse(profile, channel)
+            return TandemCodecRegistry.codecFor(variant).parse(raw)
         }
         val normalized = if (raw.firstOrNull() == DATA_MDR) raw else byteArrayOf(DATA_MDR) + raw
         val command = normalized.getOrNull(1) ?: return ParsedTandemResponse.Unknown(null, null, byteArrayOf(), raw)
@@ -358,6 +401,26 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
             }
         }
     }
+
+    private fun table2VariantForResponse(
+        profile: ConnectedHeadphoneProfile,
+        channel: TandemChannel,
+    ): HeadphoneProtocolVariant =
+        when (channel) {
+            TandemChannel.GATT_V2_MC -> HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE2
+            TandemChannel.GATT_V1_MC -> HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE2
+            TandemChannel.GATT_V2_HPC,
+            TandemChannel.SPP_MDR -> {
+                val profileVariants = profile.featureBindings.values.map { it.variant }.toSet()
+                when {
+                    profileVariants.any { it == HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1 || it == HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE2 } ->
+                        HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE2
+                    profileVariants.any { it == HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1 || it == HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE2 } ->
+                        HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE2
+                    else -> HeadphoneProtocolVariant.UNKNOWN
+                }
+            }
+        }
 
     private fun bindingForResponse(
         profile: ConnectedHeadphoneProfile,
@@ -410,7 +473,8 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
         POWER_RET_STATUS, POWER_NTFY_STATUS -> HeadphoneFeature.BATTERY
         EQEBB_GET_STATUS, EQEBB_RET_STATUS, EQEBB_NTFY_STATUS,
         EQEBB_GET_PARAM, EQEBB_RET_PARAM, EQEBB_SET_PARAM,
-        EQEBB_NTFY_PARAM -> HeadphoneFeature.EQ
+        EQEBB_NTFY_PARAM, EQEBB_GET_EXTENDED_INFO,
+        EQEBB_RET_EXTENDED_INFO -> HeadphoneFeature.EQ
         NCASM_GET_STATUS, NCASM_RET_STATUS, NCASM_NTFY_STATUS,
         NCASM_GET_PARAM, NCASM_RET_PARAM, NCASM_SET_PARAM,
         NCASM_NTFY_PARAM -> HeadphoneFeature.NOISE_CONTROL

@@ -51,6 +51,30 @@ internal object SonyEqEbbPayloadParser {
         )
     }
 
+    fun parseExtendedInfo(
+        version: EqEbbPayloadVersion,
+        payload: ByteArray,
+        raw: ByteArray,
+    ): ParsedTandemResponse {
+        val type = payload.firstOrNull()?.let { typeFor(version, it) }
+        val count = payload.getOrNull(1)?.unsigned ?: 0
+        val bands = buildList {
+            var offset = 2
+            while (size < count && offset + 2 < payload.size) {
+                val infoType = payload[offset].toEqBandInformationType()
+                val value = (payload[offset + 1].unsigned shl 8) or payload[offset + 2].unsigned
+                add(ParsedTandemResponse.EqBandInfo(infoType, value))
+                offset += 3
+            }
+        }
+        return ParsedTandemResponse.EqEbbExtendedInfo(
+            type = type,
+            bands = bands,
+            values = payload.drop(1).map { it.unsigned },
+            raw = raw,
+        )
+    }
+
     private fun typeFor(version: EqEbbPayloadVersion, code: Byte): EqEbbInquiredType? =
         when (version) {
             EqEbbPayloadVersion.V1 -> when (code) {
@@ -133,4 +157,7 @@ internal object SonyEqEbbPayloadParser {
 
     private fun Byte.toEqPreset(): EqPresetId? =
         EqPresetId.entries.firstOrNull { it.code == this }
+
+    private fun Byte.toEqBandInformationType(): EqBandInformationType? =
+        EqBandInformationType.entries.firstOrNull { it.code == this }
 }

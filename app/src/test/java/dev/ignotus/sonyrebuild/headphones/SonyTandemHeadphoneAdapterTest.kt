@@ -3,6 +3,7 @@ package dev.ignotus.sonyrebuild.headphones
 import dev.ignotus.sonyrebuild.ble.DiscoveredSonyDevice
 import dev.ignotus.sonyrebuild.protocol.DeviceInfoType
 import dev.ignotus.sonyrebuild.protocol.EqEbbInquiredType
+import dev.ignotus.sonyrebuild.protocol.EqPresetId
 import dev.ignotus.sonyrebuild.protocol.NcAsmInquiredType
 import dev.ignotus.sonyrebuild.protocol.NoiseControlMode
 import dev.ignotus.sonyrebuild.protocol.ParsedTandemResponse
@@ -79,6 +80,7 @@ class SonyTandemHeadphoneAdapterTest {
         assertFalse(labels.any { it == "GET battery CRADLE_BATTERY" })
         assertFalse(labels.any { it == "GET EQ param CUSTOM_EQ" })
         assertTrue(labels.any { it == "GET EQ param PRESET_EQ" })
+        assertTrue(labels.any { it == "GET EQ extended PRESET_EQ" })
         assertTrue(labels.any { it == "GET playback status" })
         assertFalse(labels.any { it == "GET display firmware version" })
         assertFalse(labels.any { it.contains("LEA") })
@@ -97,6 +99,10 @@ class SonyTandemHeadphoneAdapterTest {
         assertArrayEquals(
             byteArrayOf(0x0E, 0xA2.toByte(), 0x01),
             commands.first { it.label == "GET playback status" }.bytes,
+        )
+        assertArrayEquals(
+            byteArrayOf(0x0E, 0x5A, 0x01),
+            commands.first { it.label == "GET EQ extended PRESET_EQ" }.bytes,
         )
         assertFalse(commands.any { it.bytes.contentEquals(byteArrayOf(0x0E, 0x22, 0x00)) })
     }
@@ -151,7 +157,8 @@ class SonyTandemHeadphoneAdapterTest {
             ),
             profile.capabilities.batteryQueries,
         )
-        assertTrue(profile.capabilities.eqConfig.statusQueryTypes.contains(EqEbbInquiredType.CUSTOM_EQ))
+        assertEquals(listOf(EqEbbInquiredType.PRESET_EQ), profile.capabilities.eqConfig.statusQueryTypes)
+        assertEquals(listOf(EqEbbInquiredType.PRESET_EQ), profile.capabilities.eqConfig.paramQueryTypes)
     }
 
     @Test
@@ -201,6 +208,19 @@ class SonyTandemHeadphoneAdapterTest {
         assertTrue("Expected PlaybackAck but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.PlaybackAck)
         parsed as ParsedTandemResponse.PlaybackAck
         assertEquals(PlaybackStatus.PAUSED, parsed.status)
+    }
+
+    @Test
+    fun parse_xm4EqParamResponse_routesViaV1_returnsPresetAndBands() {
+        val profile = SonyTandemHeadphoneAdapter.match(xm4Device(), "WH-1000XM4")!!
+        val raw = byteArrayOf(0x0E, 0x57, 0x01, 0xA2.toByte(), 0x06, 0x0A, 0x0A, 0x0A, 0x0A, 0x08, 0x11)
+        val parsed = SonyTandemHeadphoneAdapter.parse(profile, raw)
+
+        assertTrue("Expected EqEbb but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.EqEbb)
+        parsed as ParsedTandemResponse.EqEbb
+        assertEquals(EqEbbInquiredType.PRESET_EQ, parsed.type)
+        assertEquals(EqPresetId.USER_SETTING2, parsed.preset)
+        assertEquals(listOf(0x0A, 0x0A, 0x0A, 0x0A, 0x08, 0x11), parsed.bandSteps)
     }
 
     @Test

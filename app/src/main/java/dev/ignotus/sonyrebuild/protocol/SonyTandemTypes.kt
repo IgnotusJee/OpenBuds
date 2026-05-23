@@ -60,6 +60,18 @@ sealed interface ParsedTandemResponse {
         override val raw: ByteArray,
     ) : ParsedTandemResponse
 
+    data class EqBandInfo(
+        val type: EqBandInformationType?,
+        val value: Int,
+    )
+
+    data class EqEbbExtendedInfo(
+        val type: EqEbbInquiredType?,
+        val bands: List<EqBandInfo>,
+        val values: List<Int>,
+        override val raw: ByteArray,
+    ) : ParsedTandemResponse
+
     data class NoiseControl(
         val type: NcAsmInquiredType?,
         val values: List<Int>,

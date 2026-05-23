@@ -1,5 +1,6 @@
 package dev.ignotus.sonyrebuild.headphones.sonydevices
 
+import dev.ignotus.sonyrebuild.headphones.ClearBassWriteMode
 import dev.ignotus.sonyrebuild.headphones.EqDeviceConfig
 import dev.ignotus.sonyrebuild.headphones.HeadphoneCapabilities
 import dev.ignotus.sonyrebuild.headphones.HeadphoneFeature
@@ -58,14 +59,11 @@ object LinkBudsSProfile {
                     EqPresetId.USER_SETTING2,
                 ),
                 writeInquiredType = EqEbbInquiredType.PRESET_EQ,
-                statusQueryTypes = listOf(
-                    EqEbbInquiredType.PRESET_EQ,
-                    EqEbbInquiredType.CUSTOM_EQ,
-                    EqEbbInquiredType.EBB,
-                ),
-                paramQueryTypes = listOf(EqEbbInquiredType.PRESET_EQ, EqEbbInquiredType.EBB),
+                statusQueryTypes = listOf(EqEbbInquiredType.PRESET_EQ),
+                paramQueryTypes = listOf(EqEbbInquiredType.PRESET_EQ),
                 bandCount = 6,
                 hasClearBass = true,
+                clearBassWriteMode = ClearBassWriteMode.PRESET_EQ_BANDS,
             ),
         ),
         featureProtocolMap = features.associateWith { HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1 },

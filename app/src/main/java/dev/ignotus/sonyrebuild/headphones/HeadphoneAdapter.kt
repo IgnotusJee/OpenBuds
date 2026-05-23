@@ -99,6 +99,7 @@ data class HeadphoneCommand(
 
 data class EqWriteContext(
     val rawBandSteps: List<Int> = emptyList(),
+    val preset: EqPresetId? = null,
 )
 
 data class HeadphoneCapabilities(

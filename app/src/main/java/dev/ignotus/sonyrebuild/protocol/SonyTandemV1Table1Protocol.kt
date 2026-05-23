@@ -41,6 +41,8 @@ object SonyTandemV1Table1Protocol {
     private const val EQEBB_RET_PARAM: Byte = 0x57
     private const val EQEBB_SET_PARAM: Byte = 0x58
     private const val EQEBB_NTFY_PARAM: Byte = 0x59
+    private const val EQEBB_GET_EXTENDED_INFO: Byte = 0x5A
+    private const val EQEBB_RET_EXTENDED_INFO: Byte = 0x5B
 
     // V1 inquired-type sub-codes
     private const val V1_PRESET_EQ: Byte = 0x01
@@ -115,6 +117,9 @@ object SonyTandemV1Table1Protocol {
     fun buildGetEqEbbParam(type: EqEbbInquiredType): ByteArray =
         SonyTandemFrame.message(EQEBB_GET_PARAM, byteArrayOf(v1TypeCode(type)))
 
+    fun buildGetEqEbbExtendedInfo(type: EqEbbInquiredType): ByteArray =
+        SonyTandemFrame.message(EQEBB_GET_EXTENDED_INFO, byteArrayOf(v1TypeCode(type)))
+
     fun buildSetEqPreset(
         preset: EqPresetId,
         type: EqEbbInquiredType,
@@ -162,6 +167,8 @@ object SonyTandemV1Table1Protocol {
             EQEBB_RET_STATUS, EQEBB_NTFY_STATUS,
             EQEBB_RET_PARAM, EQEBB_NTFY_PARAM ->
                 SonyEqEbbPayloadParser.parse(EqEbbPayloadVersion.V1, command, payload, raw)
+            EQEBB_RET_EXTENDED_INFO ->
+                SonyEqEbbPayloadParser.parseExtendedInfo(EqEbbPayloadVersion.V1, payload, raw)
             PLAY_RET_STATUS, PLAY_NTFY_STATUS -> ParsedTandemResponse.PlaybackAck(
                 values = payload.unsignedList(),
                 status = parsePlaybackStatus(payload),

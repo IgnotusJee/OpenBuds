@@ -25,6 +25,7 @@ interface TandemCodec {
     fun buildGetBatteryStatus(type: PowerInquiredType): ByteArray? = null
     fun buildGetEqEbbStatus(type: EqEbbInquiredType): ByteArray? = null
     fun buildGetEqEbbParam(type: EqEbbInquiredType): ByteArray? = null
+    fun buildGetEqEbbExtendedInfo(type: EqEbbInquiredType): ByteArray? = null
     fun buildSetEqPreset(
         preset: EqPresetId,
         type: EqEbbInquiredType,
@@ -125,6 +126,9 @@ object SonyTandemV1Table1Codec : TandemCodec {
     override fun buildGetEqEbbParam(type: EqEbbInquiredType): ByteArray =
         SonyTandemV1Table1Protocol.buildGetEqEbbParam(type)
 
+    override fun buildGetEqEbbExtendedInfo(type: EqEbbInquiredType): ByteArray =
+        SonyTandemV1Table1Protocol.buildGetEqEbbExtendedInfo(type)
+
     override fun buildSetEqPreset(
         preset: EqPresetId,
         type: EqEbbInquiredType,
@@ -187,6 +191,9 @@ object SonyTandemV2Table1Codec : TandemCodec {
 
     override fun buildGetEqEbbParam(type: EqEbbInquiredType): ByteArray =
         SonyTandemV2Table1Protocol.buildGetEqEbbParam(type)
+
+    override fun buildGetEqEbbExtendedInfo(type: EqEbbInquiredType): ByteArray =
+        SonyTandemV2Table1Protocol.buildGetEqEbbExtendedInfo(type)
 
     fun buildGetEqEbbParam(typeCode: Byte): ByteArray =
         SonyTandemV2Table1Protocol.buildGetEqEbbParam(typeCode)

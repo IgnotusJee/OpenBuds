@@ -9,9 +9,16 @@ data class EqDeviceConfig(
     val writeInquiredType: EqEbbInquiredType,
     val statusQueryTypes: List<EqEbbInquiredType>,
     val paramQueryTypes: List<EqEbbInquiredType>,
+    val extendedInfoQueryTypes: List<EqEbbInquiredType> = emptyList(),
     val bandCount: Int,
     val hasClearBass: Boolean,
+    val clearBassWriteMode: ClearBassWriteMode = ClearBassWriteMode.EBB_PARAM,
 )
+
+enum class ClearBassWriteMode {
+    EBB_PARAM,
+    PRESET_EQ_BANDS,
+}
 
 data class EqUiCapability(
     val availablePresets: List<EqPresetId>,
@@ -45,6 +52,11 @@ class EqProtocolEngine(
         config.paramQueryTypes.forEach { type ->
             codec.buildGetEqEbbParam(type)?.let { bytes ->
                 add(buildCommand("GET EQ param $type", bytes))
+            }
+        }
+        config.extendedInfoQueryTypes.forEach { type ->
+            codec.buildGetEqEbbExtendedInfo(type)?.let { bytes ->
+                add(buildCommand("GET EQ extended $type", bytes))
             }
         }
     }

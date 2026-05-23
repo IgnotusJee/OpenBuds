@@ -70,6 +70,17 @@ class SonyTandemProfileRoutingTest {
     }
 
     @Test
+    fun linkBudsS_eqRefresh_usesPresetEqOnly() {
+        val profile = linkBudsSProfile()
+        val commands = SonyTandemHeadphoneAdapter.buildRefreshEqCommands(profile)
+        val labels = commands.map { it.label }
+
+        assertEquals(listOf("GET EQ status PRESET_EQ", "GET EQ param PRESET_EQ"), labels)
+        assertFalse(labels.any { it.contains("CUSTOM_EQ") })
+        assertFalse(labels.any { it.contains("EBB") })
+    }
+
+    @Test
     fun linkBudsS_noiseControlWrite_usesV2Builder() {
         val profile = linkBudsSProfile()
         val commands = SonyTandemHeadphoneAdapter.buildSetNoiseControlModeCommands(
@@ -92,24 +103,42 @@ class SonyTandemProfileRoutingTest {
         val profile = linkBudsSProfile()
         val context = EqWriteContext(rawBandSteps = listOf(0x13, 0x0A, 0x0A, 0x0A, 0x0B, 0x0C))
 
-        val command = SonyTandemHeadphoneAdapter.buildSetEqPresetCommands(profile, EqPresetId.BASS, context).single()
+        val speech = SonyTandemHeadphoneAdapter.buildSetEqPresetCommands(profile, EqPresetId.SPEECH, context).single()
+        val userSetting2 = SonyTandemHeadphoneAdapter.buildSetEqPresetCommands(
+            profile,
+            EqPresetId.USER_SETTING2,
+            context,
+        ).single()
 
-        assertArrayEquals(byteArrayOf(0x0E, 0x58, 0x00, 0x16, 0x00), command.bytes)
-        assertEquals(TandemChannel.GATT_V2_HPC, command.channel)
+        assertArrayEquals(byteArrayOf(0x0E, 0x58, 0x00, 0x17, 0x00), speech.bytes)
+        assertEquals(TandemChannel.GATT_V2_HPC, speech.channel)
+        assertArrayEquals(byteArrayOf(0x0E, 0x58, 0x00, 0xA2.toByte(), 0x00), userSetting2.bytes)
+        assertEquals(TandemChannel.GATT_V2_HPC, userSetting2.channel)
     }
 
     @Test
     fun linkBudsS_eqBandWrite_usesOfficialPresetEqBandPayload() {
         val profile = linkBudsSProfile()
-        val rawSteps = listOf(0x13, 0x0A, 0x0A, 0x0A, 0x0B, 0x0C)
+        val rawSteps = listOf(0x13, 0x0A, 0x0A, 0x0A, 0x0B, 0x02)
         val context = EqWriteContext(rawBandSteps = rawSteps)
 
         val command = SonyTandemHeadphoneAdapter.buildSetEqBandCommands(profile, rawSteps, EqPresetId.USER_SETTING2, context).single()
 
         assertArrayEquals(
-            byteArrayOf(0x0E, 0x58, 0x00, 0xA2.toByte(), 0x06, 0x13, 0x0A, 0x0A, 0x0A, 0x0B, 0x0C),
+            byteArrayOf(0x0E, 0x58, 0x00, 0xA2.toByte(), 0x06, 0x13, 0x0A, 0x0A, 0x0A, 0x0B, 0x02),
             command.bytes,
         )
+    }
+
+    @Test
+    fun linkBudsS_dataMdrNo2Response_routesToV2Table2() {
+        val profile = linkBudsSProfile()
+        val raw = byteArrayOf(0x0F, 0x23, 0x00, 0x01)
+        val parsed = SonyTandemHeadphoneAdapter.parse(profile, raw)
+
+        assertTrue("Expected Table2Generic but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Table2Generic)
+        parsed as ParsedTandemResponse.Table2Generic
+        assertEquals("POWER", parsed.family)
     }
 
     // ── WH-1000XM4 ──────────────────────────────────────────────────────────
@@ -276,10 +305,15 @@ class SonyTandemProfileRoutingTest {
         // XM4 uses V1 type codes: queries PRESET_EQ param for preset+bands
         assertFalse(labels.any { it == "GET EQ status CUSTOM_EQ" })
         assertTrue(labels.any { it == "GET EQ param PRESET_EQ" })
+        assertTrue(labels.any { it == "GET EQ extended PRESET_EQ" })
         val paramLabels = labels.filter { it.startsWith("GET EQ param") }
         assertEquals(1, paramLabels.size)
         assertFalse(paramLabels.any { it.contains("CUSTOM_EQ") })
         assertFalse(paramLabels.any { it.contains("EBB") })
+        assertArrayEquals(
+            byteArrayOf(0x0E, 0x5A, 0x01),
+            commands.first { it.label == "GET EQ extended PRESET_EQ" }.bytes,
+        )
     }
 
     @Test
@@ -319,17 +353,40 @@ class SonyTandemProfileRoutingTest {
     }
 
     @Test
-    fun clearBassWrite_usesCorrectEbbTypeCodePerDevice() {
-        val context = EqWriteContext(rawBandSteps = listOf(0x13, 0x0A, 0x0A, 0x0A, 0x0B, 0x0C))
+    fun xm4_userEqBandWrite_matchesCapturedManualEditShape() {
+        val profile = xm4Profile()
+        val rawSteps = listOf(0x0A, 0x0A, 0x0A, 0x0A, 0x08, 0x11)
+        val context = EqWriteContext(rawBandSteps = rawSteps, preset = EqPresetId.USER_SETTING2)
 
-        // LinkBuds S: V2 EBB type (0x01)
+        val command = SonyTandemHeadphoneAdapter.buildSetEqBandCommands(
+            profile,
+            rawSteps,
+            EqPresetId.USER_SETTING2,
+            context,
+        ).single()
+
         assertArrayEquals(
-            byteArrayOf(0x0E, 0x58, 0x01, 0x03),
-            SonyTandemHeadphoneAdapter.buildSetClearBassCommands(linkBudsSProfile(), level = 3, context).single().bytes,
+            byteArrayOf(0x0E, 0x58, 0x01, 0xFF.toByte(), 0x06, 0x0A, 0x0A, 0x0A, 0x0A, 0x08, 0x11),
+            command.bytes,
         )
-        // WH-1000XM4: V1 EBB type (0x02)
+        assertEquals(TandemChannel.GATT_V1_MC, command.channel)
+    }
+
+    @Test
+    fun clearBassWrite_usesDeviceSpecificShape() {
+        val context = EqWriteContext(
+            rawBandSteps = listOf(0x13, 0x0A, 0x0A, 0x0A, 0x0B, 0x0C),
+            preset = EqPresetId.USER_SETTING2,
+        )
+
+        // LinkBuds S: captured standard EQ path writes Clear Bass by resending PRESET_EQ bands.
         assertArrayEquals(
-            byteArrayOf(0x0E, 0x58, 0x02, 0xFE.toByte()),
+            byteArrayOf(0x0E, 0x58, 0x00, 0xA2.toByte(), 0x06, 0x08, 0x0A, 0x0A, 0x0A, 0x0B, 0x0C),
+            SonyTandemHeadphoneAdapter.buildSetClearBassCommands(linkBudsSProfile(), level = -2, context).single().bytes,
+        )
+        // WH-1000XM4: V1 PRESET_EQ bands, where raw band 0 is Clear Bass.
+        assertArrayEquals(
+            byteArrayOf(0x0E, 0x58, 0x01, 0xFF.toByte(), 0x06, 0x08, 0x0A, 0x0A, 0x0A, 0x0B, 0x0C),
             SonyTandemHeadphoneAdapter.buildSetClearBassCommands(xm4Profile(), level = -2, context).single().bytes,
         )
     }
@@ -385,6 +442,15 @@ class SonyTandemProfileRoutingTest {
         parsed as ParsedTandemResponse.PlaybackAck
         assertEquals(listOf(1, 0, 1), parsed.values)
         assertEquals(PlaybackStatus.PLAYING, parsed.status)
+    }
+
+    @Test
+    fun xm4_dataMdrNo2Response_doesNotRouteToV2Table2() {
+        val profile = xm4Profile()
+        val raw = byteArrayOf(0x0F, 0x23, 0x00, 0x01)
+        val parsed = SonyTandemHeadphoneAdapter.parse(profile, raw)
+
+        assertTrue("Expected Unknown but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Unknown)
     }
 
     // ── Unknown / fallback Sony device ──────────────────────────────────────

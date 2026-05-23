@@ -1,5 +1,6 @@
 package dev.ignotus.sonyrebuild.headphones.sonydevices
 
+import dev.ignotus.sonyrebuild.headphones.ClearBassWriteMode
 import dev.ignotus.sonyrebuild.headphones.EqDeviceConfig
 import dev.ignotus.sonyrebuild.headphones.HeadphoneCapabilities
 import dev.ignotus.sonyrebuild.headphones.HeadphoneFeature
@@ -54,8 +55,10 @@ object Wh1000Xm4Profile {
                 writeInquiredType = EqEbbInquiredType.PRESET_EQ,
                 statusQueryTypes = listOf(EqEbbInquiredType.PRESET_EQ),
                 paramQueryTypes = listOf(EqEbbInquiredType.PRESET_EQ),
+                extendedInfoQueryTypes = listOf(EqEbbInquiredType.PRESET_EQ),
                 bandCount = 6,
                 hasClearBass = true,
+                clearBassWriteMode = ClearBassWriteMode.PRESET_EQ_BANDS,
             ),
             queryProtocolInfo = false,
             queryNoiseControlParams = true,
