@@ -390,7 +390,10 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
                 ?.let { sendCommandIfReady(it.copy(label = "DEBUG ${it.label}")) }
                 ?: appendLog("Debug battery action ignored: current profile has no battery query")
             "raw" -> rawHex?.hexToByteArrayOrNull()?.let {
-                sendCommandIfReady(HeadphoneCommand("DEBUG RAW", it))
+                val channel = _state.value.connectedProfile?.defaultResponseChannel()
+                    ?: client.availableChannels().firstOrNull()
+                    ?: TandemChannel.SPP_MDR
+                sendCommandIfReady(HeadphoneCommand("DEBUG RAW", it, channel))
             }
                 ?: appendLog("Debug raw action ignored: invalid hex")
             else -> appendLog("Unknown debug action: $action")
@@ -1001,6 +1004,7 @@ private fun String?.toHeadphoneTransport(): HeadphoneTransport =
     when (this) {
         "SPP" -> HeadphoneTransport.SPP
         "GATT_HPC" -> HeadphoneTransport.GATT_HPC
+        "GATT_MC" -> HeadphoneTransport.GATT_MC
         "UNSUPPORTED_LE_ENDPOINT" -> HeadphoneTransport.UNSUPPORTED_LE_ENDPOINT
         else -> HeadphoneTransport.UNKNOWN
     }

@@ -3,12 +3,10 @@ package dev.ignotus.sonyrebuild.headphones
 import dev.ignotus.sonyrebuild.protocol.EqEbbInquiredType
 import dev.ignotus.sonyrebuild.protocol.EqPresetId
 import dev.ignotus.sonyrebuild.protocol.ParsedTandemResponse
-import dev.ignotus.sonyrebuild.protocol.SonyTandemConstants.DATA_MDR
 
 data class EqDeviceConfig(
     val availablePresets: List<EqPresetId>,
     val writeInquiredType: EqEbbInquiredType,
-    val includeBandsOnPresetWrite: Boolean,
     val statusQueryTypes: List<EqEbbInquiredType>,
     val paramQueryTypes: List<EqEbbInquiredType>,
     val bandCount: Int,
@@ -25,7 +23,14 @@ data class EqUiCapability(
     val bandStepCenter: Int,
 )
 
-class EqProtocolEngine(private val config: EqDeviceConfig) {
+class EqProtocolEngine(
+    private val config: EqDeviceConfig,
+    private val codec: TandemCodec,
+) {
+    constructor(config: EqDeviceConfig, variant: HeadphoneProtocolVariant) : this(
+        config,
+        TandemCodecRegistry.codecFor(variant),
+    )
 
     // ── Refresh ──
 
@@ -33,34 +38,39 @@ class EqProtocolEngine(private val config: EqDeviceConfig) {
         buildCommand: (String, ByteArray) -> HeadphoneCommand,
     ): List<HeadphoneCommand> = buildList {
         config.statusQueryTypes.forEach { type ->
-            add(buildCommand("GET EQ status $type", SonyTandemV2Table1Codec.buildGetEqEbbStatus(type)))
+            codec.buildGetEqEbbStatus(type)?.let { bytes ->
+                add(buildCommand("GET EQ status $type", bytes))
+            }
         }
         config.paramQueryTypes.forEach { type ->
-            add(buildCommand("GET EQ param $type", SonyTandemV2Table1Codec.buildGetEqEbbParam(type)))
+            codec.buildGetEqEbbParam(type)?.let { bytes ->
+                add(buildCommand("GET EQ param $type", bytes))
+            }
         }
     }
 
     // ── Writes ──
 
-    fun buildSetPreset(preset: EqPresetId, currentBands: List<Int>): ByteArray {
-        val bands = if (config.includeBandsOnPresetWrite) {
-            currentBands.ifEmpty { List(config.bandCount) { BAND_STEP_CENTER } }
-        } else {
-            emptyList()
+    fun buildSetPreset(preset: EqPresetId): ByteArray =
+        requireNotNull(codec.buildSetEqPreset(preset, config.writeInquiredType)) {
+            "Codec ${codec.variant} does not support EQ preset writes"
         }
-        return SonyTandemV2Table1Codec.buildSetEqPreset(preset, config.writeInquiredType, bands)
-    }
 
     fun buildSetBands(bands: List<Int>, preset: EqPresetId): ByteArray =
-        SonyTandemV2Table1Codec.buildSetEqPreset(preset, config.writeInquiredType, bands)
+        requireNotNull(codec.buildSetEqBands(preset, config.writeInquiredType, bands)) {
+            "Codec ${codec.variant} does not support EQ band writes"
+        }
 
     fun buildSetClearBass(level: Int): ByteArray =
-        SonyTandemV2Table1Codec.buildSetClearBass(level)
+        requireNotNull(codec.buildSetClearBass(level)) {
+            "Codec ${codec.variant} does not support Clear Bass writes"
+        }
 
     // ── Parse ──
 
+    /** Parse delegates to the selected codec so EQ routing stays protocol-variant local. */
     fun parseResponse(raw: ByteArray): ParsedTandemResponse.EqEbb? {
-        val result = SonyTandemV2Table1Codec.parse(raw)
+        val result = codec.parse(raw)
         return result as? ParsedTandemResponse.EqEbb
     }
 

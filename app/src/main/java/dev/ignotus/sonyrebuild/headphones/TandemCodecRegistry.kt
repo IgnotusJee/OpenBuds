@@ -19,6 +19,40 @@ interface TandemCodec {
     val variant: HeadphoneProtocolVariant
     val defaultChannel: TandemChannel
     fun parse(raw: ByteArray): ParsedTandemResponse
+    fun buildGetProtocolInfo(): ByteArray? = null
+    fun buildGetDeviceInfo(type: DeviceInfoType): ByteArray? = null
+    fun buildGetDisplayFirmwareVersion(): ByteArray? = null
+    fun buildGetBatteryStatus(type: PowerInquiredType): ByteArray? = null
+    fun buildGetEqEbbStatus(type: EqEbbInquiredType): ByteArray? = null
+    fun buildGetEqEbbParam(type: EqEbbInquiredType): ByteArray? = null
+    fun buildSetEqPreset(
+        preset: EqPresetId,
+        type: EqEbbInquiredType,
+        bandSteps: List<Int> = emptyList(),
+    ): ByteArray? = null
+    fun buildSetEqBands(
+        preset: EqPresetId,
+        type: EqEbbInquiredType,
+        bandSteps: List<Int>,
+    ): ByteArray? = buildSetEqPreset(preset, type, bandSteps)
+    fun buildSetClearBass(level: Int): ByteArray? = null
+    fun buildGetNcAsmStatus(type: NcAsmInquiredType): ByteArray? = null
+    fun buildGetNcAsmParam(type: NcAsmInquiredType): ByteArray? = null
+    fun buildSetNoiseControlMode(
+        type: NcAsmInquiredType,
+        mode: NoiseControlMode,
+        ambientLevel: Int,
+        ambientMode: AmbientSoundMode,
+    ): ByteArray? = null
+    fun buildSetNcOnOff(enabled: Boolean): ByteArray? = null
+    fun buildSetAmbientSound(enabled: Boolean, mode: AmbientSoundMode): ByteArray? = null
+    fun buildSetAmbientLevel(level: Int, enabled: Boolean, mode: AmbientSoundMode): ByteArray? = null
+    fun buildGetPlaybackStatus(): ByteArray? = null
+    fun buildPlayback(control: PlaybackControl): ByteArray? = null
+    fun buildGetLeaStatus(type: LeaInquiredType): ByteArray? = null
+    fun buildGetLeaPairedHistory(type: LeaInquiredType): ByteArray? = null
+    fun buildGetQuickAccess(): ByteArray? = null
+    fun buildGetWearingStatus(): ByteArray? = null
 }
 
 object TandemCodecRegistry {
@@ -33,7 +67,8 @@ object TandemCodecRegistry {
 
 object UnknownTandemCodec : TandemCodec {
     override val variant: HeadphoneProtocolVariant = HeadphoneProtocolVariant.UNKNOWN
-    override val defaultChannel: TandemChannel = TandemChannel.GATT_V2_HPC
+    override val defaultChannel: TandemChannel
+        get() = error("Unknown codec has no default channel")
     override fun parse(raw: ByteArray): ParsedTandemResponse =
         ParsedTandemResponse.Unknown(
             dataType = raw.getOrNull(0)?.toInt()?.and(0xFF),
@@ -47,11 +82,18 @@ object SonyTandemV1Table1Codec : TandemCodec {
     override val variant: HeadphoneProtocolVariant = HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1
     override val defaultChannel: TandemChannel = TandemChannel.GATT_V1_MC
 
-    fun buildGetBatteryStatus(type: PowerInquiredType): ByteArray =
+    override fun buildGetBatteryStatus(type: PowerInquiredType): ByteArray =
         SonyTandemV1Table1Protocol.buildGetBatteryStatus(type)
 
     fun buildGetNcAsmParam(): ByteArray =
         SonyTandemV1Table1Protocol.buildGetNcAsmParam()
+
+    override fun buildGetNcAsmParam(type: NcAsmInquiredType): ByteArray? =
+        if (type == NcAsmInquiredType.V1_TABLE_SET1_NC_ASM) {
+            SonyTandemV1Table1Protocol.buildGetNcAsmParam()
+        } else {
+            null
+        }
 
     fun buildSetNoiseControlMode(
         mode: NoiseControlMode,
@@ -59,6 +101,47 @@ object SonyTandemV1Table1Codec : TandemCodec {
         ambientMode: AmbientSoundMode,
     ): ByteArray =
         SonyTandemV1Table1Protocol.buildSetNoiseControlMode(mode, ambientLevel, ambientMode)
+
+    override fun buildSetNoiseControlMode(
+        type: NcAsmInquiredType,
+        mode: NoiseControlMode,
+        ambientLevel: Int,
+        ambientMode: AmbientSoundMode,
+    ): ByteArray? =
+        if (type == NcAsmInquiredType.V1_TABLE_SET1_NC_ASM) {
+            SonyTandemV1Table1Protocol.buildSetNoiseControlMode(mode, ambientLevel, ambientMode)
+        } else {
+            null
+        }
+
+    // ── EQ/EBB (V1 type codes) ──
+
+    override fun buildGetEqEbbStatus(type: EqEbbInquiredType): ByteArray =
+        SonyTandemV1Table1Protocol.buildGetEqEbbStatus(type)
+
+    override fun buildGetEqEbbParam(type: EqEbbInquiredType): ByteArray =
+        SonyTandemV1Table1Protocol.buildGetEqEbbParam(type)
+
+    override fun buildSetEqPreset(
+        preset: EqPresetId,
+        type: EqEbbInquiredType,
+        bandSteps: List<Int>,
+    ): ByteArray =
+        SonyTandemV1Table1Protocol.buildSetEqPreset(preset, type, bandSteps)
+
+    override fun buildSetEqBands(
+        preset: EqPresetId,
+        type: EqEbbInquiredType,
+        bandSteps: List<Int>,
+    ): ByteArray =
+        SonyTandemV1Table1Protocol.buildSetEqPreset(
+            EqPresetId.UNSPECIFIED,
+            EqEbbInquiredType.PRESET_EQ,
+            bandSteps,
+        )
+
+    override fun buildSetClearBass(level: Int): ByteArray =
+        SonyTandemV1Table1Protocol.buildSetClearBass(level)
 
     override fun parse(raw: ByteArray): ParsedTandemResponse =
         SonyTandemV1Table1Protocol.parse(raw)
@@ -75,38 +158,54 @@ object SonyTandemV2Table1Codec : TandemCodec {
     override val variant: HeadphoneProtocolVariant = HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1
     override val defaultChannel: TandemChannel = TandemChannel.GATT_V2_HPC
 
-    fun buildGetProtocolInfo(): ByteArray =
+    override fun buildGetProtocolInfo(): ByteArray =
         SonyTandemV2Table1Protocol.buildGetProtocolInfo()
 
-    fun buildGetDeviceInfo(type: DeviceInfoType): ByteArray =
+    override fun buildGetDeviceInfo(type: DeviceInfoType): ByteArray =
         SonyTandemV2Table1Protocol.buildGetDeviceInfo(type)
 
-    fun buildGetDisplayFirmwareVersion(): ByteArray =
+    override fun buildGetDisplayFirmwareVersion(): ByteArray =
         SonyTandemV2Table1Protocol.buildGetDisplayFirmwareVersion()
 
-    fun buildGetBatteryStatus(type: PowerInquiredType): ByteArray =
+    override fun buildGetBatteryStatus(type: PowerInquiredType): ByteArray =
         SonyTandemV2Table1Protocol.buildGetBatteryStatus(type)
 
-    fun buildGetEqEbbStatus(type: EqEbbInquiredType): ByteArray =
+    override fun buildGetEqEbbStatus(type: EqEbbInquiredType): ByteArray =
         SonyTandemV2Table1Protocol.buildGetEqEbbStatus(type)
 
-    fun buildGetEqEbbParam(type: EqEbbInquiredType): ByteArray =
+    fun buildGetEqEbbStatus(typeCode: Byte): ByteArray =
+        SonyTandemV2Table1Protocol.buildGetEqEbbStatus(typeCode)
+
+    override fun buildGetEqEbbParam(type: EqEbbInquiredType): ByteArray =
         SonyTandemV2Table1Protocol.buildGetEqEbbParam(type)
 
-    fun buildSetEqPreset(
+    fun buildGetEqEbbParam(typeCode: Byte): ByteArray =
+        SonyTandemV2Table1Protocol.buildGetEqEbbParam(typeCode)
+
+    override fun buildSetEqPreset(
         preset: EqPresetId,
         type: EqEbbInquiredType,
-        bandSteps: List<Int> = emptyList(),
+        bandSteps: List<Int>,
     ): ByteArray =
         SonyTandemV2Table1Protocol.buildSetEqPreset(preset, type, bandSteps)
 
-    fun buildSetClearBass(level: Int): ByteArray =
+    fun buildSetEqPreset(
+        preset: EqPresetId,
+        typeCode: Byte,
+        bandSteps: List<Int> = emptyList(),
+    ): ByteArray =
+        SonyTandemV2Table1Protocol.buildSetEqPreset(preset, typeCode, bandSteps)
+
+    override fun buildSetClearBass(level: Int): ByteArray =
         SonyTandemV2Table1Protocol.buildSetClearBass(level)
 
-    fun buildGetNcAsmStatus(type: NcAsmInquiredType): ByteArray =
+    fun buildSetClearBass(level: Int, ebbTypeCode: Byte): ByteArray =
+        SonyTandemV2Table1Protocol.buildSetClearBass(level, ebbTypeCode)
+
+    override fun buildGetNcAsmStatus(type: NcAsmInquiredType): ByteArray =
         SonyTandemV2Table1Protocol.buildGetNcAsmStatus(type)
 
-    fun buildGetNcAsmParam(type: NcAsmInquiredType): ByteArray =
+    override fun buildGetNcAsmParam(type: NcAsmInquiredType): ByteArray =
         SonyTandemV2Table1Protocol.buildGetNcAsmParam(type)
 
     fun buildSetNoiseControlMode(
@@ -123,31 +222,45 @@ object SonyTandemV2Table1Codec : TandemCodec {
     ): ByteArray =
         SonyTandemV2Table1Protocol.buildSetNcModeSwitchAndAmbientLevel(mode, ambientLevel, ambientMode)
 
-    fun buildSetNcOnOff(enabled: Boolean): ByteArray =
+    override fun buildSetNoiseControlMode(
+        type: NcAsmInquiredType,
+        mode: NoiseControlMode,
+        ambientLevel: Int,
+        ambientMode: AmbientSoundMode,
+    ): ByteArray? =
+        when (type) {
+            NcAsmInquiredType.NC_MODE_SWITCH_AND_ASM_SEAMLESS ->
+                SonyTandemV2Table1Protocol.buildSetNcModeSwitchAndAmbientLevel(mode, ambientLevel, ambientMode)
+            NcAsmInquiredType.MODE_NC_ASM_DUAL_NC_MODE_SWITCH_AND_ASM_SEAMLESS ->
+                SonyTandemV2Table1Protocol.buildSetNoiseControlMode(mode, ambientLevel, ambientMode)
+            else -> null
+        }
+
+    override fun buildSetNcOnOff(enabled: Boolean): ByteArray =
         SonyTandemV2Table1Protocol.buildSetNcOnOff(enabled)
 
-    fun buildSetAmbientSound(enabled: Boolean, mode: AmbientSoundMode): ByteArray =
+    override fun buildSetAmbientSound(enabled: Boolean, mode: AmbientSoundMode): ByteArray =
         SonyTandemV2Table1Protocol.buildSetAmbientSound(enabled, mode)
 
-    fun buildSetAmbientLevel(level: Int, enabled: Boolean, mode: AmbientSoundMode): ByteArray =
+    override fun buildSetAmbientLevel(level: Int, enabled: Boolean, mode: AmbientSoundMode): ByteArray =
         SonyTandemV2Table1Protocol.buildSetAmbientLevel(level, enabled, mode)
 
-    fun buildGetPlaybackStatus(): ByteArray =
+    override fun buildGetPlaybackStatus(): ByteArray =
         SonyTandemV2Table1Protocol.buildGetPlaybackStatus()
 
-    fun buildPlayback(control: PlaybackControl): ByteArray =
+    override fun buildPlayback(control: PlaybackControl): ByteArray =
         SonyTandemV2Table1Protocol.buildPlayback(control)
 
-    fun buildGetLeaStatus(type: LeaInquiredType): ByteArray =
+    override fun buildGetLeaStatus(type: LeaInquiredType): ByteArray =
         SonyTandemV2Table1Protocol.buildGetLeaStatus(type)
 
-    fun buildGetLeaPairedHistory(type: LeaInquiredType): ByteArray =
+    override fun buildGetLeaPairedHistory(type: LeaInquiredType): ByteArray =
         SonyTandemV2Table1Protocol.buildGetLeaPairedHistory(type)
 
-    fun buildGetQuickAccess(): ByteArray =
+    override fun buildGetQuickAccess(): ByteArray =
         SonyTandemV2Table1Protocol.buildGetQuickAccess()
 
-    fun buildGetWearingStatus(): ByteArray =
+    override fun buildGetWearingStatus(): ByteArray =
         SonyTandemV2Table1Protocol.buildGetWearingStatus()
 
     override fun parse(raw: ByteArray): ParsedTandemResponse =

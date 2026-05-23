@@ -47,13 +47,13 @@ class SonyTandemHeadphoneAdapterTest {
             HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1,
             profile.protocolFor(HeadphoneFeature.AMBIENT_VOICE_MODE),
         )
-        // XM4: EQ, Clear Bass, playback → V2 Table1
+        // XM4: EQ, Clear Bass → V1 Table1; playback → V2 Table1
         assertEquals(
-            HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1,
+            HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1,
             profile.protocolFor(HeadphoneFeature.EQ),
         )
         assertEquals(
-            HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1,
+            HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1,
             profile.protocolFor(HeadphoneFeature.CLEAR_BASS),
         )
         assertEquals(
@@ -73,7 +73,7 @@ class SonyTandemHeadphoneAdapterTest {
         assertFalse(labels.any { it == "GET battery LEFT_RIGHT_BATTERY" })
         assertFalse(labels.any { it == "GET battery CRADLE_BATTERY" })
         assertFalse(labels.any { it == "GET EQ param CUSTOM_EQ" })
-        assertTrue(labels.any { it == "GET EQ param EBB" })
+        assertTrue(labels.any { it == "GET EQ param PRESET_EQ" })
         assertTrue(labels.any { it == "GET playback status" })
         assertTrue(labels.any { it == "GET display firmware version" })
         // XM4 NC refresh now routes through V1 path → label is "GET NC/ASM param V1"

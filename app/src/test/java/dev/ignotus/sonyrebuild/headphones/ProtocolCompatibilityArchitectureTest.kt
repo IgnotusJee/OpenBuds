@@ -5,6 +5,7 @@ import dev.ignotus.sonyrebuild.protocol.PlaybackControl
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 import java.io.File
 
@@ -33,6 +34,11 @@ class ProtocolCompatibilityArchitectureTest {
         assertEquals(TandemChannel.GATT_V2_MC, defaultChannelFor(HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE2))
         assertEquals(TandemChannel.GATT_V1_MC, defaultChannelFor(HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE2))
         assertEquals(TandemChannel.GATT_V2_HPC, defaultChannelFor(HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1))
+        try {
+            defaultChannelFor(HeadphoneProtocolVariant.UNKNOWN)
+            fail("UNKNOWN protocol must not silently default to a concrete channel")
+        } catch (_: IllegalStateException) {
+        }
     }
 
     @Test
@@ -68,6 +74,19 @@ class ProtocolCompatibilityArchitectureTest {
         assertFalse(source.contains("import dev.ignotus.sonyrebuild.protocol.SonyTandemV2Table1Protocol"))
         assertFalse(source.contains("SonyTandemV1Table1Protocol."))
         assertFalse(source.contains("SonyTandemV2Table1Protocol."))
+    }
+
+    @Test
+    fun profileTemplateDoesNotInferProtocolFromModelName() {
+        val source = mainSource("headphones/HeadphoneAdapter.kt")
+        assertFalse(source.contains("when (modelName)"))
+        assertFalse(source.contains("buildFeatureProtocolMap"))
+    }
+
+    @Test
+    fun v1Table1ParserDoesNotDelegateToV2Parser() {
+        val source = mainSource("protocol/SonyTandemV1Table1Protocol.kt")
+        assertFalse(source.contains("SonyTandemV2Table1Protocol.parse"))
     }
 
     @Test

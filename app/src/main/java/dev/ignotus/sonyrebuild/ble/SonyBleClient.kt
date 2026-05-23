@@ -83,24 +83,26 @@ data class UnsupportedEndpointDiagnostics(
     val rawReads: Map<String, String> = emptyMap(),
 )
 
-internal const val V1_MC_ONLY_GATT_PENDING_REASON =
-    "V1 MC-only GATT detected; handshake/control path pending validation"
-
 internal fun tandemEndpointSupportState(services: Collection<UUID>): String? =
-    if (SonyGatt.TANDEM_V2_HPC_SERVICE in services) null else unsupportedTandemEndpointReason(services)
+    if (services.any { it in supportedGattControlServices }) null else unsupportedTandemEndpointReason(services)
 
 internal fun unsupportedTandemEndpointReason(services: Collection<UUID>): String {
     val labels = services.map { SonyGatt.serviceLabel(it) }
     return when {
         SonyGatt.TANDEM_V1_MC_SERVICE in services ->
-            "$V1_MC_ONLY_GATT_PENDING_REASON. Services: ${labels.joinToString()}"
+            "Tandem V1 MC service was found, but no usable MC control endpoint could be registered. Services: ${labels.joinToString()}"
         SonyGatt.LE_AUDIO_CAPABILITY_FOR_HPC in services ->
             "This LE endpoint exposes LE Audio capability, not Tandem V2 HPC control. Try disabling LE Audio / using classic-only mode, then rescan."
         SonyGatt.BLUETOOTH_PAIRING_COMPLETE_NAME_SERVICE in services ->
             "This LE endpoint is a pairing/name endpoint, not Tandem V2 HPC control. Services: ${labels.joinToString()}"
-        else -> "Tandem V2 HPC service was not found. Services: ${labels.joinToString()}"
+        else -> "Tandem control service was not found. Services: ${labels.joinToString()}"
     }
 }
+
+private val supportedGattControlServices = setOf(
+    SonyGatt.TANDEM_V2_HPC_SERVICE,
+    SonyGatt.TANDEM_V1_MC_SERVICE,
+)
 
 interface SonyBleClientListener {
     fun onBluetoothUnavailable(reason: String)
@@ -211,29 +213,31 @@ class SonyBleClient(
             }
             val services = gatt.services.map { it.uuid }
             val service = gatt.getService(SonyGatt.TANDEM_V2_HPC_SERVICE)
-            if (service == null) {
+            if (service != null) {
+                log("Tandem V2 HPC service discovered")
+                val hpcSpec = TandemGattRouting.endpointSpecFor(TandemChannel.GATT_V2_HPC)
+                toAcc = service.getCharacteristic(hpcSpec.toAccUuid)
+                fromAcc = service.getCharacteristic(hpcSpec.fromAccUuid)
+                if (toAcc != null && fromAcc != null) {
+                    gattEndpoints[TandemChannel.GATT_V2_HPC] = GattTandemEndpoint(
+                        channel = TandemChannel.GATT_V2_HPC,
+                        toAcc = toAcc!!,
+                        fromAcc = fromAcc!!,
+                    )
+                } else {
+                    val characteristics = service.characteristics.joinToString { it.uuid.toString() }
+                    log("Tandem V2 HPC characteristics incomplete. Available=[$characteristics]")
+                }
+            }
+            discoverMcEndpoints(gatt)
+            if (gattEndpoints.isEmpty()) {
                 val labels = services.joinToString { SonyGatt.serviceLabel(it) }
                 val reason = unsupportedTandemEndpointReason(services)
-                log("Tandem V2 HPC service missing. Available services=[$labels]")
+                log("No usable Tandem GATT endpoint. Available services=[$labels]")
                 beginUnsupportedEndpointProbe(gatt, services, reason)
                 return
             }
-            log("Tandem V2 HPC service discovered")
-            val hpcSpec = TandemGattRouting.endpointSpecFor(TandemChannel.GATT_V2_HPC)
-            toAcc = service.getCharacteristic(hpcSpec.toAccUuid)
-            fromAcc = service.getCharacteristic(hpcSpec.fromAccUuid)
-            if (toAcc == null || fromAcc == null) {
-                val characteristics = service.characteristics.joinToString { it.uuid.toString() }
-                log("Tandem V2 HPC characteristics incomplete. Available=[$characteristics]")
-                listener.onBluetoothUnavailable("Tandem V2 HPC characteristics are incomplete")
-                return
-            }
-            gattEndpoints[TandemChannel.GATT_V2_HPC] = GattTandemEndpoint(
-                channel = TandemChannel.GATT_V2_HPC,
-                toAcc = toAcc!!,
-                fromAcc = fromAcc!!,
-            )
-            discoverMcEndpoints(gatt)
+            log("Tandem GATT endpoints discovered: ${gattEndpoints.keys.joinToString()}")
             beginTandemHandshake(gatt)
         }
 
@@ -465,7 +469,7 @@ class SonyBleClient(
             return
         }
         val services = activeGatt.services.map { it.uuid }
-        if (SonyGatt.TANDEM_V2_HPC_SERVICE in services) {
+        if (services.any { it in supportedGattControlServices } && gattEndpoints.isNotEmpty()) {
             beginTandemHandshake(activeGatt)
         } else {
             beginUnsupportedEndpointProbe(activeGatt, services, unsupportedTandemEndpointReason(services))
@@ -479,7 +483,7 @@ class SonyBleClient(
             transport.send(bytes)
             return
         }
-        writeToChannel(TandemChannel.GATT_V2_HPC, bytes)
+        writeToChannel(defaultGattWriteChannel(), bytes)
     }
 
     fun sendToChannel(channel: TandemChannel, bytes: ByteArray) {
@@ -670,7 +674,9 @@ class SonyBleClient(
             endpoints = gattEndpoints,
             serviceUuid = characteristic.service?.uuid,
             characteristicUuid = uuid,
-        ) ?: TandemChannel.GATT_V2_HPC
+        ) ?: TandemGattRouting.fromAccChannelFor(characteristic.service?.uuid, uuid)
+            ?: gattEndpoints.keys.singleOrNull()
+            ?: defaultGattWriteChannel()
         listener.onMessage(channel, value)
     }
 
@@ -887,7 +893,7 @@ class SonyBleClient(
                     mtu = negotiatedMtu,
                     writableValueLength = writableValueLength,
                     optimalMtu = optimalMtu,
-                    transport = "GATT_HPC",
+                    transport = gattTransportLabel(),
                 )
             )
             return
@@ -970,6 +976,21 @@ class SonyBleClient(
             listener.onBluetoothUnavailable("Failed to enqueue BLE write")
         }
     }
+
+    private fun defaultGattWriteChannel(): TandemChannel =
+        when {
+            TandemChannel.GATT_V2_HPC in gattEndpoints -> TandemChannel.GATT_V2_HPC
+            TandemChannel.GATT_V1_MC in gattEndpoints -> TandemChannel.GATT_V1_MC
+            TandemChannel.GATT_V2_MC in gattEndpoints -> TandemChannel.GATT_V2_MC
+            else -> TandemChannel.GATT_V2_HPC
+        }
+
+    private fun gattTransportLabel(): String =
+        if (TandemChannel.GATT_V2_HPC in gattEndpoints) {
+            "GATT_HPC"
+        } else {
+            "GATT_MC"
+        }
 
     private fun hasScanPermission(): Boolean =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {

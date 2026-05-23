@@ -115,11 +115,8 @@ class SonyBleClientChannelTest {
     }
 
     @Test
-    fun unsupportedTandemEndpointReason_v1McOnlyStaysPendingValidation() {
-        val reason = unsupportedTandemEndpointReason(listOf(SonyGatt.TANDEM_V1_MC_SERVICE))
-
-        assertTrue(reason.contains(V1_MC_ONLY_GATT_PENDING_REASON))
-        assertTrue(reason.contains("TANDEM_V1_MC_SERVICE"))
+    fun tandemEndpointSupportState_v1McOnlyIsSupported() {
+        assertNull(tandemEndpointSupportState(listOf(SonyGatt.TANDEM_V1_MC_SERVICE)))
     }
 
     // ── Channel characteristic resolution ────────────────────────────────────

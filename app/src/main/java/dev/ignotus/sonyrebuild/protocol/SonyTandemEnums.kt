@@ -64,6 +64,7 @@ enum class EqPresetId(val code: Byte, val displayName: String) {
     CUSTOM(0xA0.toByte(), "Custom"),
     USER_SETTING1(0xA1.toByte(), "User Setting 1"),
     USER_SETTING2(0xA2.toByte(), "User Setting 2"),
+    UNSPECIFIED(0xFF.toByte(), "Unspecified"),
 }
 
 enum class NcAsmInquiredType(val code: Byte) {

@@ -63,26 +63,42 @@ object SonyTandemV2Table1Protocol {
         SonyTandemFrame.message(POWER_GET_STATUS, byteArrayOf(type.code))
 
     fun buildGetEqEbbStatus(type: EqEbbInquiredType): ByteArray =
-        SonyTandemFrame.message(EQEBB_GET_STATUS, byteArrayOf(type.code))
+        buildGetEqEbbStatus(type.code)
+
+    fun buildGetEqEbbStatus(typeCode: Byte): ByteArray =
+        SonyTandemFrame.message(EQEBB_GET_STATUS, byteArrayOf(typeCode))
 
     fun buildGetEqEbbParam(type: EqEbbInquiredType): ByteArray =
-        SonyTandemFrame.message(EQEBB_GET_PARAM, byteArrayOf(type.code))
+        buildGetEqEbbParam(type.code)
+
+    fun buildGetEqEbbParam(typeCode: Byte): ByteArray =
+        SonyTandemFrame.message(EQEBB_GET_PARAM, byteArrayOf(typeCode))
 
     fun buildSetEqPreset(
         preset: EqPresetId,
         type: EqEbbInquiredType = EqEbbInquiredType.PRESET_EQ,
         bandSteps: List<Int> = emptyList(),
     ): ByteArray =
+        buildSetEqPreset(preset, type.code, bandSteps)
+
+    fun buildSetEqPreset(
+        preset: EqPresetId,
+        typeCode: Byte,
+        bandSteps: List<Int> = emptyList(),
+    ): ByteArray =
         SonyTandemFrame.message(
             EQEBB_SET_PARAM,
-            byteArrayOf(type.code, preset.code, bandSteps.size.toByte()) +
+            byteArrayOf(typeCode, preset.code, bandSteps.size.toByte()) +
                 bandSteps.map { it.coerceIn(0, 255).toByte() }.toByteArray(),
         )
 
     fun buildSetClearBass(level: Int): ByteArray =
+        buildSetClearBass(level, EqEbbInquiredType.EBB.code)
+
+    fun buildSetClearBass(level: Int, ebbTypeCode: Byte): ByteArray =
         SonyTandemFrame.message(
             EQEBB_SET_PARAM,
-            byteArrayOf(EqEbbInquiredType.EBB.code, level.coerceIn(-127, 127).toByte()),
+            byteArrayOf(ebbTypeCode, level.coerceIn(-127, 127).toByte()),
         )
 
     fun buildGetNcAsmStatus(type: NcAsmInquiredType): ByteArray =
@@ -361,60 +377,7 @@ object SonyTandemV2Table1Protocol {
     }
 
     private fun parseEqEbb(command: Byte, payload: ByteArray, raw: ByteArray): ParsedTandemResponse {
-        val type = payload.firstOrNull()?.let { code ->
-            EqEbbInquiredType.entries.firstOrNull { it.code == code }
-        }
-        val values = payload.drop(1).map { it.unsigned }
-        val isParamResponse = command == EQEBB_RET_PARAM || command == EQEBB_NTFY_PARAM
-        val enabled = if (command == EQEBB_RET_STATUS || command == EQEBB_NTFY_STATUS) {
-            payload.getOrNull(1)?.let { it == VALUE_ENABLE }
-        } else {
-            null
-        }
-        val ebbHasPresetField = isParamResponse && type == EqEbbInquiredType.EBB &&
-            payload.size >= 4 &&
-            payload.getOrNull(2)?.unsigned?.let { count -> payload.size == count + 3 } == true
-        val preset = if (isParamResponse) when (type) {
-            EqEbbInquiredType.PRESET_EQ,
-            EqEbbInquiredType.PRESET_EQ_NONCUSTOMIZABLE,
-            EqEbbInquiredType.PRESET_EQ_AND_ERRORCODE,
-            EqEbbInquiredType.PRESET_EQ_AND_ULT_MODE -> payload.getOrNull(1)?.let { code ->
-                EqPresetId.entries.firstOrNull { it.code == code }
-            }
-            EqEbbInquiredType.EBB -> if (ebbHasPresetField) {
-                payload.getOrNull(1)?.let { code ->
-                    EqPresetId.entries.firstOrNull { it.code == code }
-                }
-            } else null
-            else -> null
-        } else {
-            null
-        }
-        val bandCountOffset = when (type) {
-            EqEbbInquiredType.CUSTOM_EQ -> 1
-            EqEbbInquiredType.EBB -> if (ebbHasPresetField) 2 else 1
-            EqEbbInquiredType.PRESET_EQ_AND_ULT_MODE -> 3
-            null -> 0
-            else -> 2
-        }
-        val bandSteps = if (isParamResponse) payload.getOrNull(bandCountOffset)?.unsigned?.let { count ->
-            payload.drop(bandCountOffset + 1).take(count).map { it.unsigned }
-        }.orEmpty() else emptyList()
-        return ParsedTandemResponse.EqEbb(
-            type = type,
-            enabled = enabled,
-            preset = preset,
-            clearBass = when {
-                type == EqEbbInquiredType.EBB && isParamResponse && !ebbHasPresetField ->
-                    payload.getOrNull(1)?.toInt()
-                type == EqEbbInquiredType.EBB && isParamResponse && ebbHasPresetField && bandSteps.isNotEmpty() ->
-                    bandSteps[0]
-                else -> null
-            },
-            bandSteps = bandSteps,
-            values = values,
-            raw = raw,
-        )
+        return SonyEqEbbPayloadParser.parse(EqEbbPayloadVersion.V2, command, payload, raw)
     }
 
     private fun parseNoiseControl(command: Byte, payload: ByteArray, raw: ByteArray): ParsedTandemResponse {

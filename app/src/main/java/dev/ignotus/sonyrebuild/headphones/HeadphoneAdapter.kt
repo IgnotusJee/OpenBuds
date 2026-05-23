@@ -42,6 +42,7 @@ enum class HeadphoneTransport {
     UNKNOWN,
     SPP,
     GATT_HPC,
+    GATT_MC,
     UNSUPPORTED_LE_ENDPOINT,
 }
 
@@ -85,7 +86,7 @@ data class FeatureProtocolBinding(
 data class HeadphoneCommand(
     val label: String,
     val bytes: ByteArray,
-    val channel: TandemChannel = TandemChannel.GATT_V2_HPC,
+    val channel: TandemChannel,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -109,7 +110,6 @@ data class HeadphoneCapabilities(
     val eqConfig: EqDeviceConfig = EqDeviceConfig(
         availablePresets = listOf(EqPresetId.OFF),
         writeInquiredType = EqEbbInquiredType.PRESET_EQ,
-        includeBandsOnPresetWrite = false,
         statusQueryTypes = emptyList(),
         paramQueryTypes = emptyList(),
         bandCount = 0,
@@ -138,35 +138,35 @@ data class ConnectedHeadphoneProfile(
         featureBindings[feature]?.variant ?: featureProtocolMap[feature] ?: HeadphoneProtocolVariant.UNKNOWN
     fun bindingFor(feature: HeadphoneFeature): FeatureProtocolBinding? = featureBindings[feature]
     fun channelFor(feature: HeadphoneFeature): TandemChannel =
-        featureBindings[feature]?.channel ?: defaultChannelFor(protocolFor(feature))
+        featureBindings[feature]?.channel
+            ?: protocolFor(feature)
+                .takeIf { it != HeadphoneProtocolVariant.UNKNOWN }
+                ?.let(::defaultChannelFor)
+            ?: error("No protocol channel binding for $feature on $modelName")
+
+    fun defaultResponseChannel(): TandemChannel =
+        featureBindings.values
+            .firstOrNull { it.channel == TandemChannel.GATT_V2_HPC }
+            ?.channel
+            ?: featureBindings.values.firstOrNull()?.channel
+            ?: TandemChannel.SPP_MDR
 }
 
 data class ProfileTemplate(
     val modelName: String,
     val series: String?,
     val capabilities: HeadphoneCapabilities,
+    val featureProtocolMap: Map<HeadphoneFeature, HeadphoneProtocolVariant>,
     val knownStaticProfile: Boolean = true,
 ) {
-    val featureProtocolMap: Map<HeadphoneFeature, HeadphoneProtocolVariant> by lazy {
-        buildFeatureProtocolMap()
-    }
-
-    private fun buildFeatureProtocolMap(): Map<HeadphoneFeature, HeadphoneProtocolVariant> =
-        when (modelName) {
-            "WH-1000XM4" -> capabilities.features.associateWith { feature ->
-                when (feature) {
-                    HeadphoneFeature.BATTERY,
-                    HeadphoneFeature.NOISE_CONTROL,
-                    HeadphoneFeature.AMBIENT_LEVEL,
-                    HeadphoneFeature.AMBIENT_VOICE_MODE -> HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1
-                    HeadphoneFeature.EQ,
-                    HeadphoneFeature.CLEAR_BASS,
-                    HeadphoneFeature.PLAYBACK_CONTROL -> HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1
-                    else -> HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1
-                }
+    init {
+        if (knownStaticProfile) {
+            val missingFeatures = capabilities.features - featureProtocolMap.keys
+            require(missingFeatures.isEmpty()) {
+                "Static profile $modelName is missing protocol bindings for $missingFeatures"
             }
-            else -> capabilities.features.associateWith { HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1 }
         }
+    }
 
     val featureBindings: Map<HeadphoneFeature, FeatureProtocolBinding> by lazy {
         featureProtocolMap.mapValues { (feature, variant) ->
@@ -295,7 +295,7 @@ interface HeadphoneAdapter {
     fun parse(profile: ConnectedHeadphoneProfile, channel: TandemChannel, raw: ByteArray): ParsedTandemResponse
 
     fun parse(profile: ConnectedHeadphoneProfile, raw: ByteArray): ParsedTandemResponse =
-        parse(profile, TandemChannel.GATT_V2_HPC, raw)
+        parse(profile, profile.defaultResponseChannel(), raw)
 
     fun canWrite(profile: ConnectedHeadphoneProfile, feature: HeadphoneFeature): Boolean =
         profile.supports(feature)
@@ -386,6 +386,6 @@ fun defaultChannelFor(variant: HeadphoneProtocolVariant): TandemChannel =
         HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1,
         HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE2 -> TandemChannel.GATT_V1_MC
         HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE2 -> TandemChannel.GATT_V2_MC
-        HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1,
-        HeadphoneProtocolVariant.UNKNOWN -> TandemChannel.GATT_V2_HPC
+        HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1 -> TandemChannel.GATT_V2_HPC
+        HeadphoneProtocolVariant.UNKNOWN -> error("Unknown protocol variant has no default channel")
     }

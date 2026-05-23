@@ -192,28 +192,28 @@ class SonyTandemProfileRoutingTest {
     }
 
     @Test
-    fun xm4_eqRoutesToV2Table1ByDefault() {
+    fun xm4_eqRoutesToV1Table1() {
         val profile = xm4Profile()
         assertEquals(
-            HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1,
+            HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1,
             profile.protocolFor(HeadphoneFeature.EQ),
         )
         assertTrue(
             SonyTandemHeadphoneAdapter.buildRefreshEqCommands(profile)
-                .all { it.channel == TandemChannel.GATT_V2_HPC },
+                .all { it.channel == TandemChannel.GATT_V1_MC },
         )
     }
 
     @Test
-    fun xm4_clearBassRoutesToV2Table1ByDefault() {
+    fun xm4_clearBassRoutesToV1Table1() {
         val profile = xm4Profile()
         assertEquals(
-            HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1,
+            HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1,
             profile.protocolFor(HeadphoneFeature.CLEAR_BASS),
         )
         val context = EqWriteContext(rawBandSteps = emptyList())
         assertEquals(
-            TandemChannel.GATT_V2_HPC,
+            TandemChannel.GATT_V1_MC,
             SonyTandemHeadphoneAdapter.buildSetClearBassCommands(profile, level = 3, context).single().channel,
         )
     }
@@ -232,63 +232,68 @@ class SonyTandemProfileRoutingTest {
     }
 
     @Test
-    fun xm4_eqRefresh_onlyEbbInParamQueries() {
+    fun xm4_eqRefresh_onlyPresetEqInParamQueries() {
         val profile = xm4Profile()
         val commands = SonyTandemHeadphoneAdapter.buildRefreshEqCommands(profile)
 
         val labels = commands.map { it.label }
-        // XM4 queries EBB param only (no CUSTOM_EQ param)
-        assertTrue(labels.any { it == "GET EQ param EBB" })
+        // XM4 uses V1 type codes: queries PRESET_EQ param for preset+bands
+        assertFalse(labels.any { it == "GET EQ status CUSTOM_EQ" })
+        assertTrue(labels.any { it == "GET EQ param PRESET_EQ" })
         val paramLabels = labels.filter { it.startsWith("GET EQ param") }
         assertEquals(1, paramLabels.size)
         assertFalse(paramLabels.any { it.contains("CUSTOM_EQ") })
-        assertFalse(paramLabels.any { it.contains("PRESET_EQ") })
+        assertFalse(paramLabels.any { it.contains("EBB") })
     }
 
     @Test
-    fun xm4_eqPresetWrite_usesEbbTypeWithBandData() {
+    fun xm4_eqPresetWrite_usesSonyV1PresetPayloadWithoutBands() {
         val profile = xm4Profile()
         val context = EqWriteContext(rawBandSteps = listOf(0x11, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A))
 
         assertArrayEquals(
-            byteArrayOf(0x0E, 0x58, 0x01, 0x16, 0x06, 0x11, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A),
+            byteArrayOf(0x0E, 0x58, 0x01, 0x16, 0x00),
             SonyTandemHeadphoneAdapter.buildSetEqPresetCommands(profile, EqPresetId.BASS, context).single().bytes,
         )
         assertArrayEquals(
-            byteArrayOf(0x0E, 0x58, 0x01, 0x13, 0x06, 0x11, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A),
+            byteArrayOf(0x0E, 0x58, 0x01, 0x13, 0x00),
             SonyTandemHeadphoneAdapter.buildSetEqPresetCommands(profile, EqPresetId.RELAXED, context).single().bytes,
         )
     }
 
     @Test
-    fun xm4_userEqWrites_useEbbTypeWithCurrentBands() {
+    fun xm4_userEqWrites_useV1PresetEqType() {
         val profile = xm4Profile()
         val rawSteps = listOf(0x11, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A)
         val context = EqWriteContext(rawBandSteps = rawSteps)
 
+        // buildSetPreset sends Sony's active-preset payload with no bands.
         val userPreset = SonyTandemHeadphoneAdapter.buildSetEqPresetCommands(profile, EqPresetId.USER_SETTING1, context).single()
+        // buildSetBands sends Sony's V1 custom-band shape: PRESET_EQ + UNSPECIFIED + bands.
         val customBands = SonyTandemHeadphoneAdapter.buildSetEqBandCommands(profile, rawSteps, EqPresetId.CUSTOM, context).single()
 
         assertArrayEquals(
-            byteArrayOf(0x0E, 0x58, 0x01, 0xA1.toByte(), 0x06, 0x11, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A),
+            byteArrayOf(0x0E, 0x58, 0x01, 0xA1.toByte(), 0x00),
             userPreset.bytes,
         )
         assertArrayEquals(
-            byteArrayOf(0x0E, 0x58, 0x01, 0xA0.toByte(), 0x06, 0x11, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A),
+            byteArrayOf(0x0E, 0x58, 0x01, 0xFF.toByte(), 0x06, 0x11, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A),
             customBands.bytes,
         )
     }
 
     @Test
-    fun clearBassWrite_alwaysUsesOfficialEbbLevelPayload() {
+    fun clearBassWrite_usesCorrectEbbTypeCodePerDevice() {
         val context = EqWriteContext(rawBandSteps = listOf(0x13, 0x0A, 0x0A, 0x0A, 0x0B, 0x0C))
 
+        // LinkBuds S: V2 EBB type (0x01)
         assertArrayEquals(
             byteArrayOf(0x0E, 0x58, 0x01, 0x03),
             SonyTandemHeadphoneAdapter.buildSetClearBassCommands(linkBudsSProfile(), level = 3, context).single().bytes,
         )
+        // WH-1000XM4: V1 EBB type (0x02)
         assertArrayEquals(
-            byteArrayOf(0x0E, 0x58, 0x01, 0xFE.toByte()),
+            byteArrayOf(0x0E, 0x58, 0x02, 0xFE.toByte()),
             SonyTandemHeadphoneAdapter.buildSetClearBassCommands(xm4Profile(), level = -2, context).single().bytes,
         )
     }

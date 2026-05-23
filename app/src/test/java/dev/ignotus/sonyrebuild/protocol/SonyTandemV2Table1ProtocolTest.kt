@@ -2,6 +2,7 @@ package dev.ignotus.sonyrebuild.protocol
 
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -166,6 +167,13 @@ class SonyTandemV2Table1ProtocolTest {
             byteArrayOf(0x0E, 0x58, 0x01, 0xFE.toByte()),
             SonyTandemV2Table1Protocol.buildSetClearBass(-2),
         )
+    }
+
+    @Test
+    fun v1EqEbbTypeCode_rejectsUnsupportedV2Types() {
+        assertThrows(IllegalArgumentException::class.java) {
+            SonyTandemV1Table1Protocol.v1TypeCode(EqEbbInquiredType.CUSTOM_EQ)
+        }
     }
 
     @Test
