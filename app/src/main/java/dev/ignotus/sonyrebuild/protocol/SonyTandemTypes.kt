@@ -86,6 +86,7 @@ sealed interface ParsedTandemResponse {
     data class PlaybackAck(
         val values: List<Int>,
         val status: PlaybackStatus = PlaybackStatus.UNKNOWN,
+        val isUnsolicited: Boolean = false,
         override val raw: ByteArray,
     ) : ParsedTandemResponse
 
@@ -182,4 +183,4 @@ fun ByteArray.hexString(): String = joinToString(" ") { "%02X".format(it.unsigne
 
 fun ByteArray.unsignedList(): List<Int> = map { it.unsigned }
 
-fun Byte.percentageOrNull(): Int? = unsigned.takeIf { it in 0..100 }
+fun Byte.percentageOrNull

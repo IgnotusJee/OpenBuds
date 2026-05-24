@@ -249,9 +249,16 @@ object SonyTandemV2Table1Protocol {
             EQEBB_RET_EXTENDED_INFO -> SonyEqEbbPayloadParser.parseExtendedInfo(EqEbbPayloadVersion.V2, payload, raw)
             NCASM_RET_STATUS, NCASM_NTFY_STATUS -> parseNoiseControl(command, payload, raw)
             NCASM_RET_PARAM, NCASM_NTFY_PARAM -> parseNoiseControl(command, payload, raw)
-            PLAY_RET_STATUS, PLAY_NTFY_STATUS -> ParsedTandemResponse.PlaybackAck(
+            PLAY_RET_STATUS -> ParsedTandemResponse.PlaybackAck(
                 values = payload.unsignedList(),
                 status = parsePlaybackStatus(payload),
+                isUnsolicited = false,
+                raw = raw,
+            )
+            PLAY_NTFY_STATUS -> ParsedTandemResponse.PlaybackAck(
+                values = payload.unsignedList(),
+                status = parsePlaybackStatus(payload),
+                isUnsolicited = true,
                 raw = raw,
             )
             LEA_RET_STATUS, LEA_NTFY_STATUS -> parseLeaStatus(payload, raw)
@@ -573,13 +580,4 @@ object SonyTandemV2Table1Protocol {
             WearingDetectionStatus.entries.firstOrNull { it.code == s }
         }
         val result = payload.getOrNull(2)?.let { r ->
-            WearingDetectionResult.entries.firstOrNull { it.code == r }
-        }
-        return ParsedTandemResponse.WearingStatus(
-            status = status,
-            result = result,
-            values = payload.unsignedList(),
-            raw = raw,
-        )
-    }
-}
+       

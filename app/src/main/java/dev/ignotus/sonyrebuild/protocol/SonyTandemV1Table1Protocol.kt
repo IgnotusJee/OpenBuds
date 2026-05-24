@@ -169,9 +169,16 @@ object SonyTandemV1Table1Protocol {
                 SonyEqEbbPayloadParser.parse(EqEbbPayloadVersion.V1, command, payload, raw)
             EQEBB_RET_EXTENDED_INFO ->
                 SonyEqEbbPayloadParser.parseExtendedInfo(EqEbbPayloadVersion.V1, payload, raw)
-            PLAY_RET_STATUS, PLAY_NTFY_STATUS -> ParsedTandemResponse.PlaybackAck(
+            PLAY_RET_STATUS -> ParsedTandemResponse.PlaybackAck(
                 values = payload.unsignedList(),
                 status = parsePlaybackStatus(payload),
+                isUnsolicited = false,
+                raw = raw,
+            )
+            PLAY_NTFY_STATUS -> ParsedTandemResponse.PlaybackAck(
+                values = payload.unsignedList(),
+                status = parsePlaybackStatus(payload),
+                isUnsolicited = true,
                 raw = raw,
             )
             else -> unknown(command, payload, raw)
@@ -318,11 +325,4 @@ object SonyTandemV1Table1Protocol {
         }
     }
 
-    private fun unknown(command: Byte?, payload: ByteArray, raw: ByteArray): ParsedTandemResponse.Unknown =
-        ParsedTandemResponse.Unknown(
-            dataType = DATA_MDR.unsigned,
-            command = command?.unsigned,
-            payload = payload,
-            raw = raw,
-        )
-}
+    private fun unknown(c
