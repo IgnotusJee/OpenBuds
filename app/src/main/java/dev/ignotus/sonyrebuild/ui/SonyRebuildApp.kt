@@ -27,6 +27,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.BoxScope
@@ -130,6 +131,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.fastCoerceIn
+import androidx.compose.ui.util.fastRoundToInt
 import androidx.compose.ui.util.lerp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
@@ -173,7 +176,6 @@ import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.math.abs
-import kotlin.math.roundToInt
 import kotlin.math.sign
 
 private enum class AppRoute(
@@ -461,6 +463,8 @@ fun SonyRebuildApp(
                 )
                 if (showQuickActionMenu) {
                     NavigationQuickActionPopup(
+                        renderCapabilities = renderCapabilities,
+                        navigationBackdrop = backdrop,
                         onDismiss = { showQuickActionMenu = false },
                         onSelected = { action ->
                             showQuickActionMenu = false
@@ -569,57 +573,237 @@ private fun AppNavigationBar(
 
 @Composable
 private fun NavigationQuickActionPopup(
+    renderCapabilities: UiRenderCapabilities,
+    navigationBackdrop: Backdrop?,
     onDismiss: () -> Unit,
     onSelected: (NavigationQuickAction) -> Unit,
 ) {
+    val density = LocalDensity.current
+    val actions = NavigationQuickAction.entries
+    val isLight = MaterialTheme.colorScheme.background.luminance() >= 0.5f
+    val style = rememberQuickActionStyle(renderCapabilities, isLight)
+    val useGlass = style.useGlass && navigationBackdrop != null
+    val menuBackdrop = if (useGlass) rememberLayerBackdrop() else null
+    val progress = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(Unit) {
+        progress.animateTo(1f, tween(220, easing = FastOutSlowInEasing))
+    }
+    val dismiss: () -> Unit = {
+        scope.launch {
+            progress.animateTo(0f, tween(170, easing = FastOutSlowInEasing))
+            onDismiss()
+        }
+    }
+
     Popup(
         alignment = Alignment.BottomCenter,
-        onDismissRequest = onDismiss,
-        properties = PopupProperties(focusable = true),
+        onDismissRequest = dismiss,
+        properties = PopupProperties(focusable = true, dismissOnBackPress = true, dismissOnClickOutside = true),
     ) {
-        Column(
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+        val progressValue = progress.value
+        Box(
             modifier = Modifier
-                .navigationBarsPadding()
-                .padding(start = 18.dp, end = 18.dp, bottom = 92.dp)
-                .widthIn(max = 360.dp),
+                .graphicsLayer {
+                    alpha = progressValue
+                    val scale = 0.92f + 0.08f * progressValue
+                    scaleX = scale
+                    scaleY = scale
+                    translationY = with(density) { (1f - progressValue) * 8.dp.toPx() }
+                },
+            contentAlignment = Alignment.TopCenter,
         ) {
-            NavigationQuickAction.entries.forEach { action ->
-                GlassCard(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { onSelected(action) },
+            // Hidden backdrop source layer for glass mode — provides capsule surfaces
+            // that the menuBackdrop samples for its blur+vibrancy base
+            if (menuBackdrop != null) {
+                Column(
+                    modifier = Modifier.layerBackdrop(menuBackdrop),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(12.dp),
-                    ) {
+                    repeat(actions.size) {
                         Box(
-                            contentAlignment = Alignment.Center,
                             modifier = Modifier
-                                .size(36.dp)
-                                .clip(CircleShape)
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.13f)),
-                        ) {
-                            Icon(action.icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                        }
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = action.title,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                            Text(
-                                text = action.target.subtitle,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
+                                .width(176.dp)
+                                .height(40.dp)
+                                .background(style.containerColor, ContinuousCapsule),
+                        )
                     }
                 }
+            }
+
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .navigationBarsPadding()
+                    .padding(bottom = 92.dp),
+            ) {
+                actions.forEachIndexed { index, action ->
+                    val delayProgress = (progressValue - index * 0.05f).coerceIn(0f, 1f)
+                    QuickActionButton(
+                        label = action.title,
+                        subtitle = action.target.subtitle,
+                        icon = action.icon,
+                        style = style,
+                        menuBackdrop = menuBackdrop,
+                        navigationBackdrop = navigationBackdrop,
+                        delayProgress = delayProgress,
+                        onClick = {
+                            scope.launch {
+                                progress.animateTo(0f, tween(120, easing = FastOutSlowInEasing))
+                                onSelected(action)
+                            }
+                        },
+                    )
+                }
+            }
+        }
+    }
+}
+
+private data class QuickActionStyle(
+    val containerColor: Color,
+    val contentColor: Color,
+    val borderColor: Color,
+    val shadowAlpha: Float,
+    val shadowElevation: Dp,
+    val useGlass: Boolean,
+)
+
+@Composable
+private fun rememberQuickActionStyle(
+    renderCapabilities: UiRenderCapabilities,
+    isLight: Boolean,
+): QuickActionStyle {
+    val primary = MaterialTheme.colorScheme.primary
+    val onSurface = MaterialTheme.colorScheme.onSurface
+    val surface = MaterialTheme.colorScheme.surface
+    val outline = MaterialTheme.colorScheme.outline
+    return when {
+        renderCapabilities.liquidGlassEnabled -> QuickActionStyle(
+            containerColor = if (isLight) {
+                Color.White.copy(alpha = 0.18f)
+            } else {
+                Color.White.copy(alpha = 0.105f)
+            },
+            contentColor = onSurface,
+            borderColor = Color.White.copy(alpha = if (isLight) 0.34f else 0.15f),
+            shadowAlpha = if (isLight) 0.14f else 0.30f,
+            shadowElevation = 16.dp,
+            useGlass = true,
+        )
+        renderCapabilities.floatingBottomBarEnabled -> QuickActionStyle(
+            containerColor = surface,
+            contentColor = onSurface,
+            borderColor = outline.copy(alpha = if (isLight) 0.70f else 0.86f),
+            shadowAlpha = if (isLight) 0.18f else 0.34f,
+            shadowElevation = 14.dp,
+            useGlass = false,
+        )
+        else -> QuickActionStyle(
+            containerColor = surface,
+            contentColor = onSurface,
+            borderColor = outline.copy(alpha = if (isLight) 0.70f else 0.86f),
+            shadowAlpha = if (isLight) 0.13f else 0.28f,
+            shadowElevation = 10.dp,
+            useGlass = false,
+        )
+    }
+}
+
+@Composable
+private fun QuickActionButton(
+    label: String,
+    subtitle: String,
+    icon: ImageVector,
+    style: QuickActionStyle,
+    menuBackdrop: Backdrop?,
+    navigationBackdrop: Backdrop?,
+    delayProgress: Float,
+    onClick: () -> Unit,
+) {
+    val density = LocalDensity.current
+    val useGlass = style.useGlass && menuBackdrop != null && navigationBackdrop != null
+    val progressScale = 0.96f + 0.04f * delayProgress
+
+    Box(
+        modifier = Modifier
+            .width(176.dp)
+            .height(40.dp)
+            .graphicsLayer {
+                val scaleValue = progressScale
+                scaleX = scaleValue
+                scaleY = scaleValue
+                shape = ContinuousCapsule
+                clip = true
+                shadowElevation = with(density) { style.shadowElevation.toPx() }
+                ambientShadowColor = Color.Black.copy(alpha = style.shadowAlpha)
+                spotShadowColor = Color.Black.copy(alpha = style.shadowAlpha)
+            }
+            .then(
+                if (useGlass) {
+                    Modifier.drawBackdrop(
+                        backdrop = menuBackdrop!!,
+                        shape = { ContinuousCapsule },
+                        effects = {
+                            vibrancy()
+                            blur(12f.dp.toPx())
+                            lens(28f.dp.toPx(), 30f.dp.toPx())
+                        },
+                        highlight = { Highlight.Default.copy(alpha = 0.92f) },
+                        shadow = {
+                            Shadow.Default.copy(
+                                color = Color.Black.copy(alpha = 0.22f),
+                                alpha = 0.40f,
+                            )
+                        },
+                        innerShadow = {
+                            InnerShadow(radius = 8.dp, alpha = 0.28f)
+                        },
+                        onDrawSurface = {
+                            drawRect(style.containerColor)
+                            drawRect(Color.White.copy(alpha = 0.055f))
+                            drawRect(Color.Black.copy(alpha = 0.012f))
+                        },
+                    )
+                } else {
+                    Modifier
+                        .background(style.containerColor, ContinuousCapsule)
+                }
+            )
+            .then(
+                Modifier.border(0.75.dp, style.borderColor, ContinuousCapsule)
+            )
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = style.contentColor,
+                modifier = Modifier.size(19.dp),
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }
@@ -644,7 +828,11 @@ private fun FloatingLiquidNavigationBar(
     val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
     val animationScope = rememberCoroutineScope()
     val isLight = MaterialTheme.colorScheme.background.luminance() >= 0.5f
-    val containerColor = MaterialTheme.colorScheme.surface.copy(alpha = if (isLight) 0.40f else 0.34f)
+    val containerColor = if (blurEnabled) {
+        MaterialTheme.colorScheme.surface.copy(alpha = if (isLight) 0.40f else 0.34f)
+    } else {
+        MaterialTheme.colorScheme.surface.copy(alpha = if (isLight) 0.88f else 0.85f)
+    }
     val tabsBackdrop = if (liquidGlassEnabled && backdrop != null) rememberLayerBackdrop() else null
     var totalWidthPx by remember { mutableFloatStateOf(0f) }
     var tabWidthPx by remember { mutableFloatStateOf(0f) }
@@ -655,7 +843,7 @@ private fun FloatingLiquidNavigationBar(
             if (totalWidthPx == 0f) {
                 0f
             } else {
-                val fraction = (offsetAnimation.value / totalWidthPx).coerceIn(-1f, 1f)
+                val fraction = (offsetAnimation.value / totalWidthPx).fastCoerceIn(-1f, 1f)
                 with(density) {
                     4.dp.toPx() * fraction.sign * EaseOut.transform(abs(fraction))
                 }
@@ -688,18 +876,9 @@ private fun FloatingLiquidNavigationBar(
                 }
                 globalTouchX in 0f..totalWidthPx
             },
-            onDragStarted = { position ->
-                if (tabWidthPx > 0f) {
-                    val direction = if (isLtr) 1f else -1f
-                    val touchOffsetFromCenter = position.x - tabWidthPx / 2f
-                    snapToValue(
-                        (targetValue + touchOffsetFromCenter / tabWidthPx * direction)
-                            .coerceIn(0f, tabs.lastIndex.toFloat())
-                    )
-                }
-            },
+            onDragStarted = {},
             onDragStopped = {
-                val targetIndex = targetValue.roundToInt().coerceIn(0, tabs.lastIndex)
+                val targetIndex = targetValue.fastRoundToInt().fastCoerceIn(0, tabs.lastIndex)
                 currentIndex = targetIndex
                 animateToValue(targetIndex.toFloat())
                 animationScope.launch {
@@ -711,7 +890,7 @@ private fun FloatingLiquidNavigationBar(
                     val direction = if (isLtr) 1f else -1f
                     updateValue(
                         (targetValue + dragAmount.x / tabWidthPx * direction)
-                            .coerceIn(0f, tabs.lastIndex.toFloat())
+                            .fastCoerceIn(0f, tabs.lastIndex.toFloat())
                     )
                     animationScope.launch {
                         offsetAnimation.snapTo(offsetAnimation.value + dragAmount.x)
@@ -807,6 +986,7 @@ private fun FloatingLiquidNavigationBar(
                 .padding(4.dp),
         ) {
             if (liquidGlassEnabled && backdrop != null && tabsBackdrop != null) {
+                val duplicateProgress = dampedDragAnimation.pressProgress
                 Row(
                     modifier = Modifier
                         .clearAndSetSemantics {}
@@ -819,15 +999,14 @@ private fun FloatingLiquidNavigationBar(
                             backdrop = backdrop,
                             shape = { ContinuousCapsule },
                             effects = {
-                                val progress = dampedDragAnimation.pressProgress
                                 vibrancy()
                                 if (blurEnabled) {
                                     blur(8f.dp.toPx())
                                 }
-                                lens(24f.dp.toPx() * progress, 24f.dp.toPx() * progress)
+                                lens(24f.dp.toPx() * duplicateProgress, 24f.dp.toPx() * duplicateProgress)
                             },
                             highlight = {
-                                Highlight.Default.copy(alpha = dampedDragAnimation.pressProgress)
+                                Highlight.Default.copy(alpha = duplicateProgress)
                             },
                             onDrawSurface = {
                                 drawRect(containerColor)
@@ -841,7 +1020,7 @@ private fun FloatingLiquidNavigationBar(
                             tab = tab,
                             selected = selectedRoute == tab,
                              modifier = Modifier.weight(1f),
-                             scale = { lerp(1f, 1.2f, dampedDragAnimation.pressProgress) },
+                             scale = { lerp(1f, 1.2f, duplicateProgress) },
                              clickEnabled = false,
                              onSelected = onSelected,
                         )
@@ -873,6 +1052,11 @@ private fun FloatingLiquidNavigationBar(
             }
             if (tabWidthPx > 0f) {
                 val selectedIndicatorBackdrop = tabsBackdrop
+                val combinedForSelected = if (liquidGlassEnabled && backdrop != null && selectedIndicatorBackdrop != null) {
+                    rememberCombinedBackdrop(backdrop, selectedIndicatorBackdrop)
+                } else {
+                    null
+                }
                 Box(
                     modifier = Modifier
                         .width(with(density) { tabWidthPx.toDp() })
@@ -887,9 +1071,9 @@ private fun FloatingLiquidNavigationBar(
                         }
                         .then(if (liquidGlassEnabled && interactionsEnabled) dampedDragAnimation.modifier else Modifier)
                         .then(
-                            if (liquidGlassEnabled && backdrop != null && selectedIndicatorBackdrop != null) {
+                            if (liquidGlassEnabled && combinedForSelected != null) {
                                 Modifier.drawBackdrop(
-                                    backdrop = rememberCombinedBackdrop(backdrop, selectedIndicatorBackdrop),
+                                    backdrop = combinedForSelected,
                                     shape = { ContinuousCapsule },
                                     effects = {
                                         val progress = dampedDragAnimation.pressProgress
@@ -922,17 +1106,17 @@ private fun FloatingLiquidNavigationBar(
                                             scaleX = dampedDragAnimation.scaleX
                                             scaleY = dampedDragAnimation.scaleY
                                             val velocity = dampedDragAnimation.velocity / 10f
-                                            scaleX /= 1f - (velocity * 0.75f).coerceIn(-0.2f, 0.2f)
-                                            scaleY *= 1f - (velocity * 0.25f).coerceIn(-0.2f, 0.2f)
+                                            scaleX /= 1f - (velocity * 0.75f).fastCoerceIn(-0.2f, 0.2f)
+                                            scaleY *= 1f - (velocity * 0.25f).fastCoerceIn(-0.2f, 0.2f)
                                         }
                                     },
                                     onDrawSurface = {
                                         val progress = dampedDragAnimation.pressProgress
                                         drawRect(
                                             color = if (isLight) {
-                                                Color.Black.copy(alpha = 0.08f)
+                                                Color.Black.copy(alpha = 0.10f)
                                             } else {
-                                                Color.White.copy(alpha = 0.10f)
+                                                Color.White.copy(alpha = 0.12f)
                                             },
                                             alpha = 1f - progress,
                                         )
@@ -944,9 +1128,9 @@ private fun FloatingLiquidNavigationBar(
                                     .clip(ContinuousCapsule)
                                     .background(
                                         if (isLight) {
-                                            Color.Black.copy(alpha = 0.08f)
+                                            Color.Black.copy(alpha = 0.10f)
                                         } else {
-                                            Color.White.copy(alpha = 0.11f)
+                                            Color.White.copy(alpha = 0.12f)
                                         }
                                     )
                             }

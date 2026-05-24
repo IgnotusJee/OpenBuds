@@ -18,6 +18,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.util.fastCoerceIn
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.flow.filter
@@ -107,7 +108,7 @@ internal class DampedDragAnimation(
     }
 
     fun updateValue(value: Float) {
-        val targetValue = value.coerceIn(valueRange.start, valueRange.endInclusive)
+        val targetValue = value.fastCoerceIn(valueRange.start, valueRange.endInclusive)
         animationScope.launch {
             launch {
                 valueAnimation.animateTo(targetValue, valueAnimationSpec) {
@@ -118,7 +119,7 @@ internal class DampedDragAnimation(
     }
 
     fun snapToValue(value: Float) {
-        val targetValue = value.coerceIn(valueRange.start, valueRange.endInclusive)
+        val targetValue = value.fastCoerceIn(valueRange.start, valueRange.endInclusive)
         animationScope.launch {
             mutatorMutex.mutate {
                 valueAnimation.snapTo(targetValue)
@@ -131,7 +132,7 @@ internal class DampedDragAnimation(
         animationScope.launch {
             mutatorMutex.mutate {
                 press()
-                val targetValue = value.coerceIn(valueRange.start, valueRange.endInclusive)
+                val targetValue = value.fastCoerceIn(valueRange.start, valueRange.endInclusive)
                 launch { valueAnimation.animateTo(targetValue, valueAnimationSpec) }
                 if (velocity != 0f) {
                     launch { velocityAnimation.animateTo(0f, velocityAnimationSpec) }
