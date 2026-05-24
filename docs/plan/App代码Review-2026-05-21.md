@@ -110,7 +110,7 @@ fun playbackPlayPause() {
 Thread({
     try { Thread.sleep(ACK_TIMEOUT_MS) } catch (_: InterruptedException) { return@Thread }
     // ...
-}, "SonyRebuild-SppAckTimeout").start()
+}, "OpenBuds-SppAckTimeout").start()
 ```
 
 每次等待 ACK 都创建一个新线程。在高丢包场景下（蓝牙干扰、距离过远），短时间内可能累积大量超时线程。ACK_TIMEOUT_MS 为 1200ms，MAX_ACK_RETRIES=1，但每次重试又会创建新线程。
@@ -202,7 +202,7 @@ DEVELOPMENT.md 的代码结构图中列出了 `protocol/SonyTandemFrame.kt`，�
 | `SonyTandemHeadphoneAdapterTest` | Profile 匹配、refresh 命令计划、NC/ASM 命令路由 | ✅ 5 个用例 |
 | `UiEffectsPolicyTest` | 四种底栏模式 × 特效开关矩阵 | ✅ 3 个用例 |
 | `AppColorModeTest` | 颜色模式主题重组 | ✅ |
-| `SonyRebuildAppSmokeTest` | FloatingGlass + Miuix + UI effects 冷启动 | ✅ |
+| `OpenBudsAppSmokeTest` | FloatingGlass + Miuix + UI effects 冷启动 | ✅ |
 
 ### 4.2 缺失的测试
 

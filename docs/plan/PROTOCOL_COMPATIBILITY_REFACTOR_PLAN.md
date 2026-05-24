@@ -17,8 +17,8 @@
 
 2026-05-23 真机日志验收结论：
 
-- ✅ LinkBuds S：`captures/sonyrebuild-logcat-linkbudss.txt` 显示 SPP connected / Tandem ready，battery、NC/ASM、EQ、playback status 均经 SPP DATA_MDR 收发闭环，NC/ASM、EQ preset、playback 控制均有 ACK/RX 证据。
-- ✅ WH-1000XM4：`captures/sonyrebuild-logcat-wh1000xm4.txt` 显示 SPP connected / Tandem ready；battery refresh 使用 `GET battery BATTERY [GATT_V1_MC] -> 0E 10 00`，NC/ASM refresh 使用 `GET NC/ASM param V1 [GATT_V1_MC] -> 0E 66 02`，ambient/NC/off 写入均使用 `SET NC/ASM V1 table1 ... [GATT_V1_MC] -> 0E 68 02 ...` 并收到 `0x69` notification 与 `0x67` readback；该日志中的 EQ/playback 仍来自旧混合 profile，当前实现已按逆向证据改为完整 V1 profile，待下一轮真机回归。
+- ✅ LinkBuds S：`captures/openbuds-logcat-linkbudss.txt` 显示 SPP connected / Tandem ready，battery、NC/ASM、EQ、playback status 均经 SPP DATA_MDR 收发闭环，NC/ASM、EQ preset、playback 控制均有 ACK/RX 证据。
+- ✅ WH-1000XM4：`captures/openbuds-logcat-wh1000xm4.txt` 显示 SPP connected / Tandem ready；battery refresh 使用 `GET battery BATTERY [GATT_V1_MC] -> 0E 10 00`，NC/ASM refresh 使用 `GET NC/ASM param V1 [GATT_V1_MC] -> 0E 66 02`，ambient/NC/off 写入均使用 `SET NC/ASM V1 table1 ... [GATT_V1_MC] -> 0E 68 02 ...` 并收到 `0x69` notification 与 `0x67` readback；该日志中的 EQ/playback 仍来自旧混合 profile，当前实现已按逆向证据改为完整 V1 profile，待下一轮真机回归。
 - ⚠️ WH-1000XM4 日志中有一次 `SPP ACK timeout expected=1; resending frame retry=1`，随后收到 ACK 并继续完成后续收发，不影响本次协议路由验收。
 
 2026-05-23 XM4 TableSet1 修正：
@@ -82,7 +82,7 @@
 
 涉及文件：
 
-- `app/src/main/java/dev/ignotus/sonyrebuild/protocol/SonyTandemTypes.kt`
+- `app/src/main/java/dev/ignotus/openbuds/protocol/SonyTandemTypes.kt`
 
 现状：
 
@@ -112,7 +112,7 @@
 
 涉及文件：
 
-- `app/src/main/java/dev/ignotus/sonyrebuild/protocol/SonyTandemV1Table1Protocol.kt`
+- `app/src/main/java/dev/ignotus/openbuds/protocol/SonyTandemV1Table1Protocol.kt`
 
 现状：
 
@@ -141,7 +141,7 @@
 
 涉及文件：
 
-- `app/src/main/java/dev/ignotus/sonyrebuild/protocol/SonyTandemV1Table2Protocol.kt`
+- `app/src/main/java/dev/ignotus/openbuds/protocol/SonyTandemV1Table2Protocol.kt`
 - `references/SonyConnect/sources/com/sony/songpal/tandemfamily/message/mdr/p063v1/table2/peripheral/param/PeripheralInquiredType.java`
 - `references/SonyConnect/sources/com/sony/songpal/tandemfamily/message/mdr/p063v1/table2/voiceguidance/param/VoiceGuidanceInquiredType.java`
 
@@ -173,8 +173,8 @@
 
 涉及文件：
 
-- `app/src/test/java/dev/ignotus/sonyrebuild/headphones/ProtocolCompatibilityArchitectureTest.kt`
-- `app/src/test/java/dev/ignotus/sonyrebuild/ble/SonyBleClientChannelTest.kt`
+- `app/src/test/java/dev/ignotus/openbuds/headphones/ProtocolCompatibilityArchitectureTest.kt`
+- `app/src/test/java/dev/ignotus/openbuds/ble/SonyBleClientChannelTest.kt`
 
 问题：
 

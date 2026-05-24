@@ -836,7 +836,7 @@ isRuntimeShaderSupported()
 - `textureBlur(enabled = true)`
 - `rearAcrylicEffect(...)` 默认直接启用
 
-如果要给 SonyRebuild 复刻并增加“特效开关”，建议加一个总开关：
+如果要给 OpenBuds 复刻并增加“特效开关”，建议加一个总开关：
 
 ```kotlin
 val enableUiEffects = userPrefs.enableUiEffects && runtimeShaderSupported
@@ -873,13 +873,13 @@ REAREye 的 kyant backdrop 和 Miuix texture blur 没有共用一个全局内容
 
 关键不是单个特效，而是“状态驱动 + 统一动画参数 + 分层特效开关”。REAREye 的代码基本没有把动画写死在点击回调里，而是让状态变化触发 Compose 动画，这一点是最值得复用的。
 
-## 8. SonyRebuild 当前落地状态
+## 8. OpenBuds 当前落地状态
 
-SonyRebuild 现在已经把 REAREye 的全特效链路收敛成“模式 + 用户开关”两层，没有设备黑名单，也没有 `safe surfaces active` 这类强制回退语义。`UiRenderCapabilities` 只负责把底栏模式和总开关映射成具体的渲染开关；真正的 blur / haze 能力只在底层组件创建时做 runtime 支持判断。
+OpenBuds 现在已经把 REAREye 的全特效链路收敛成“模式 + 用户开关”两层，没有设备黑名单，也没有 `safe surfaces active` 这类强制回退语义。`UiRenderCapabilities` 只负责把底栏模式和总开关映射成具体的渲染开关；真正的 blur / haze 能力只在底层组件创建时做 runtime 支持判断。
 
 ### 8.1 全局能力层
 
-实现入口为 `app/src/main/java/dev/ignotus/sonyrebuild/ui/UiEffectsPolicy.kt`：
+实现入口为 `app/src/main/java/dev/ignotus/openbuds/ui/UiEffectsPolicy.kt`：
 
 - `UiRenderCapabilities` 只接受 `mode` 和 `userEffectsEnabled`。
 - 派生值只包含 `effectsEnabled`、`floatingBottomBarEnabled`、`semiTransparentBottomBar`、`rootBackdropEnabled`、`navigationBackdropEnabled`、`liquidGlassEnabled`、`glassCardsEnabled`、`backgroundGradientEnabled`。
@@ -923,7 +923,7 @@ Settings 和 About 根页面已去掉旧的安全模式文案：
 
 ### 8.6 液态玻璃 `DampedDragAnimation` 稳定性修复
 
-SonyRebuild 的 `FloatingLiquidNavigationBar` 在 `remember` `DampedDragAnimation` 时额外将 `tabWidthPx` 和 `totalWidthPx` 放入 key 中。这两个值在首次 layout 测量时从 0 变为实际像素值，导致 `DampedDragAnimation` 被整体重建（所有内部 `Animatable` 重新初始化），造成切换 tab 时动画不稳定。
+OpenBuds 的 `FloatingLiquidNavigationBar` 在 `remember` `DampedDragAnimation` 时额外将 `tabWidthPx` 和 `totalWidthPx` 放入 key 中。这两个值在首次 layout 测量时从 0 变为实际像素值，导致 `DampedDragAnimation` 被整体重建（所有内部 `Animatable` 重新初始化），造成切换 tab 时动画不稳定。
 
 REAREye 的做法是：
 - `tabWidthPx` 和 `totalWidthPx` 均使用 `mutableFloatStateOf` 声明为 state-backed 变量。
@@ -931,7 +931,7 @@ REAREye 的做法是：
 - `remember` 的 key 仅为 `(animationScope, tabsCount, density, isLtr)`，不包含会变化一次的 layout 测量值。
 - 闭包内读取 `tabWidthPx` 时，因为变量是 `var` + delegate，Kotlin 捕获的是 delegate 引用，始终读到当前值。
 
-修复内容（`SonyRebuildApp.kt`）：
+修复内容（`OpenBudsApp.kt`）：
 - `tabWidthPx` 从 `val = if (...) ... else 0f` 改为 `var ... by remember { mutableFloatStateOf(0f) }`，并在 `onGloballyPositioned` 内与 `totalWidthPx` 一同赋值。
 - `remember` key 从 `(animationScope, tabs.size, density, isLtr, tabWidthPx, totalWidthPx)` 改为 `(animationScope, tabs.size, density, isLtr)`，与 REAREye 对齐。
 - 移除不再使用的 `kotlinx.coroutines.delay` import。
@@ -944,7 +944,7 @@ REAREye 的做法是：
 
 ### 8.7 根容器 clip 移除
 
-SonyRebuild 原先在 `appContent` 根 `Box` 上挂有 `graphicsLayer { clip = true }`。REAREye 不对根容器做裁剪，因为：
+OpenBuds 原先在 `appContent` 根 `Box` 上挂有 `graphicsLayer { clip = true }`。REAREye 不对根容器做裁剪，因为：
 - `AnimatedContent` 的 `slideInHorizontally`/`slideOutHorizontally` 使用 `graphicsLayer { translationX }` 实现位移，不需要父级 clip。
 - 悬浮底栏的 `shadow` 和 `drawBackdrop` 阴影会略微超出 `Box` 边界；根 clip 可能在部分屏幕宽度上切断阴影边缘。
 

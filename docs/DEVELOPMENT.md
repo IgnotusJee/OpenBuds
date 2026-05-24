@@ -1,6 +1,6 @@
 # 开发指引
 
-本文档面向后续维护 SonyRebuild 的开发者，说明当前 App 的结构、调试方式和新增功能流程。
+本文档面向后续维护 OpenBuds 的开发者，说明当前 App 的结构、调试方式和新增功能流程。
 
 ## 环境要求
 
@@ -29,7 +29,7 @@ git diff
 $adb="C:\Software\platform-tools\adb.exe"
 & $adb devices
 & $adb install -r "app\build\outputs\apk\debug\app-debug.apk"
-& $adb logcat -v time SonyRebuild:I AndroidRuntime:E '*:S'
+& $adb logcat -v time OpenBuds:I AndroidRuntime:E '*:S'
 ```
 
 ## 开发流程
@@ -45,7 +45,7 @@ $adb="C:\Software\platform-tools\adb.exe"
 ## 代码结构
 
 ```text
-app/src/main/java/dev/ignotus/sonyrebuild/
+app/src/main/java/dev/ignotus/openbuds/
 ├── MainActivity.kt
 ├── ble/
 │   ├── SonyBleClient.kt          # 设备发现、GATT 握手、SPP 选择、诊断
@@ -80,8 +80,8 @@ app/src/main/java/dev/ignotus/sonyrebuild/
 └── ui/
     ├── AppUiSettingsStore.kt
     ├── LiquidNavigationDrag.kt
-    ├── SonyRebuildApp.kt
-    ├── SonyRebuildComponents.kt
+    ├── OpenBudsApp.kt
+    ├── OpenBudsComponents.kt
     ├── UiBlurEffects.kt
     ├── UiEffectsPolicy.kt
     └── screen/
@@ -100,7 +100,7 @@ app/src/main/java/dev/ignotus/sonyrebuild/
 - `headphones/` 负责按品牌/型号选择 adapter、声明能力、绑定 feature 到 protocol variant/channel、生成刷新命令和判断写入是否安全。`EqProtocolEngine` 是 EQ 写入/刷新/解析的单一入口，消费 `EqDeviceConfig` 输出 `EqUiCapability`，消除跨 adapter/codec/repository 的 EQ 条件分支。
 - Repository 只发起领域操作，不按型号直接构造协议字节。
 - `SonyHeadphoneRepository` 是应用状态聚合层，负责把协议响应更新成 `SonyHeadphoneUiState`。
-- `SonyRebuildApp` 只消费 state 和调用 repository action，不直接构造协议字节。
+- `OpenBudsApp` 只消费 state 和调用 repository action，不直接构造协议字节。
 
 ## 新增控制功能的流程
 
@@ -113,7 +113,7 @@ app/src/main/java/dev/ignotus/sonyrebuild/
 4. 按功能所属协议在 `protocol/` 增加 enum、builder、parser，并在 `TandemCodecRegistry` 中暴露 codec wrapper；adapter 不直接 import protocol object。
 5. 在 `SonyTandemV2Table1ProtocolTest.kt`、Table2 test、routing test 和 adapter test 加编码、解析、命令计划单元测试。编码测试必须写死期望字节。
 6. 在 `SonyHeadphoneRepository.kt` 增加 state 聚合和 action，刷新命令应来自 adapter。
-7. 在 `SonyRebuildApp.kt` 增加 UI。未确认写入安全前，只显示状态和日志，不提供开关。
+7. 在 `OpenBudsApp.kt` 增加 UI。未确认写入安全前，只显示状态和日志，不提供开关。
 8. 真机运行，打开 debug log，用 logcat 对照 TX/RX。
 
 ### 只读状态（Read-Only Status）添加模板
@@ -184,7 +184,7 @@ Sony 耳机在 Android 上可能同时出现普通设备名和 `LE_` 前缀设�
 - Home 显示应用/连接摘要；Device 负责扫描、历史设备和已连接耳机控制；Settings 放全局设置；About 放设备信息、协议来源和免责声明。
 - 复杂功能使用二级展开区域，避免主页堆满滑块。
 - 对真实耳机有副作用的设置必须显示当前状态，并且只在 `protocolReady=true` 后可操作。
-- UI 设置使用 DataStore 持久化；当前 UI 设置库名为 `sony_rebuild_ui_settings_v2`，默认底栏为 `Floating`，默认关闭视觉特效。
+- UI 设置使用 DataStore 持久化；当前 UI 设置库名为 `openbuds_ui_settings_v2`，默认底栏为 `Floating`，默认关闭视觉特效。
 - DataStore 设置加载前不要先渲染默认 UI 配置；保留空背景或等价轻量占位，避免用户已保存的 `FloatingGlass + Miuix + UI effects` 冷启动时先闪成默认 Material / effects off。
 - Appearance 中保留底栏模式、`UI effects`、颜色模式和 Theme style。底栏模式为 `Normal`、`Semi transparent`、`Floating`、`Liquid glass`。
 - `UiEffectsPolicy.kt` 是 UI 渲染能力的唯一入口。页面代码只读取 `UiRenderCapabilities`，不要再直接做厂商特判或分散判断 blur/backdrop/glass 是否可用。
@@ -205,8 +205,8 @@ MIUI / Xiaomi 类设备上如果再次出现 `RenderThread`、`MiBackgroundBlurB
 ```powershell
 $adb="C:\Software\platform-tools\adb.exe"
 & $adb -s <serial> logcat -c
-& $adb -s <serial> shell am force-stop dev.ignotus.sonyrebuild
-& $adb -s <serial> shell am start -n dev.ignotus.sonyrebuild/dev.ignotus.sonyrebuild.MainActivity
+& $adb -s <serial> shell am force-stop dev.ignotus.openbuds
+& $adb -s <serial> shell am start -n dev.ignotus.openbuds/dev.ignotus.openbuds.MainActivity
 & $adb -s <serial> logcat -b crash -d
 ```
 
@@ -214,16 +214,16 @@ UI 性能调试建议：
 
 ```powershell
 $adb="C:\Software\platform-tools\adb.exe"
-& $adb shell dumpsys gfxinfo dev.ignotus.sonyrebuild reset
+& $adb shell dumpsys gfxinfo dev.ignotus.openbuds reset
 # 手动或用 input 执行一次导航切换/拖动
-& $adb shell dumpsys gfxinfo dev.ignotus.sonyrebuild framestats
+& $adb shell dumpsys gfxinfo dev.ignotus.openbuds framestats
 ```
 
 只用稳定交互段的 `framestats` 判断卡顿；安装、冷启动和首次权限弹窗会污染统计。
 
 ## 日志约定
 
-统一使用 tag `SonyRebuild`。Repository 会把关键日志也写入 UI debug log。
+统一使用 tag `OpenBuds`。Repository 会把关键日志也写入 UI debug log。
 
 应记录：
 
@@ -276,11 +276,11 @@ $adb="C:\Software\platform-tools\adb.exe"
 & $adb devices
 & $adb -s <serial> install -r "app\build\outputs\apk\debug\app-debug.apk"
 & $adb -s <serial> logcat -c
-& $adb -s <serial> shell am force-stop dev.ignotus.sonyrebuild
-& $adb -s <serial> shell am start -n dev.ignotus.sonyrebuild/dev.ignotus.sonyrebuild.MainActivity
+& $adb -s <serial> shell am force-stop dev.ignotus.openbuds
+& $adb -s <serial> shell am start -n dev.ignotus.openbuds/dev.ignotus.openbuds.MainActivity
 Start-Sleep -Seconds 5
 & $adb -s <serial> logcat -b crash -d -v time
-& $adb -s <serial> logcat -d -v time SonyRebuild:I AndroidRuntime:E '*:S'
+& $adb -s <serial> logcat -d -v time OpenBuds:I AndroidRuntime:E '*:S'
 ```
 
 ## 资源和机型图片

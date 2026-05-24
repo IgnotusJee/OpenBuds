@@ -6,18 +6,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Reverse engineering and rebuilding of Sony Sound Connect (v13.0.5) — the companion app for Sony Bluetooth headphones. The goal is to extract the local Bluetooth control protocol from decompiled sources and build a clean-room implementation from scratch.
 
-The Android rebuild lives in `app/` as a Jetpack Compose project with package `dev.ignotus.sonyrebuild`. Git repository is at the project root. See `README.md`, `docs/DEVELOPMENT.md`, `docs/PROTOCOL_GUIDE.md`, and `docs/FEATURE_STATUS.md` before changing implementation details. UI/特效改动还需参考 `docs/analysis/REAREye_UI实现分析.md`。协议改动参考 `docs/plan/Sony耳机BLE协议完整分析.md`。
+The Android rebuild lives in `app/` as a Jetpack Compose project with package `dev.ignotus.openbuds`. Git repository is at the project root. See `README.md`, `docs/DEVELOPMENT.md`, `docs/PROTOCOL_GUIDE.md`, and `docs/FEATURE_STATUS.md` before changing implementation details. UI/特效改动还需参考 `docs/analysis/REAREye_UI实现分析.md`。协议改动参考 `docs/plan/Sony耳机BLE协议完整分析.md`。
 
 ## Repository Structure
 
 项目根目录即为 git 仓库根目录（原 `App/`），包含以下子目录：
 
-- **`app/`** — Android 模块（原 `App/app/`），Jetpack Compose 项目，package `dev.ignotus.sonyrebuild`。
-  - `app/src/main/java/dev/ignotus/sonyrebuild/ble/` — BLE客户端、SPP传输、端点诊断。
-  - `app/src/main/java/dev/ignotus/sonyrebuild/protocol/` — GATT UUID定义 + Tandem V1/V2命令构造和解析。
-  - `app/src/main/java/dev/ignotus/sonyrebuild/data/` — Repository、UI状态聚合、产品图片目录。
-  - `app/src/main/java/dev/ignotus/sonyrebuild/headphones/` — 设备adapter/profile/capability抽象。
-  - `app/src/main/java/dev/ignotus/sonyrebuild/ui/` — Compose UI（Home/Device/Settings/About四页）。
+- **`app/`** — Android 模块（原 `App/app/`），Jetpack Compose 项目，package `dev.ignotus.openbuds`。
+  - `app/src/main/java/dev/ignotus/openbuds/ble/` — BLE客户端、SPP传输、端点诊断。
+  - `app/src/main/java/dev/ignotus/openbuds/protocol/` — GATT UUID定义 + Tandem V1/V2命令构造和解析。
+  - `app/src/main/java/dev/ignotus/openbuds/data/` — Repository、UI状态聚合、产品图片目录。
+  - `app/src/main/java/dev/ignotus/openbuds/headphones/` — 设备adapter/profile/capability抽象。
+  - `app/src/main/java/dev/ignotus/openbuds/ui/` — Compose UI（Home/Device/Settings/About四页）。
 - **`docs/`** — 开发文档。
   - `DEVELOPMENT.md` — 开发指引：环境、代码结构、新增功能流程、UI约定、测试要求。
   - `PROTOCOL_GUIDE.md` — 协议实现说明：传输层(GATT/SPP)、Tandem V2消息格式、已实现命令族、parser设计原则。
@@ -41,7 +41,7 @@ The Android rebuild lives in `app/` as a Jetpack Compose project with package `d
 - **`tools/`** — Agent 和开发辅助工具。
   - `analyze_btsnoop.py` — BLE btsnoop HCI 日志分析脚本，用于解析蓝牙通信包。
 - **`gradle/`** — Gradle wrapper 和版本目录（`libs.versions.toml`）。
-- 根目录 Gradle 文件 — `build.gradle.kts`（根构建配置）、`settings.gradle.kts`（项目设置，rootProject.name = "SonyRebuild"）。
+- 根目录 Gradle 文件 — `build.gradle.kts`（根构建配置）、`settings.gradle.kts`（项目设置，rootProject.name = "OpenBuds"）。
 
 ## Core Architecture (4 layers + adapter pattern + EQ engine)
 
@@ -55,7 +55,7 @@ The Android rebuild lives in `app/` as a Jetpack Compose project with package `d
 ## Core Code Structure (actual files)
 
 ```text
-app/src/main/java/dev/ignotus/sonyrebuild/
+app/src/main/java/dev/ignotus/openbuds/
 ├── MainActivity.kt
 ├── ble/
 │   ├── SonyBleClient.kt          # 设备发现、GATT 握手、SPP 选择、诊断
@@ -90,8 +90,8 @@ app/src/main/java/dev/ignotus/sonyrebuild/
 └── ui/
     ├── AppUiSettingsStore.kt
     ├── LiquidNavigationDrag.kt
-    ├── SonyRebuildApp.kt
-    ├── SonyRebuildComponents.kt
+    ├── OpenBudsApp.kt
+    ├── OpenBudsComponents.kt
     ├── UiBlurEffects.kt
     ├── UiEffectsPolicy.kt        # UI渲染能力唯一入口
     └── screen/
@@ -218,18 +218,18 @@ adb 路径：
 ```powershell
 $adb="C:\Software\platform-tools\adb.exe"
 & $adb install -r "app\build\outputs\apk\debug\app-debug.apk"
-& $adb logcat -v time SonyRebuild:I AndroidRuntime:E '*:S'
+& $adb logcat -v time OpenBuds:I AndroidRuntime:E '*:S'
 ```
 
 真机冷启动验证（清空crash buffer后启动）：
 
 ```powershell
 & $adb -s <serial> logcat -c
-& $adb -s <serial> shell am force-stop dev.ignotus.sonyrebuild
-& $adb -s <serial> shell am start -n dev.ignotus.sonyrebuild/dev.ignotus.sonyrebuild.MainActivity
+& $adb -s <serial> shell am force-stop dev.ignotus.openbuds
+& $adb -s <serial> shell am start -n dev.ignotus.openbuds/dev.ignotus.openbuds.MainActivity
 Start-Sleep -Seconds 5
 & $adb -s <serial> logcat -b crash -d -v time
-& $adb -s <serial> logcat -d -v time SonyRebuild:I AndroidRuntime:E '*:S'
+& $adb -s <serial> logcat -d -v time OpenBuds:I AndroidRuntime:E '*:S'
 ```
 
 ### 测试覆盖

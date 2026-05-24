@@ -20,9 +20,9 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:windowSoftInputMode="adjustResize"
-        android:theme="@style/Theme.SonyRebuild">
+        android:theme="@style/Theme.OpenBuds">
         <activity
-            android:name="dev.ignotus.sonyrebuild.MainActivity"
+            android:name="dev.ignotus.openbuds.MainActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

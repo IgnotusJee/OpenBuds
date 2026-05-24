@@ -1,6 +1,6 @@
-# SonyRebuild
+# OpenBuds
 
-SonyRebuild is an Android application project built with Kotlin, Jetpack Compose, and Gradle.
+OpenBuds is an Android application project built with Kotlin, Jetpack Compose, and Gradle.
 
 ## Project Structure
 

@@ -1,4 +1,4 @@
-# SonyRebuild LSPosed 系统集成任务清单
+# OpenBuds LSPosed 系统集成任务清单
 
 更新日期：2026-05-24
 
@@ -12,7 +12,7 @@
 - LSPosed 模块作为可选系统集成层，负责系统入口、系统提示和系统 UI 注入。
 - Sony 协议、状态缓存和写入命令只保留一份实现，避免 App 和模块各自维护协议逻辑。
 - 第一可交付目标是“连接弹窗 + 常驻通知 + 快捷控制面板”。
-- 第二可交付目标是“控制中心/设备卡片点击进入 SonyRebuild 快捷面板”。
+- 第二可交付目标是“控制中心/设备卡片点击进入 OpenBuds 快捷面板”。
 - 第三可交付目标才是“系统蓝牙设置页中的 Sony 耳机入口”。
 
 明确不做：
@@ -29,10 +29,10 @@
 - `app/` 是单模块 Android Compose App。
 - `app/src/main/AndroidManifest.xml` 当前只有主 Activity、蓝牙权限和网络权限，没有 Service、BroadcastReceiver、ContentProvider、LSPosed 元数据或 hook 入口。
 - 协议和状态实现主要位于：
-  - `app/src/main/java/dev/ignotus/sonyrebuild/ble/`
-  - `app/src/main/java/dev/ignotus/sonyrebuild/protocol/`
-  - `app/src/main/java/dev/ignotus/sonyrebuild/data/`
-  - `app/src/main/java/dev/ignotus/sonyrebuild/headphones/`
+  - `app/src/main/java/dev/ignotus/openbuds/ble/`
+  - `app/src/main/java/dev/ignotus/openbuds/protocol/`
+  - `app/src/main/java/dev/ignotus/openbuds/data/`
+  - `app/src/main/java/dev/ignotus/openbuds/headphones/`
 - App 内设置入口已经存在：
   - `SettingsRoute.Modules`
   - `SettingsModulesScreen`
@@ -102,7 +102,7 @@
     - `:lsposed-module`：Xposed/YukiHook 入口和系统注入。
   - 如果短期不拆 module，至少先按 package 边界拆清楚。
 - [ ] 定义核心控制接口。
-  - 建议位置：`app/src/main/java/dev/ignotus/sonyrebuild/core/`
+  - 建议位置：`app/src/main/java/dev/ignotus/openbuds/core/`
   - 示例职责：
     - 连接目标设备。
     - 断开连接。
@@ -137,8 +137,8 @@
 
 - [ ] 新增前台服务或绑定服务。
   - 建议文件：
-    - `app/src/main/java/dev/ignotus/sonyrebuild/service/SonyHeadphoneService.kt`
-    - `app/src/main/java/dev/ignotus/sonyrebuild/service/SonyHeadphoneServiceBinder.kt`
+    - `app/src/main/java/dev/ignotus/openbuds/service/SonyHeadphoneService.kt`
+    - `app/src/main/java/dev/ignotus/openbuds/service/SonyHeadphoneServiceBinder.kt`
   - 职责：
     - 维护连接。
     - 持有最新精简状态。
@@ -149,8 +149,8 @@
   - 通知权限按 Android 13+ 处理。
 - [ ] 新增紧凑弹窗 Activity。
   - 建议文件：
-    - `app/src/main/java/dev/ignotus/sonyrebuild/QuickPopupActivity.kt`
-    - `app/src/main/java/dev/ignotus/sonyrebuild/ui/screen/QuickPopupScreen.kt`
+    - `app/src/main/java/dev/ignotus/openbuds/QuickPopupActivity.kt`
+    - `app/src/main/java/dev/ignotus/openbuds/ui/screen/QuickPopupScreen.kt`
   - 内容：
     - 设备名。
     - 左/右/盒或单电量。
@@ -237,9 +237,9 @@
     4. ContentProvider 只用于只读状态。
 - [ ] 定义 action 命名空间。
   - 示例：
-    - `dev.ignotus.sonyrebuild.action.SHOW_QUICK_POPUP`
-    - `dev.ignotus.sonyrebuild.action.REQUEST_STATE`
-    - `dev.ignotus.sonyrebuild.action.SET_NOISE_CONTROL`
+    - `dev.ignotus.openbuds.action.SHOW_QUICK_POPUP`
+    - `dev.ignotus.openbuds.action.REQUEST_STATE`
+    - `dev.ignotus.openbuds.action.SET_NOISE_CONTROL`
 - [ ] 所有外部入口使用显式包名和组件名。
 - [ ] 对写入命令增加来源校验。
   - 只接受本应用签名权限或明确白名单。
@@ -292,7 +292,7 @@
 ## 8. 阶段 P6：SystemUI 控制中心 / 设备卡片入口
 
 风险：高  
-目标：点击控制中心或设备中心的 Sony 耳机卡片时，打开 SonyRebuild 快捷弹窗。
+目标：点击控制中心或设备中心的 Sony 耳机卡片时，打开 OpenBuds 快捷弹窗。
 
 任务：
 
@@ -332,7 +332,7 @@
   - 是系统蓝牙状态图标。
   - 还是小米蓝牙通知 extras。
   - 还是 SystemUI plugin 内部状态。
-- [ ] 首版只影响 SonyRebuild 自己创建的通知 extras。
+- [ ] 首版只影响 OpenBuds 自己创建的通知 extras。
 - [ ] 若需要 hook SystemUI 状态控制器，先只做只读日志。
 - [ ] 添加版本白名单。
   - 未知版本默认关闭。
@@ -350,7 +350,7 @@
 ## 10. 阶段 P8：系统蓝牙设置页入口
 
 风险：很高  
-目标：先做到“系统设备详情页出现 SonyRebuild 入口”，不要一开始做完整嵌入式设置页。
+目标：先做到“系统设备详情页出现 OpenBuds 入口”，不要一开始做完整嵌入式设置页。
 
 任务：
 
@@ -362,15 +362,15 @@
   - Preference screen 构建时机。
   - 当前设备对象读取方式。
 - [ ] 只对 Sony 设备插入入口。
-  - 标题：Sony Sound settings / SonyRebuild。
-  - summary：电量、ANC 当前状态或“打开 SonyRebuild”。
+  - 标题：Sony Sound settings / OpenBuds。
+  - summary：电量、ANC 当前状态或“打开 OpenBuds”。
   - 点击：打开主 App 设备页或快捷弹窗。
 - [ ] 不在第一版直接嵌入复杂 Compose UI。
 - [ ] 不覆盖系统原有蓝牙设置项。
 
 验收：
 
-- [ ] Sony 耳机设备详情页出现 SonyRebuild 入口。
+- [ ] Sony 耳机设备详情页出现 OpenBuds 入口。
 - [ ] 非 Sony 设备不出现入口。
 - [ ] 点击入口能进入 App 对应设备页。
 - [ ] Settings hook 失败时系统设置不崩溃。
@@ -482,7 +482,7 @@
 5. `feat: add module diagnostics settings page`
 6. `feat: scaffold LSPosed module`
 7. `feat: add read-only HyperOS hook probes`
-8. `feat: bridge module actions to SonyRebuild service`
+8. `feat: bridge module actions to OpenBuds service`
 9. `feat: add HyperOS notification integration`
 10. `feat: intercept compatible control center device card`
 11. `feat: add experimental status bar integration`

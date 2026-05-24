@@ -6,17 +6,17 @@ This file provides guidance to Codex (Codex.ai/code) when working with code in t
 
 Reverse engineering and rebuilding of Sony Sound Connect (v13.0.5) — the companion app for Sony Bluetooth headphones. The goal is to extract the local Bluetooth control protocol from decompiled sources and build a clean-room implementation from scratch.
 
-The Android rebuild lives in `app/` as a Jetpack Compose project with package `dev.ignotus.sonyrebuild`. Git repository is at the project root. See `README.md`, `docs/DEVELOPMENT.md`, `docs/PROTOCOL_GUIDE.md`, and `docs/FEATURE_STATUS.md` before changing implementation details.
+The Android rebuild lives in `app/` as a Jetpack Compose project with package `dev.ignotus.openbuds`. Git repository is at the project root. See `README.md`, `docs/DEVELOPMENT.md`, `docs/PROTOCOL_GUIDE.md`, and `docs/FEATURE_STATUS.md` before changing implementation details.
 
 ## Repository Structure
 
 The project root is the git repository root (formerly `App/`). Subdirectories:
 
-- **`app/`** — Android module (formerly `App/app/`), Jetpack Compose, package `dev.ignotus.sonyrebuild`.
-  - `app/src/main/java/dev/ignotus/sonyrebuild/ble/` — BLE, GATT, SPP transport, endpoint diagnostics.
-  - `app/src/main/java/dev/ignotus/sonyrebuild/protocol/` — GATT UUIDs and Tandem V1/V2 command builders/parsers.
-  - `app/src/main/java/dev/ignotus/sonyrebuild/data/` — Repository, UI state, model image catalog.
-  - `app/src/main/java/dev/ignotus/sonyrebuild/ui/` — Compose UI.
+- **`app/`** — Android module (formerly `App/app/`), Jetpack Compose, package `dev.ignotus.openbuds`.
+  - `app/src/main/java/dev/ignotus/openbuds/ble/` — BLE, GATT, SPP transport, endpoint diagnostics.
+  - `app/src/main/java/dev/ignotus/openbuds/protocol/` — GATT UUIDs and Tandem V1/V2 command builders/parsers.
+  - `app/src/main/java/dev/ignotus/openbuds/data/` — Repository, UI state, model image catalog.
+  - `app/src/main/java/dev/ignotus/openbuds/ui/` — Compose UI.
 - **`docs/`** — Development documentation.
   - `DEVELOPMENT.md` — Dev guide: environment, code structure, feature workflow, UI conventions, testing.
   - `PROTOCOL_GUIDE.md` — Protocol implementation: transport layer, Tandem message format, command families, parser design.
@@ -29,7 +29,7 @@ The project root is the git repository root (formerly `App/`). Subdirectories:
   - `OppoPods/` — OPPO headphone Xposed module (HyperOS integration reference).
   - `REAREye/` — Backscreen Xposed module (Compose UI reference).
 - **`tools/`** — Agent and development helper tools (e.g., `analyze_btsnoop.py` for BLE HCI log analysis).
-- Root Gradle files — `build.gradle.kts`, `settings.gradle.kts` (rootProject.name = "SonyRebuild").
+- Root Gradle files — `build.gradle.kts`, `settings.gradle.kts` (rootProject.name = "OpenBuds").
 
 ## Core Architecture (3 layers)
 
@@ -81,7 +81,7 @@ Logcat:
 
 ```powershell
 $adb="$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe"
-& $adb logcat -v time SonyRebuild:I AndroidRuntime:E '*:S'
+& $adb logcat -v time OpenBuds:I AndroidRuntime:E '*:S'
 ```
 
 ## Working with Decompiled Sources

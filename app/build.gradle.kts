@@ -5,10 +5,10 @@ plugins {
 }
 
 android {
-    namespace = "dev.ignotus.sonyrebuild"
+    namespace = "dev.ignotus.openbuds"
     compileSdk = 37
     defaultConfig {
-        applicationId = "dev.ignotus.sonyrebuild"
+        applicationId = "dev.ignotus.openbuds"
         minSdk = 31
         targetSdk = 37
         versionCode = 1

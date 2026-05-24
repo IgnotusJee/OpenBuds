@@ -1,6 +1,6 @@
 # 协议实现说明
 
-SonyRebuild 当前实现的是 Sony Tandem V1/V2 的本地控制子集，主要覆盖 LinkBuds S 的 SPP/Tandem 链路和 WH-1000XM4 的首版兼容路径。
+OpenBuds 当前实现的是 Sony Tandem V1/V2 的本地控制子集，主要覆盖 LinkBuds S 的 SPP/Tandem 链路和 WH-1000XM4 的首版兼容路径。
 
 ## 资料来源
 
