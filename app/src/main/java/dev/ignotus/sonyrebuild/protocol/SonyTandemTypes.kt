@@ -183,4 +183,4 @@ fun ByteArray.hexString(): String = joinToString(" ") { "%02X".format(it.unsigne
 
 fun ByteArray.unsignedList(): List<Int> = map { it.unsigned }
 
-fun Byte.percentageOrNull
+fun Byte.percentageOrNull(): Int? = unsigned.takeIf { it in 0..100 }

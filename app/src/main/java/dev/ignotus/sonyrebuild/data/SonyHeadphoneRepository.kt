@@ -1211,4 +1211,59 @@ private fun NoiseControlState.forMode(mode: NoiseControlMode): NoiseControlState
     copy(
         controlMode = mode,
         noiseCancellingEnabled = mode == NoiseControlMode.NOISE_CANCELLING,
-        ambientSoundEnabled = mode == NoiseCon
+        ambientSoundEnabled = mode == NoiseControlMode.AMBIENT_SOUND,
+    )
+
+private fun EqState.bandEditPreset(): EqPresetId =
+    when (preset) {
+        EqPresetId.CUSTOM,
+        EqPresetId.USER_SETTING1,
+        EqPresetId.USER_SETTING2 -> preset
+        else -> EqPresetId.CUSTOM
+    }
+
+internal fun EqState.withClearBassSynced(level: Int): EqState {
+    val clamped = level.coerceIn(-10, 10)
+    val syncedRawSteps = rawBandSteps.takeIf { it.size > EQ_CLEAR_BASS_RAW_INDEX }
+        ?.toMutableList()
+        ?.also { it[EQ_CLEAR_BASS_RAW_INDEX] = displayEqStepToRaw(clamped) }
+        ?: rawBandSteps
+    return copy(
+        clearBass = clamped,
+        rawBandSteps = syncedRawSteps,
+        bandSteps = if (syncedRawSteps !== rawBandSteps) {
+            displayEqBands(syncedRawSteps)
+        } else {
+            bandSteps
+        },
+    )
+}
+
+internal fun displayEqStep(rawStep: Int): Int =
+    (rawStep - EQ_BAND_STEP_CENTER).coerceIn(-10, 10)
+
+internal fun displayEqBands(rawSteps: List<Int>): List<Int> {
+    val displaySteps = rawSteps.map(::displayEqStep)
+    return if (displaySteps.size > EQ_FIRST_FREQUENCY_RAW_INDEX) {
+        displaySteps.drop(EQ_FIRST_FREQUENCY_RAW_INDEX)
+    } else {
+        displaySteps
+    }
+}
+
+internal fun displayEqStepToRaw(displayStep: Int): Int =
+    (displayStep.coerceIn(-10, 10) + EQ_BAND_STEP_CENTER).coerceIn(0, 255)
+
+fun featureStatusesFor(profile: ConnectedHeadphoneProfile?): List<FeatureStatus> = listOf(
+    FeatureStatus("扫描与连接", profile?.let { "${it.protocolName} via ${it.transport}" } ?: "BLE scan, GATT/SPP discovery", true),
+    FeatureStatus("设备信息", "Model, firmware, protocol basics", profile.supports(HeadphoneFeature.DEVICE_INFO)),
+    FeatureStatus("电量", "Single/headset, left/right, and cradle-compatible reads", profile.supports(HeadphoneFeature.BATTERY)),
+    FeatureStatus("降噪开关", "NC/ASM gated by current device profile", profile.supports(HeadphoneFeature.NOISE_CONTROL)),
+    FeatureStatus("环境声等级", "ASM seamless level when confirmed writable", profile.supports(HeadphoneFeature.AMBIENT_LEVEL)),
+    FeatureStatus("播放控制", "Play, pause, previous, next", profile.supports(HeadphoneFeature.PLAYBACK_CONTROL)),
+    FeatureStatus("EQ / Clear Bass", "Preset EQ, custom EQ, and Clear Bass", profile.supports(HeadphoneFeature.EQ)),
+    FeatureStatus("LE Audio 状态", "Connection type, streaming status, paired history", profile.supports(HeadphoneFeature.LEA_STATUS)),
+    FeatureStatus("Quick Access", "Customizable button actions L/R and NC/AMB keys", profile.supports(HeadphoneFeature.QUICK_ACCESS)),
+    FeatureStatus("佩戴检测", "Earpiece fitting and wearing detection status", profile.supports(HeadphoneFeature.WEARING_STATUS)),
+    FeatureStatus("Sense / AutoPlay / Multipoint / FOTA", "Advanced modules reserved", false),
+)

@@ -325,4 +325,11 @@ object SonyTandemV1Table1Protocol {
         }
     }
 
-    private fun unknown(c
+    private fun unknown(command: Byte?, payload: ByteArray, raw: ByteArray): ParsedTandemResponse.Unknown =
+        ParsedTandemResponse.Unknown(
+            dataType = DATA_MDR.unsigned,
+            command = command?.unsigned,
+            payload = payload,
+            raw = raw,
+        )
+}

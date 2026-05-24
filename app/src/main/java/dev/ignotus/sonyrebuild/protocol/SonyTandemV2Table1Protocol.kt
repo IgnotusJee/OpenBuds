@@ -580,4 +580,13 @@ object SonyTandemV2Table1Protocol {
             WearingDetectionStatus.entries.firstOrNull { it.code == s }
         }
         val result = payload.getOrNull(2)?.let { r ->
-       
+            WearingDetectionResult.entries.firstOrNull { it.code == r }
+        }
+        return ParsedTandemResponse.WearingStatus(
+            status = status,
+            result = result,
+            values = payload.unsignedList(),
+            raw = raw,
+        )
+    }
+}
