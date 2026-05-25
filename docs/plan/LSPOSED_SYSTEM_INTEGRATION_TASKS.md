@@ -89,7 +89,7 @@
 - [x] 新增 `QuickPopupActivity.kt` — 对话框主题 Activity（`singleInstance`、`excludeFromRecents`），绑定 `SonyControlService`，承载 `QuickPopupScreen`。
 - [x] 新增 `ui/screen/QuickPopupScreen.kt` — Compose 布局：设备名 + 电量行 + 三态 ANC 切换 + 环境声 slider + 播放控制行 + "More settings" 按钮。断开后 5 秒自动关闭。
 - [x] 新增 `res/values/themes.xml` `Theme.OpenBuds.Popup` — `windowIsTranslucent`、`windowIsFloating`、`backgroundDimEnabled`。
-- [x] 更新 `AndroidManifest.xml` — QuickPopupActivity 声明 + `SHOW_QUICK_POPUP` intent-filter。
+- [x] 更新 `AndroidManifest.xml` — QuickPopupActivity 声明（P4.5 后改为 `exported=false`，无 intent-filter，由 Receiver 和内部组件显式启动）。
 - [x] 更新 `SettingsModulesScreen` — "Background service" / "Persistent notification" / "Connection popup" 开关。
 
 ---
@@ -189,12 +189,27 @@
 - [ ] 手动验证：第三方未授权 Intent 不能直接打开 `QuickPopupActivity`。
 - [ ] 手动验证：ProbeResultCache JSON 损坏时 Settings 模块页不崩溃，并输出错误日志。
 
+### 第二次审计（2026-05-25，commit `f1b488c`）
+
+自审发现并修复了以下问题：
+
+- [x] **Critical：QuickPopupActivity recomposition 失效** — `_connectedBinder` 字段更新不触发 Compose 重组。修复：将 `mutableStateOf` 提升到 Activity 级别，在 `ServiceConnection.onServiceConnected` 中赋值，使用 `DisposableEffect` 桥接 LiveData → Compose state。
+- [x] **Major：SonyControlService 隐式 Intent** — `setClassName("dev.ignotus.openbuds.QuickPopupActivity")` 使用字符串字面量。修复：改用 `Intent(this, QuickPopupActivity::class.java)` 显式类引用。
+- [x] **Minor：QuickPopupScreen 未使用 imports** — 移除 `Bluetooth`、`MusicNote`、`width`。
+
+已知遗留问题：
+
+- ⚠️ **Phase 5+ IPC 阻止**：`SystemIntegrationReceiver` 使用 `signature` 保护级别权限。LSPosed 模块在系统进程（`com.android.bluetooth` 等）中运行时使用不同签名，无法向 Receiver 发送广播。进入 Phase 5 前需改为 `protectionLevel="normal"` + 在 `onReceive` 中验证调用包名，或使用显式 Activity Intent（`FLAG_ACTIVITY_NEW_TASK`）绕过 Receiver。
+- ⚠️ `notificationLockscreen` 偏好已连接但未被 `SonyControlService` 消费 — 留待后续通知增强时使用。
+
 ---
 
 ## 阶段 P5：HyperOS 通知集成（条件性）
 
 风险：中到高
-前提：`com.android.bluetooth.ble.app.MiuiBluetoothNotification` 在 ProbeResultCache 中标记为存在。
+前提：
+- `com.android.bluetooth.ble.app.MiuiBluetoothNotification` 在 ProbeResultCache 中标记为存在。
+- ⚠️ `SystemIntegrationReceiver` 权限需先从 `signature` 改为 `normal` + 调用包名白名单校验，否则系统进程（不同签名）无法通过广播与 App 通信。
 
 待实现：
 
