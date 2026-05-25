@@ -14,7 +14,7 @@
 
     <permission
         android:name="dev.ignotus.openbuds.permission.SYSTEM_INTEGRATION"
-        android:protectionLevel="signature" />
+        android:protectionLevel="normal" />
 
     <uses-feature
         android:name="android.hardware.bluetooth_le"

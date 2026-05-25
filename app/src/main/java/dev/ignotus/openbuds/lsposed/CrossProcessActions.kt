@@ -14,6 +14,11 @@ object CrossProcessActions {
     const val EXTRA_BATTERY_PARAMS = "battery_params"
     const val EXTRA_DEVICE_NAME = "device_name"
 
-    // Permission protecting system integration IPC
-    const val PERMISSION_SYSTEM_INTEGRATION = "dev.ignotus.openbuds.permission.SYSTEM_INTEGRATION"
+    // System packages that may host our LSPosed module and are allowed
+    // to send cross-process broadcasts to SystemIntegrationReceiver.
+    val ALLOWED_CALLER_PACKAGES = setOf(
+        "com.android.bluetooth",
+        "com.android.systemui",
+        "com.xiaomi.bluetooth",
+    )
 }
