@@ -2,14 +2,17 @@
 .gradle/
 build/
 **/build/
+gradle/gradle-daemon-jvm.properties
 
 # Local SDK and machine-specific files
 local.properties
 *.iml
 
-# Android Studio / IntelliJ local state
+# Android Studio / IntelliJ local state / claude / code
 .idea/
 .kotlin/
+.claude
+.vscode
 
 # Android build intermediates
 captures/

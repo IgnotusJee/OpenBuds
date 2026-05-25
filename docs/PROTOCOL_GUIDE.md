@@ -311,4 +311,3 @@ assertArrayEquals(
 - Repository 刷新流程会读取状态。
 - UI 禁用态和 unsupported 文案明确。
 - 真机 log 中能看到 TX/RX 和状态更新。
-                           

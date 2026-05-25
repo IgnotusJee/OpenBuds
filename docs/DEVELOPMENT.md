@@ -306,4 +306,3 @@ app/src/main/assets/sony_model_images.json
 - 播放控制既有耳机 Tandem 命令，也有 Android media key fallback。UI 状态不要在点击时乐观切两次。
 - LE Audio 切换会触发蓝牙重连，不能按普通开关实现。
 - 反编译类名不可靠，优先相信 enum 名、byte code、payload 校验逻辑和 j2objc feature 调用链。
-                                                                                               
