@@ -32,6 +32,12 @@ $adb="C:\Software\platform-tools\adb.exe"
 & $adb logcat -v time OpenBuds:I AndroidRuntime:E '*:S'
 ```
 
+**LSPosed 模块安装注意**：LSPosed 框架要求禁用 Android Studio 的部署优化，否则模块更新不会生效。必须使用 `gradlew installDebug` 安装，或关闭 IDE 的 "Deploy Optimization" 选项。
+
+```powershell
+.\gradlew.bat installDebug
+```
+
 ## 开发流程
 
 1. 开始前先读 `README.md`、本文档、`docs/FEATURE_STATUS.md`，协议改动再读 `docs/PROTOCOL_GUIDE.md` 和 `docs/plan/Sony耳机BLE协议完整分析.md`。
