@@ -1,8 +1,8 @@
 # OpenBuds LSPosed 系统集成任务清单
 
-更新日期：2026-05-24
+更新日期：2026-05-25
 
-本文把“参考 OppoPods / HyperPods，为 Sony 耳机实现 HyperOS 弹窗、状态栏、控制中心入口，以及最终接近小米原生耳机设置体验”的目标拆成仓库级任务。执行顺序按风险从低到高排列；前一阶段没有通过验收时，不进入后一阶段。
+本文把"参考 OppoPods / HyperPods，为 Sony 耳机实现 HyperOS 弹窗、状态栏、控制中心入口，以及最终接近小米原生耳机设置体验"的目标拆成仓库级任务。使用 **libxposed 现代 API** (`io.github.libxposed:api:101.0.1`)，同一 hook 挂载点，更类型安全。
 
 ## 0. 目标和边界
 
@@ -11,31 +11,28 @@
 - 主 App 保持独立可用，不依赖 root、LSPosed 或 HyperOS。
 - LSPosed 模块作为可选系统集成层，负责系统入口、系统提示和系统 UI 注入。
 - Sony 协议、状态缓存和写入命令只保留一份实现，避免 App 和模块各自维护协议逻辑。
-- 第一可交付目标是“连接弹窗 + 常驻通知 + 快捷控制面板”。
-- 第二可交付目标是“控制中心/设备卡片点击进入 OpenBuds 快捷面板”。
-- 第三可交付目标才是“系统蓝牙设置页中的 Sony 耳机入口”。
+- 第一可交付目标是"连接弹窗 + 常驻通知 + 快捷控制面板"。
+- 第二可交付目标是"控制中心/设备卡片点击进入 OpenBuds 快捷面板"。
+- 第三可交付目标才是"系统蓝牙设置页中的 Sony 耳机入口"。
 
 明确不做：
 
 - 不复制 Sony 官方 App 反编译业务代码。
-- 不直接复制 OppoPods / HyperPods 的 GPL 源码到本项目，除非项目许可策略明确接受 GPL 传染风险；可以参考其架构和 hook 目标。
+- 不直接复制 OppoPods / HyperPods 的 GPL 源码到本项目；可参考其 hook 目标类名和方法签名（作为小米操作系统的事实），所有 hook 逻辑从零编写。
 - 不把未知 HyperOS / MIUI 版本当作默认支持对象。
 - 不在系统进程中执行复杂协议状态机；系统进程只做入口、展示和轻量转发。
 
-## 1. 现状基准
+## 现状基准
 
 当前仓库状态：
 
 - `app/` 是单模块 Android Compose App。
-- `app/src/main/AndroidManifest.xml` 当前只有主 Activity、蓝牙权限和网络权限，没有 Service、BroadcastReceiver、ContentProvider、LSPosed 元数据或 hook 入口。
 - 协议和状态实现主要位于：
   - `app/src/main/java/dev/ignotus/openbuds/ble/`
   - `app/src/main/java/dev/ignotus/openbuds/protocol/`
   - `app/src/main/java/dev/ignotus/openbuds/data/`
   - `app/src/main/java/dev/ignotus/openbuds/headphones/`
-- App 内设置入口已经存在：
-  - `SettingsRoute.Modules`
-  - `SettingsModulesScreen`
+- App 内设置入口已经存在：`SettingsRoute.Modules` → `SettingsModulesScreen`。
 - 已实现的可复用状态包括电量、NC/ASM、EQ、播放控制、LE Audio 状态读取、Quick Access 读取、佩戴检测读取。
 
 参考项目：
@@ -50,362 +47,174 @@
 - `com.android.systemui`：控制中心设备卡片、状态栏/系统 UI 入口。
 - `com.android.settings` 或小米设置相关包：系统蓝牙设备详情页入口。该项最高风险，最后处理。
 
-## 2. 阶段 P0：调研和兼容矩阵
+## libxposed 现代 API vs 旧 API 对比
 
-风险：低  
-目标：先知道要支持哪些系统、哪些类存在、哪些入口可 hook。
+| 项目 | 旧方案 (HyperPods/YukiHookAPI) | 新方案 (OpenBuds) |
+|------|-------------------------------|-------------------|
+| 核心 API | `de.robv.android.xposed:api` + YukiHookAPI | `io.github.libxposed:api:101.0.1` |
+| 入口类 | `object : IYukiHookXposedInit` + `@InjectYukiHookWithXposed` | `class : XposedModule()` |
+| 入口注册 | `assets/xposed_init` | `META-INF/xposed/java_init.list` |
+| 模块配置 | Manifest `<meta-data>` (xposedmodule, xposedscope...) | `META-INF/xposed/module.prop` |
+| 作用域 | `res/values/xposed_arrays.xml` | `META-INF/xposed/scope.list` |
+| Hook 注册 | `loadApp(pkg, hooker)` 在 `onHook()` 中 | `onPackageLoaded(param)` + 反射/ClassLoader 探测 |
+| Hook 目标 | 相同的类名和方法名 | 完全相同 — 仅 hook 机制不同 |
+| 许可 | YukiHookAPI Apache 2.0, XposedBridge Apache 2.0 | libxposed Apache 2.0 |
 
-任务：
+---
 
-- [ ] 记录目标测试设备和系统版本。
-  - 输出：`docs/LSPOSED_COMPATIBILITY_MATRIX.md`
-  - 字段：设备型号、Android 版本、HyperOS/MIUI 版本、LSPosed 版本、作用域包版本。
-- [ ] 在测试设备上导出目标包信息。
-  - `com.android.bluetooth`
-  - `com.xiaomi.bluetooth`
-  - `com.android.systemui`
-  - `com.android.settings`
-- [ ] 确认小米系统包名和类名是否与 OppoPods 当前 hook 点一致。
-  - Focus Island / 蓝牙通知类。
-  - SystemUI 插件加载类。
-  - 控制中心设备卡片 wrapper 类。
-  - 蓝牙设置设备详情页类。
-- [ ] 建立“可 hook 能力表”。
-  - 只读类存在。
-  - 构造函数可 hook。
-  - 方法可 hook。
-  - hook 后是否触发。
-  - hook 失败是否影响系统稳定。
+## 阶段 P1 ✅ 已完成：基础 —— 前台 Service + 跨进程 DTO
 
-验收：
+风险：低
+目标：让 Repository 能在后台运行，暴露精简状态和命令接口，不依赖 Compose/Activity。
 
-- [ ] 兼容矩阵文档存在。
-- [ ] 至少一台目标 HyperOS 设备完成类名探测。
-- [ ] 每个后续 hook 目标都有类名、方法名、失败回退策略。
+完成内容：
 
-不进入下一阶段的阻断条件：
+- [x] 新增 `gradle/libs.versions.toml` — libxposed API 101.0.1 + service 101.0.0 依赖声明。
+- [x] 更新 `app/build.gradle.kts` — `compileOnly(libs.libxposed.api)` + `implementation(libs.libxposed.service)`。
+- [x] 新增 `service/DeviceStateSnapshot.kt` — 精简状态 DTO：设备名、MAC、左右/盒电量、NC 模式、ANC/ASM 开关、播放状态、EQ preset 名。提供 `fromUiState()` 映射和 `toBundle()`/`fromBundle()` 序列化。
+- [x] 新增 `service/ControlCommand.kt` — sealed class：`SetNoiseControl(mode)`, `SetAmbientLevel(level)`, `SetAmbientVoiceMode(enabled)`, `Playback(action)`, `Refresh`。
+- [x] 新增 `service/SonyControlService.kt` — 前台 Service，持有 `SonyHeadphoneRepository`，通过 `LiveData<DeviceStateSnapshot>` 暴露状态，通过 `LocalBinder.execute()` 委托命令。管理常驻通知（设备名 + 电量 + 断开/弹窗操作）。
+- [x] 更新 `AndroidManifest.xml` — `FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_CONNECTED_DEVICE` / `POST_NOTIFICATIONS` 权限 + Service 声明。
+- [x] 更新 `AppUiSettingsStore.kt` — 新增 `serviceBackgroundRun`、`notificationPersistent`、`notificationLockscreen`、`connectionPopup` 四个偏好。
 
-- 目标设备未 root 或 LSPosed 不可用。
-- 无法稳定启用 `com.android.bluetooth`、`com.xiaomi.bluetooth`、`com.android.systemui` 作用域。
+---
 
-## 3. 阶段 P1：Core 分层和状态接口
+## 阶段 P2 ✅ 已完成：App 级弹窗与通知
 
-风险：低  
-目标：把协议能力从 UI 生命周期中解耦，给 App、Service 和模块共用。
-
-任务：
-
-- [ ] 评估是否新增 Gradle module。
-  - 推荐结构：
-    - `:sony-core`：协议、profile、状态模型、命令接口。
-    - `:app`：Compose UI、Activity、App 设置。
-    - `:lsposed-module`：Xposed/YukiHook 入口和系统注入。
-  - 如果短期不拆 module，至少先按 package 边界拆清楚。
-- [ ] 定义核心控制接口。
-  - 建议位置：`app/src/main/java/dev/ignotus/openbuds/core/`
-  - 示例职责：
-    - 连接目标设备。
-    - 断开连接。
-    - 读取最新 `SonyHeadphoneUiState` 或精简状态。
-    - 设置 NC/ASM。
-    - 设置 EQ。
-    - 发送播放控制。
-    - 刷新设备状态。
-- [ ] 把可被后台复用的状态裁剪成轻量 DTO。
-  - 不让系统进程依赖 Compose 类型。
-  - 不把完整 debug log 广播给系统进程。
-- [ ] 保持现有 `SonyHeadphoneRepository` 行为不变。
-  - UI 仍从现有 Repository 读取状态。
-  - 后台接口先适配 Repository，而不是替换 Repository。
-- [ ] 增加 core 单元测试。
-  - 状态 DTO 映射。
-  - 命令入口不会绕过 profile capability。
-  - 不支持的写入返回明确失败。
-
-验收：
-
-- [ ] `.\gradlew.bat testDebugUnitTest assembleDebug` 通过。
-- [ ] 主 App 不装模块仍能扫描、连接和控制耳机。
-- [ ] 新增 core 接口不直接依赖 Activity、Compose、SystemUI 或 LSPosed。
-
-## 4. 阶段 P2：App 级后台服务和快速入口
-
-风险：低到中  
+风险：低到中
 目标：不开 LSPosed 也能提供弹窗、通知和快捷控制基础体验。
 
-任务：
+完成内容：
 
-- [ ] 新增前台服务或绑定服务。
-  - 建议文件：
-    - `app/src/main/java/dev/ignotus/openbuds/service/SonyHeadphoneService.kt`
-    - `app/src/main/java/dev/ignotus/openbuds/service/SonyHeadphoneServiceBinder.kt`
-  - 职责：
-    - 维护连接。
-    - 持有最新精简状态。
-    - 暴露轻量命令。
-    - 管理标准 Android 通知。
-- [ ] 在 Manifest 添加服务声明和所需权限。
-  - Android 14+ 注意 foreground service type。
-  - 通知权限按 Android 13+ 处理。
-- [ ] 新增紧凑弹窗 Activity。
-  - 建议文件：
-    - `app/src/main/java/dev/ignotus/openbuds/QuickPopupActivity.kt`
-    - `app/src/main/java/dev/ignotus/openbuds/ui/screen/QuickPopupScreen.kt`
-  - 内容：
-    - 设备名。
-    - 左/右/盒或单电量。
-    - NC/环境声/关闭三态。
-    - 播放/暂停、上一曲、下一曲。
-    - “更多”进入主 App 设备页。
-- [ ] 新增通知 action。
-  - 打开快捷弹窗。
-  - 断开或停止服务。
-  - 刷新状态。
-- [ ] 新增普通 App 设置项。
-  - 是否启用后台服务。
-  - 是否启用连接弹窗。
-  - 是否启用常驻通知。
-  - 是否允许锁屏显示。
+- [x] 新增 `QuickPopupActivity.kt` — 对话框主题 Activity（`singleInstance`、`excludeFromRecents`），绑定 `SonyControlService`，承载 `QuickPopupScreen`。
+- [x] 新增 `ui/screen/QuickPopupScreen.kt` — Compose 布局：设备名 + 电量行 + 三态 ANC 切换 + 环境声 slider + 播放控制行 + "More settings" 按钮。断开后 5 秒自动关闭。
+- [x] 新增 `res/values/themes.xml` `Theme.OpenBuds.Popup` — `windowIsTranslucent`、`windowIsFloating`、`backgroundDimEnabled`。
+- [x] 更新 `AndroidManifest.xml` — QuickPopupActivity 声明 + `SHOW_QUICK_POPUP` intent-filter。
+- [x] 更新 `SettingsModulesScreen` — "Background service" / "Persistent notification" / "Connection popup" 开关。
 
-验收：
+---
 
-- [ ] 不启用 LSPosed 时，连接耳机后能显示标准通知。
-- [ ] 点击通知能打开紧凑弹窗。
-- [ ] 紧凑弹窗能读取当前状态并执行至少 NC/ASM 切换。
-- [ ] 耳机断开后通知消失或进入明确 disconnected 状态。
-- [ ] 设备重连后状态能恢复。
+## 阶段 P3 ✅ 已完成：LSPosed 模块骨架 —— 只读探测
 
-## 5. 阶段 P3：模块骨架，只读探测
+风险：中
+目标：加入 LSPosed 模块，使用 libxposed 现代 API，只做类存在性探测和能力评估，不改变系统行为。
 
-风险：中  
-目标：加入 LSPosed 模块，但不改变系统行为。
+完成内容：
 
-任务：
+- [x] 新增 `META-INF/xposed/module.prop` — `minApiVersion=100`, `targetApiVersion=101`, `staticScope=true`。
+- [x] 新增 `META-INF/xposed/java_init.list` — 入口类 `dev.ignotus.openbuds.lsposed.ModuleMain`。
+- [x] 新增 `META-INF/xposed/scope.list` — `com.android.bluetooth`, `com.xiaomi.bluetooth`, `com.android.systemui`。
+- [x] 新增 `lsposed/ModuleMain.kt` — `XposedModule()` 子类，`onPackageLoaded()` 按进程分发探测。
+- [x] 新增 `lsposed/BluetoothProcessHook.kt` — 探测 `A2dpService.handleConnectionStateChanged`、`MiuiBluetoothNotification`，使用 ClassLoader 反射，仅日志。
+- [x] 新增 `lsposed/XiaomiBluetoothHook.kt` — 探测 `MiuiBluetoothNotification` 构造函数，仅日志。
+- [x] 新增 `lsposed/SystemUiHook.kt` — 探测 `PluginInstance.loadPlugin`、`MainPanelController.onCreate`、`DeviceInfoWrapper.performClicked`，仅日志。
+- [x] 新增 `lsposed/ProbeResultCache.kt` — 类存在性 JSON 持久化，供 Settings 页读取。
+- [x] 更新 `SettingsModulesScreen` — 新增 "LSPosed System Integration" 卡片，显示 ROM 兼容等级、最近探测时间、实验性警告。
+- [x] 新增 `lsposed/GPL_BOUNDARY.md` — GPL 边界规则文档。
 
-- [ ] 决定模块承载形式。
-  - 方案 A：在 `app` 内增加 LSPosed 元数据和 hook 入口。
-  - 方案 B：新增 `lsposed-module` 独立模块。
-  - 推荐方案 B，便于隔离依赖和签名策略。
-- [ ] 接入 hook 框架。
-  - 可选：YukiHookAPI。
-  - 添加 `xposed_init` 或框架要求的 init 资源。
-  - 添加 `xposedmodule`、`xposeddescription`、`xposedminversion`、`xposedscope`。
-- [ ] 建立 hook 入口。
-  - `HookEntry`
-  - `BluetoothProcessHook`
-  - `XiaomiBluetoothHook`
-  - `SystemUiHook`
-  - `SettingsHook` 先占位，不启用行为。
-- [ ] scope 首版只启用：
-  - `com.android.bluetooth`
-  - `com.xiaomi.bluetooth`
-  - `com.android.systemui`
-- [ ] 每个 hook 只记录：
-  - 当前进程。
-  - class loader。
-  - 目标类是否存在。
-  - 目标方法是否存在。
-  - hook 是否触发。
-- [ ] 增加模块状态页。
-  - 使用现有 `SettingsRoute.Modules`。
-  - 展示：
-    - 模块是否安装。
-    - 模块是否启用。
-    - 作用域是否可能完整。
-    - 最近 hook 心跳时间。
-    - 当前 ROM 兼容等级。
+---
 
-验收：
+## 阶段 P4 ✅ 已完成：模块-App 通信桥
 
-- [ ] 安装模块、启用作用域、重启后系统无崩溃。
-- [ ] App 的 Modules 页能看到 hook 探测状态。
-- [ ] 禁用模块后主 App 仍完全可用。
-- [ ] hook 探测失败时只记录日志，不改变系统行为。
+风险：中
+目标：系统进程能安全打开 App、查询状态、触发命令。
 
-## 6. 阶段 P4：模块和 App 的安全通信桥
+完成内容：
 
-风险：中  
-目标：系统进程能安全打开 App、读取少量状态、触发少量命令。
+- [x] 新增 `lsposed/CrossProcessActions.kt` — 集中定义所有跨进程 action 常量和 extra key，使用 `dev.ignotus.openbuds.*` 命名空间。
+- [x] 新增 `receiver/SystemIntegrationReceiver.kt` — 在 App 进程中处理 `QUERY_DEVICE_MAC` 和 `SHOW_QUICK_POPUP`。
+- [x] 更新 `AndroidManifest.xml` — `signature` 级别自定义权限 `SYSTEM_INTEGRATION` + Receiver 声明。
 
-任务：
+---
 
-- [ ] 设计跨进程通信方式。
-  - 优先级：
-    1. 显式 `Intent` 打开 Activity。
-    2. 受权限保护的 `BroadcastReceiver`。
-    3. 绑定 Service / AIDL。
-    4. ContentProvider 只用于只读状态。
-- [ ] 定义 action 命名空间。
-  - 示例：
-    - `dev.ignotus.openbuds.action.SHOW_QUICK_POPUP`
-    - `dev.ignotus.openbuds.action.REQUEST_STATE`
-    - `dev.ignotus.openbuds.action.SET_NOISE_CONTROL`
-- [ ] 所有外部入口使用显式包名和组件名。
-- [ ] 对写入命令增加来源校验。
-  - 只接受本应用签名权限或明确白名单。
-  - 不接受任意第三方广播直接改耳机状态。
-- [ ] 增加失败回退。
-  - Service 未运行时先启动服务或只打开 Activity。
-  - 状态不可用时显示 loading / disconnected。
+## 阶段 P5：HyperOS 通知集成（条件性）
 
-验收：
+风险：中到高
+前提：`com.android.bluetooth.ble.app.MiuiBluetoothNotification` 在 ProbeResultCache 中标记为存在。
 
-- [ ] SystemUI 进程通过显式 Intent 能打开 `QuickPopupActivity`。
-- [ ] 模块无法直接崩溃 App 进程。
-- [ ] 外部伪造广播不能直接执行写入命令。
-- [ ] App 未启动时也能打开快捷弹窗并进入连接/等待状态。
+待实现：
 
-## 7. 阶段 P5：连接弹窗和通知的 HyperOS 集成
+- [ ] 修改 `XiaomiBluetoothHook.kt`：使用 libxposed API hook `MiuiBluetoothNotification` 构造函数，在 `com.xiaomi.bluetooth` 进程中注册 `BroadcastReceiver`。
+- [ ] 新增 `lsposed/HyperOsBatteryNotification.kt`：构建 HyperOS 风格电量通知（独立逻辑，不复制 GPL 代码）。
+- [ ] App Service 广播电量变化 → hook 接收 → 创建/更新通知。
+- [ ] 新增开关："HyperOS-style notification"（默认关），集中在 Settings > Modules。
+- [ ] 类不存在时自动回退标准通知（Phase 2 已实现）。
 
-风险：中到高  
-目标：把 P2 的 App 级通知升级为 HyperOS 风格，但保持可降级。
+---
 
-任务：
+## 阶段 P6：控制中心设备卡片入口（条件性）
 
-- [ ] 在 `com.xiaomi.bluetooth` 中 hook 蓝牙通知相关类。
-  - 先只注册 receiver。
-  - 不替换系统原有通知。
-- [ ] 从 app Service 广播精简状态给 `com.xiaomi.bluetooth` hook。
-  - 设备名。
-  - MAC hash 或显式 MAC，注意隐私。
-  - 电量。
-  - 是否充电。
-  - ANC 当前模式。
-- [ ] 尝试创建 HyperOS 风格耳机通知。
-  - 不可用时回退标准通知。
-- [ ] 尝试触发 Focus Island / 强提示。
-  - 只在连接事件触发。
-  - 避免状态刷新反复弹出。
-- [ ] 增加用户开关。
-  - HyperOS 连接弹窗。
-  - HyperOS 耳机通知。
-  - 标准通知 fallback。
+风险：高
+前提：`PluginInstance.loadPlugin`、`DeviceInfoWrapper.performClicked`、`MainPanelController` 均存在。
 
-验收：
+待实现：
 
-- [ ] 连接耳机时最多弹出一次系统风格提示。
-- [ ] 电量变化能更新通知内容。
-- [ ] 断开后通知正确取消。
-- [ ] 目标类不存在时自动回退标准通知。
-- [ ] 系统蓝牙原生功能不被破坏。
+- [ ] 修改 `SystemUiHook.kt`：在 `loadPlugin` after hook 中获取 `miui.systemui.plugin` 的 ClassLoader，加载 `DeviceCardHook`。
+- [ ] 新增 `lsposed/DeviceCardHook.kt`：hook `DeviceInfoWrapper.performClicked`，过滤 `deviceType == "third_headset"`，通过广播查询 MAC，匹配后打开弹窗。
+- [ ] 新增 `lsposed/MainPanelControllerProxy.kt`：薄反射封装调用 `exitOrHide()` 隐藏控制中心。
+- [ ] 新增开关："Control center device card interception"（默认关）。
 
-## 8. 阶段 P6：SystemUI 控制中心 / 设备卡片入口
+---
 
-风险：高  
-目标：点击控制中心或设备中心的 Sony 耳机卡片时，打开 OpenBuds 快捷弹窗。
+## 阶段 P7：状态栏耳机图标（条件性）
 
-任务：
+风险：高
+前提：`StatusBarManager.setIconVisibility` 有效。
 
-- [ ] 在 `com.android.systemui` 中 hook 插件 class loader。
-  - 识别小米 SystemUI plugin class loader。
-  - 只在目标插件加载后安装二级 hook。
-- [ ] hook 控制中心设备卡片点击方法。
-  - 读取设备 id / MAC / device type。
-  - 只拦截 Sony 耳机。
-  - 非 Sony 设备立即放行。
-- [ ] 设备身份匹配。
-  - App 服务维护当前 Sony 设备 MAC。
-  - SystemUI hook 点击时向 App 查询或接收最近状态。
-  - 避免通过阻塞等待造成 SystemUI 卡顿。
-- [ ] 点击后打开 `QuickPopupActivity`。
-  - 使用 `FLAG_ACTIVITY_NEW_TASK`。
-  - 可选：隐藏控制中心面板。
-- [ ] 增加开关。
-  - 控制中心卡片接管。
-  - 点击后隐藏控制中心。
+待实现：
 
-验收：
-
-- [ ] 点击当前 Sony 耳机卡片打开快捷弹窗。
-- [ ] 点击其他蓝牙设备仍保持系统默认行为。
-- [ ] App 不在线时不阻塞 SystemUI。
-- [ ] SystemUI hook 失败时没有系统 UI 崩溃或卡死。
-
-## 9. 阶段 P7：状态栏耳机图标和系统状态展示
-
-风险：高  
-目标：在支持的 HyperOS 版本上显示更接近原生耳机状态的系统 UI。
-
-任务：
-
-- [ ] 调研状态栏耳机图标来源。
-  - 是系统蓝牙状态图标。
-  - 还是小米蓝牙通知 extras。
-  - 还是 SystemUI plugin 内部状态。
+- [ ] 调研状态栏耳机图标来源（系统蓝牙状态图标 / 小米蓝牙通知 extras / SystemUI plugin 内部状态）。
 - [ ] 首版只影响 OpenBuds 自己创建的通知 extras。
 - [ ] 若需要 hook SystemUI 状态控制器，先只做只读日志。
-- [ ] 添加版本白名单。
-  - 未知版本默认关闭。
-- [ ] 添加开关。
-  - 状态栏图标增强。
-  - 实验性 SystemUI 状态 hook。
+- [ ] 添加版本白名单，未知版本默认关闭。
+- [ ] 新增开关："Status bar icon enhancement"（默认关）。
 
-验收：
+---
 
-- [ ] 支持版本上连接 Sony 耳机后能显示耳机图标或等效系统提示。
-- [ ] 断开后图标消失。
-- [ ] 未知版本默认不启用实验 hook。
-- [ ] 无法显示时保留常驻通知作为 fallback。
+## 阶段 P8：系统蓝牙设置页入口（条件性）
 
-## 10. 阶段 P8：系统蓝牙设置页入口
+风险：很高
+前提：`com.android.settings` 目标类存在。
 
-风险：很高  
-目标：先做到“系统设备详情页出现 OpenBuds 入口”，不要一开始做完整嵌入式设置页。
+待实现：
 
-任务：
-
-- [ ] 把 `com.android.settings` 或小米设置包加入可选 scope。
-  - 默认不启用。
-  - Modules 页提示用户这是实验功能。
-- [ ] 调研系统蓝牙设备详情页类。
-  - Fragment / Activity 名。
-  - Preference screen 构建时机。
-  - 当前设备对象读取方式。
-- [ ] 只对 Sony 设备插入入口。
-  - 标题：Sony Sound settings / OpenBuds。
-  - summary：电量、ANC 当前状态或“打开 OpenBuds”。
-  - 点击：打开主 App 设备页或快捷弹窗。
+- [ ] 把 `com.android.settings` 或小米设置包加入可选 scope（默认不启用）。
+- [ ] Modules 页提示用户这是实验功能。
+- [ ] 调研系统蓝牙设备详情页类（Fragment/Activity 名、Preference screen 构建时机、当前设备对象读取方式）。
+- [ ] 只对 Sony 设备插入入口：标题 "Sony Sound settings / OpenBuds"，summary 显示电量/ANC 当前状态，点击打开主 App 设备页。
 - [ ] 不在第一版直接嵌入复杂 Compose UI。
 - [ ] 不覆盖系统原有蓝牙设置项。
+- [ ] 新增开关："System settings entry"（默认关）。
 
-验收：
+---
 
-- [ ] Sony 耳机设备详情页出现 OpenBuds 入口。
-- [ ] 非 Sony 设备不出现入口。
-- [ ] 点击入口能进入 App 对应设备页。
-- [ ] Settings hook 失败时系统设置不崩溃。
+## 阶段 P9：系统设置页内嵌控制（条件性）
 
-## 11. 阶段 P9：系统设置页内嵌控制
+风险：最高
+前提：P8 已验证，仅经验证的 HyperOS 构建启用。
 
-风险：最高  
-目标：在系统蓝牙详情页中逐步加入原生风格控制项。
+待实现（按功能逐项加入，不做一次性大页面）：
 
-任务：
-
-- [ ] 按功能逐项加入，不做一次性大页面。
-  - 第一批：电量只读、ANC 三态。
-  - 第二批：环境声等级、关注语音。
-  - 第三批：EQ preset、Clear Bass。
-  - 第四批：Quick Access、佩戴检测。
-  - 第五批：LE Audio 策略、连接质量、多点连接。
+- [ ] 第一批：电量只读、ANC 三态。
+- [ ] 第二批：环境声等级、关注语音。
+- [ ] 第三批：EQ preset、Clear Bass。
+- [ ] 第四批：Quick Access、佩戴检测。
+- [ ] 第五批：LE Audio 策略、连接质量、多点连接。
 - [ ] 每个设置项都必须有 capability gating。
 - [ ] 每个写入项都必须有失败反馈。
 - [ ] 长耗时操作不在 Settings/SystemUI 主线程执行。
 - [ ] 设置页只展示稳定功能；实验功能仍跳转 App 内页。
-
-验收：
-
-- [ ] 系统设置页内 ANC 写入成功并能反映状态回读。
-- [ ] 状态不可用时控件禁用而不是误写。
-- [ ] 系统设置页退出/重进后状态一致。
 - [ ] 系统更新导致 hook 失效时自动隐藏内嵌控制项。
+- [ ] 新增开关："System settings embedded controls"（默认关，实验性）。
 
-## 12. 测试计划
+---
+
+## 测试计划
 
 基础测试：
 
-- [ ] `.\gradlew.bat testDebugUnitTest`
-- [ ] `.\gradlew.bat assembleDebug`
+- [x] `.\gradlew.bat testDebugUnitTest`
+- [x] `.\gradlew.bat assembleDebug`
 - [ ] `.\gradlew.bat :app:compileDebugAndroidTestKotlin`
 
 真机回归：
@@ -431,31 +240,24 @@
 - [ ] 锁屏状态只显示用户允许的信息。
 - [ ] 未授权状态下不公开 MAC 明文。
 
-## 13. 发布和开关策略
+---
 
-建议所有系统集成功能都挂在 Settings > Modules：
+## 发布和开关策略
 
-- [ ] 模块总开关。
-- [ ] 后台服务开关。
-- [ ] 标准通知开关。
-- [ ] 连接弹窗开关。
-- [ ] HyperOS 通知增强开关。
-- [ ] Control Center 卡片接管开关。
-- [ ] 状态栏增强开关。
-- [ ] 系统设置入口开关。
-- [ ] 实验性系统设置内嵌控制开关。
+所有系统集成功能挂在 Settings > Modules：
 
-默认值：
+- [x] 后台服务开关（`serviceBackgroundRun`，默认关）
+- [x] 常驻通知开关（`notificationPersistent`，默认开）
+- [x] 连接弹窗开关（`connectionPopup`，默认关）
+- [ ] HyperOS 通知增强开关（默认关）
+- [ ] Control Center 卡片接管开关（默认关）
+- [ ] 状态栏增强开关（默认关）
+- [ ] 系统设置入口开关（默认关）
+- [ ] 实验性系统设置内嵌控制开关（默认关）
 
-- 标准通知：开。
-- 连接弹窗：关，首次引导用户开启。
-- HyperOS 通知增强：关，检测到兼容后建议开启。
-- Control Center 接管：关。
-- 状态栏增强：关。
-- 系统设置入口：关。
-- 系统设置内嵌控制：关。
+---
 
-## 14. 风险和回退
+## 风险和回退
 
 主要风险：
 
@@ -463,7 +265,7 @@
 - SystemUI hook 失败可能影响控制中心稳定性。
 - Settings hook 失败可能影响系统设置稳定性。
 - 蓝牙系统进程 hook 失败可能影响连接稳定性。
-- GPL 参考项目代码不能直接混入当前许可未知的 clean-room 实现。
+- GPL 参考项目代码不能直接混入 clean-room 实现（详见 `lsposed/GPL_BOUNDARY.md`）。
 
 回退要求：
 
@@ -472,20 +274,3 @@
 - 未知 ROM 版本默认关闭高风险功能。
 - App 标准通知和主 UI 永远作为 fallback。
 - 模块禁用后不能留下系统侧脏状态。
-
-## 15. 建议提交顺序
-
-1. `docs: add LSPosed system integration task plan`
-2. `refactor: introduce Sony control core interfaces`
-3. `feat: add headphone foreground service`
-4. `feat: add quick popup activity`
-5. `feat: add module diagnostics settings page`
-6. `feat: scaffold LSPosed module`
-7. `feat: add read-only HyperOS hook probes`
-8. `feat: bridge module actions to OpenBuds service`
-9. `feat: add HyperOS notification integration`
-10. `feat: intercept compatible control center device card`
-11. `feat: add experimental status bar integration`
-12. `feat: add experimental Bluetooth settings entry`
-13. `feat: add experimental embedded settings controls`
-

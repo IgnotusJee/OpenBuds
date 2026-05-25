@@ -48,6 +48,12 @@ import dev.ignotus.openbuds.ui.StatusPill
 import dev.ignotus.openbuds.ui.ThemeStyle
 import dev.ignotus.openbuds.ui.UiRenderCapabilities
 import dev.ignotus.openbuds.ui.reareyeHorizontalTransform
+import dev.ignotus.openbuds.lsposed.ProbeResultCache
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -70,6 +76,12 @@ internal fun SettingsScreen(
     onDebugLoggingChanged: (Boolean) -> Unit,
     onAutoReconnectChanged: (Boolean) -> Unit,
     onStrictScanFilterChanged: (Boolean) -> Unit,
+    serviceBackgroundRun: Boolean,
+    notificationPersistent: Boolean,
+    connectionPopup: Boolean,
+    onServiceBackgroundRunChanged: (Boolean) -> Unit,
+    onNotificationPersistentChanged: (Boolean) -> Unit,
+    onConnectionPopupChanged: (Boolean) -> Unit,
 ) {
     val routeScope = rememberCoroutineScope()
     val currentRoute = routeStack.lastOrNull() ?: SettingsRoute.Root
@@ -146,6 +158,12 @@ internal fun SettingsScreen(
             SettingsRoute.Modules -> SettingsModulesScreen(
                 bottomInnerPadding = bottomInnerPadding,
                 onBack = ::closeRoute,
+                serviceBackgroundRun = serviceBackgroundRun,
+                notificationPersistent = notificationPersistent,
+                connectionPopup = connectionPopup,
+                onServiceBackgroundRunChanged = onServiceBackgroundRunChanged,
+                onNotificationPersistentChanged = onNotificationPersistentChanged,
+                onConnectionPopupChanged = onConnectionPopupChanged,
             )
         }
     }
@@ -387,24 +405,78 @@ private fun Int.hexByteOrUnknown(): String =
 internal fun SettingsModulesScreen(
     bottomInnerPadding: Dp,
     onBack: () -> Unit,
+    serviceBackgroundRun: Boolean,
+    notificationPersistent: Boolean,
+    connectionPopup: Boolean,
+    onServiceBackgroundRunChanged: (Boolean) -> Unit,
+    onNotificationPersistentChanged: (Boolean) -> Unit,
+    onConnectionPopupChanged: (Boolean) -> Unit,
 ) {
+    val context = LocalContext.current
+    var probeStatus by remember { mutableStateOf("Loading...") }
+    var lastProbe by remember { mutableStateOf(0L) }
+
+    LaunchedEffect(Unit) {
+        ProbeResultCache.load(context)
+        probeStatus = ProbeResultCache.isCompatible()
+        lastProbe = ProbeResultCache.lastProbeTime()
+    }
+
     PageColumn(bottomInnerPadding = bottomInnerPadding) {
         RouteHeader(route = SettingsRoute.Modules, onBack = onBack)
-        SectionCard(title = "Reserved modules") {
-            listOf(
-                "EQ / Clear Bass",
-                "Ambient sound level",
-                "Wearing detection",
-                "Quick Access",
-                "Sense / AutoPlay",
-                "Multipoint / LE Audio / FOTA",
-            ).forEach { name ->
+
+        SectionCard(title = "Background service") {
+            SettingRow(
+                title = "Background service",
+                subtitle = "Keep connection alive and show persistent notification",
+                trailing = {
+                    Switch(
+                        checked = serviceBackgroundRun,
+                        onCheckedChange = onServiceBackgroundRunChanged,
+                    )
+                },
+            )
+            SettingRow(
+                title = "Persistent notification",
+                subtitle = "Show headphone status in notification drawer",
+                trailing = {
+                    Switch(
+                        checked = notificationPersistent,
+                        onCheckedChange = onNotificationPersistentChanged,
+                    )
+                },
+            )
+            SettingRow(
+                title = "Connection popup",
+                subtitle = "Show quick control popup when headphone connects",
+                trailing = {
+                    Switch(
+                        checked = connectionPopup,
+                        onCheckedChange = onConnectionPopupChanged,
+                    )
+                },
+            )
+        }
+
+        SectionCard(title = "LSPosed System Integration") {
+            SettingRow(
+                title = "ROM compatibility",
+                subtitle = probeStatus,
+                trailing = { StatusPill(probeStatus, probeStatus == "Compatible") },
+            )
+            if (lastProbe > 0) {
                 SettingRow(
-                    title = name,
-                    subtitle = "Interface reserved; implementation pending",
-                    trailing = { StatusPill("stub", false) },
+                    title = "Last probe",
+                    subtitle = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
+                        .format(java.util.Date(lastProbe)),
+                    trailing = { StatusPill("probed", true) },
                 )
             }
+            SettingRow(
+                title = "Experimental feature",
+                subtitle = "HyperOS/MIUI compatibility varies by version. Disable module if system becomes unstable.",
+                trailing = { StatusPill("caution", false) },
+            )
         }
     }
 }

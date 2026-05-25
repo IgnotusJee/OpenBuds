@@ -21,6 +21,10 @@ data class AppUiSettings(
     val themeStyle: String = ThemeStyle.Material.name,
     val colorMode: String = AppColorMode.System.name,
     val effectsEnabled: Boolean = false,
+    val serviceBackgroundRun: Boolean = false,
+    val notificationPersistent: Boolean = true,
+    val notificationLockscreen: Boolean = true,
+    val connectionPopup: Boolean = false,
 )
 
 class AppUiSettingsStore(private val context: Context) {
@@ -30,6 +34,10 @@ class AppUiSettingsStore(private val context: Context) {
             themeStyle = prefs[ThemeStyleKey] ?: ThemeStyle.Material.name,
             colorMode = prefs[ColorModeKey] ?: AppColorMode.System.name,
             effectsEnabled = prefs[EffectsEnabledKey] ?: false,
+            serviceBackgroundRun = prefs[ServiceBackgroundRunKey] ?: false,
+            notificationPersistent = prefs[NotificationPersistentKey] ?: true,
+            notificationLockscreen = prefs[NotificationLockscreenKey] ?: true,
+            connectionPopup = prefs[ConnectionPopupKey] ?: false,
         )
     }
 
@@ -57,11 +65,39 @@ class AppUiSettingsStore(private val context: Context) {
         }
     }
 
+    suspend fun setServiceBackgroundRun(enabled: Boolean) {
+        context.openbudsUiSettingsDataStore.edit { prefs ->
+            prefs[ServiceBackgroundRunKey] = enabled
+        }
+    }
+
+    suspend fun setNotificationPersistent(enabled: Boolean) {
+        context.openbudsUiSettingsDataStore.edit { prefs ->
+            prefs[NotificationPersistentKey] = enabled
+        }
+    }
+
+    suspend fun setNotificationLockscreen(enabled: Boolean) {
+        context.openbudsUiSettingsDataStore.edit { prefs ->
+            prefs[NotificationLockscreenKey] = enabled
+        }
+    }
+
+    suspend fun setConnectionPopup(enabled: Boolean) {
+        context.openbudsUiSettingsDataStore.edit { prefs ->
+            prefs[ConnectionPopupKey] = enabled
+        }
+    }
+
     private companion object {
         val NavigationBarModeKey = stringPreferencesKey("navigation_bar_mode")
         val ThemeStyleKey = stringPreferencesKey("theme_style")
         val ColorModeKey = stringPreferencesKey("color_mode")
         val EffectsEnabledKey = booleanPreferencesKey("effects_enabled")
+        val ServiceBackgroundRunKey = booleanPreferencesKey("service_background_run")
+        val NotificationPersistentKey = booleanPreferencesKey("notification_persistent")
+        val NotificationLockscreenKey = booleanPreferencesKey("notification_lockscreen")
+        val ConnectionPopupKey = booleanPreferencesKey("connection_popup")
     }
 }
 

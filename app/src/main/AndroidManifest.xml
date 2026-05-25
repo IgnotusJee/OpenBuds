@@ -8,6 +8,13 @@
         android:usesPermissionFlags="neverForLocation" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <permission
+        android:name="dev.ignotus.openbuds.permission.SYSTEM_INTEGRATION"
+        android:protectionLevel="signature" />
 
     <uses-feature
         android:name="android.hardware.bluetooth_le"
@@ -29,6 +36,34 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <service
+            android:name="dev.ignotus.openbuds.service.SonyControlService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
+        <activity
+            android:name="dev.ignotus.openbuds.QuickPopupActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:launchMode="singleInstance"
+            android:theme="@style/Theme.OpenBuds.Popup">
+            <intent-filter>
+                <action android:name="dev.ignotus.openbuds.action.SHOW_QUICK_POPUP" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <receiver
+            android:name="dev.ignotus.openbuds.receiver.SystemIntegrationReceiver"
+            android:exported="true"
+            android:permission="dev.ignotus.openbuds.permission.SYSTEM_INTEGRATION">
+            <intent-filter>
+                <action android:name="dev.ignotus.openbuds.action.QUERY_DEVICE_MAC" />
+                <action android:name="dev.ignotus.openbuds.action.SHOW_QUICK_POPUP" />
+            </intent-filter>
+        </receiver>
     </application>
 
 </manifest>

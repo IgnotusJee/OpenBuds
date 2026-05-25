@@ -89,4 +89,8 @@ dependencies {
   implementation(libs.androidx.navigation3.ui)
   implementation(libs.androidx.navigation3.runtime)
   implementation(libs.androidx.lifecycle.viewmodel.navigation3)
+
+  // LSPosed / Xposed
+  compileOnly(libs.libxposed.api)
+  implementation(libs.libxposed.service)
 }

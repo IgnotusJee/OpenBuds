@@ -439,6 +439,18 @@ fun OpenBudsApp(
                                     onDebugLoggingChanged = onDebugLoggingChanged,
                                     onAutoReconnectChanged = onAutoReconnectChanged,
                                     onStrictScanFilterChanged = onStrictScanFilterChanged,
+                                    serviceBackgroundRun = loadedAppUiSettings.serviceBackgroundRun,
+                                    notificationPersistent = loadedAppUiSettings.notificationPersistent,
+                                    connectionPopup = loadedAppUiSettings.connectionPopup,
+                                    onServiceBackgroundRunChanged = {
+                                        scope.launch { settingsStore.setServiceBackgroundRun(it) }
+                                    },
+                                    onNotificationPersistentChanged = {
+                                        scope.launch { settingsStore.setNotificationPersistent(it) }
+                                    },
+                                    onConnectionPopupChanged = {
+                                        scope.launch { settingsStore.setConnectionPopup(it) }
+                                    },
                                 )
                                 AppRoute.About -> AboutScreen(
                                     state = state,
