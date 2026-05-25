@@ -2,18 +2,20 @@ package dev.ignotus.openbuds.lsposed
 
 import android.util.Log
 import io.github.libxposed.api.XposedModule
-import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
 
 class ModuleMain : XposedModule() {
 
     init {
         val processName = try {
-            val f = ModuleLoadedParam::class.java.getDeclaredField("processName")
-            f.isAccessible = true
-            f.get(null) as? String ?: "unknown"
-        } catch (_: Exception) { "unknown" }
+            val atClass = Class.forName("android.app.ActivityThread")
+            val method = atClass.getDeclaredMethod("currentProcessName")
+            method.invoke(null) as? String ?: "unknown"
+        } catch (_: Exception) {
+            "unknown"
+        }
         log("ModuleMain loaded in process: $processName")
+        instance = this
     }
 
     override fun onPackageLoaded(param: PackageLoadedParam) {

@@ -1,6 +1,5 @@
 package dev.ignotus.openbuds
 
-import android.app.Activity
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -9,6 +8,10 @@ import android.os.Bundle
 import android.os.IBinder
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import dev.ignotus.openbuds.service.ControlCommand
 import dev.ignotus.openbuds.service.DeviceStateSnapshot
 import dev.ignotus.openbuds.service.SonyControlService
@@ -23,18 +26,23 @@ class QuickPopupActivity : ComponentActivity() {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             binder = service as? SonyControlService.LocalBinder
             bound = true
+            // trigger recomposition with the now-available binder
+            _connectedBinder = binder
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
             binder = null
             bound = false
+            _connectedBinder = null
         }
     }
+
+    @Volatile
+    private var _connectedBinder: SonyControlService.LocalBinder? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Bind to service
         bindService(
             Intent(this, SonyControlService::class.java),
             connection,
@@ -42,12 +50,25 @@ class QuickPopupActivity : ComponentActivity() {
         )
 
         setContent {
-            val snapshot = DeviceStateSnapshot.EMPTY // Phase 4: observe via LiveData
+            var currentBinder by remember { mutableStateOf(_connectedBinder) }
+
+            // Observe LiveData from the connected binder
+            val snapshot = remember(currentBinder) {
+                currentBinder?.state?.let { liveData ->
+                    object {
+                        var value by mutableStateOf(liveData.value ?: DeviceStateSnapshot.EMPTY)
+                    }.also { observer ->
+                        liveData.observe(this@QuickPopupActivity) { newValue ->
+                            observer.value = newValue ?: DeviceStateSnapshot.EMPTY
+                        }
+                    }
+                }
+            }
 
             QuickPopupScreen(
-                state = snapshot,
+                state = snapshot?.value ?: DeviceStateSnapshot.EMPTY,
                 onExecuteCommand = { command ->
-                    binder?.execute(command) ?: false
+                    currentBinder?.execute(command) ?: false
                 },
                 onOpenFullApp = {
                     val intent = Intent(this, MainActivity::class.java).apply {

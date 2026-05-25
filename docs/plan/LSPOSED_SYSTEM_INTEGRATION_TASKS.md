@@ -125,6 +125,70 @@
 - [x] 新增 `receiver/SystemIntegrationReceiver.kt` — 在 App 进程中处理 `QUERY_DEVICE_MAC` 和 `SHOW_QUICK_POPUP`。
 - [x] 更新 `AndroidManifest.xml` — `signature` 级别自定义权限 `SYSTEM_INTEGRATION` + Receiver 声明。
 
+## 阶段 P4.5：P1-P4 审计修复（进入 P5 前阻断）
+
+风险：中
+目标：修复 P1-P4 最近实现中的稳定性、安全性和协议语义问题，保证 App 级弹窗、前台 Service、LSPosed 只读探测和模块-App 通信桥在继续做 HyperOS 通知/SystemUI hook 前足够稳。
+
+审计范围：
+
+- 最近 LSPosed 系统集成基础改动：P1 到 P4。
+- 重点文件：`QuickPopupActivity.kt`、`QuickPopupScreen.kt`、`AndroidManifest.xml`、`SonyControlService.kt`、`SonyHeadphoneRepository.kt`、`SonyTandemV2Table1Protocol.kt`、`lsposed/*`。
+- 工具结果：CodeRabbit 对 `HEAD~1` 到当前工作区的审计问题。
+
+修复清单：
+
+- [x] **Critical：QuickPopupActivity 永远显示空状态** ✅ 已修复
+  - 方案：`QuickPopupActivity` 通过 `LiveData.observe()` 订阅 Service 实时状态，binder 存入 `mutableStateOf` 触发重组。
+
+- [x] **Critical：ModuleMain 进程名反射读取不安全** ✅ 已修复
+  - 方案：改用 `Class.forName("android.app.ActivityThread").getDeclaredMethod("currentProcessName").invoke(null)` 反射获取进程名。
+
+- [x] **Critical：ModuleMain.instance 未初始化** ✅ 已修复
+  - 方案：在 `init` 中赋值 `instance = this`。
+
+- [x] **Major：QuickPopupActivity exported 入口缺少权限保护** ✅ 已修复
+  - 方案：移除 `QuickPopupActivity` 的 intent-filter，改为 `exported=false`；仅 Receiver 和内部组件可显式启动。
+
+- [x] **Major：V2 NC/ASM 写入需要使用 inverted OnOffSettingValue** ✅ 已修复
+  - 方案：`NCASM_ON = 0x00`（原 0x01），`NCASM_OFF = 0x01`（原 0x00），符合 Sony 协议 `0x00=ON, 0x01=OFF`。`NCASM_EFFECT_OFF` 保持不变（非 OnOff 值）。Builder/parser/adapter 测试全部更新。
+
+- [ ] **Major：setNoiseControlMode 乐观更新 confirmed state** ⚠️ 已知问题，暂缓
+  - 说明：与 CLAUDE.md 记录的已知问题 #2 相同，非本次改动引入。需更大范围重构（pending/confirm 状态流），留待后续专项处理。
+
+- [x] **Major：ProbeResultCache 非线程安全** ✅ 已修复
+  - 方案：所有公开 API 使用 `synchronized(lock)` 保护。
+
+- [x] **Minor：QuickPopupActivity 初次 composition 时 binder 为空** ✅ 已修复
+  - 方案：binder 通过 `mutableStateOf` 在 `onServiceConnected` 中赋值触发重组。
+
+- [x] **Minor：QuickPopupScreen 在 never-connected 情况下不会自动关闭** ✅ 已修复
+  - 方案：条件改为 `!state.isConnected`，移除 `deviceName != null` 要求。
+
+- [x] **Minor：ProbeResultCache 方法列表会重复追加** ✅ 已修复
+  - 方案：使用 `.distinct()` 去重。
+
+- [x] **Minor：ProbeResultCache.save() 静默吞异常** ✅ 已修复
+  - 方案：`catch (e: Exception) { Log.e(TAG, "Failed to save $FILE_NAME", e) }`。
+
+- [x] **Minor：ProbeResultCache.load() 静默吞异常** ✅ 已修复
+  - 方案：`catch (e: Exception) { Log.e(TAG, "Failed to load $FILE_NAME", e) }`。
+
+修复顺序：
+
+1. 先修安全和崩溃阻断项：Activity 权限、`ModuleMain` 初始化、QuickPopup 实时状态。
+2. 再修协议和状态一致性：NC/ASM inverted 编码、noise control pending/confirm 流程。
+3. 最后修诊断缓存健壮性：线程安全、去重、save/load 日志。
+
+回归要求：
+
+- [x] `.\gradlew.bat testDebugUnitTest`
+- [x] `.\gradlew.bat assembleDebug`
+- [ ] `.\gradlew.bat :app:compileDebugAndroidTestKotlin`
+- [ ] 手动验证：未启用 LSPosed 时，主 App、前台 Service、常驻通知、QuickPopup 正常。
+- [ ] 手动验证：第三方未授权 Intent 不能直接打开 `QuickPopupActivity`。
+- [ ] 手动验证：ProbeResultCache JSON 损坏时 Settings 模块页不崩溃，并输出错误日志。
+
 ---
 
 ## 阶段 P5：HyperOS 通知集成（条件性）

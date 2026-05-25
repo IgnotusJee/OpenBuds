@@ -44,16 +44,11 @@
 
         <activity
             android:name="dev.ignotus.openbuds.QuickPopupActivity"
-            android:exported="true"
+            android:exported="false"
             android:excludeFromRecents="true"
             android:taskAffinity=""
             android:launchMode="singleInstance"
-            android:theme="@style/Theme.OpenBuds.Popup">
-            <intent-filter>
-                <action android:name="dev.ignotus.openbuds.action.SHOW_QUICK_POPUP" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </activity>
+            android:theme="@style/Theme.OpenBuds.Popup" />
 
         <receiver
             android:name="dev.ignotus.openbuds.receiver.SystemIntegrationReceiver"

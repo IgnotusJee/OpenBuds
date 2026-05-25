@@ -60,7 +60,7 @@ fun QuickPopupScreen(
     var ambientSliderValue by remember(state.ambientLevel) { mutableFloatStateOf((state.ambientLevel ?: 10).toFloat()) }
 
     LaunchedEffect(state.isConnected) {
-        if (!state.isConnected && state.deviceName != null) {
+        if (!state.isConnected) {
             dismissCountdown = 5
             while (dismissCountdown > 0) {
                 delay(1000)
