@@ -57,6 +57,7 @@ The Android rebuild lives in `app/` as a Jetpack Compose project with package `d
 ```text
 app/src/main/java/dev/ignotus/openbuds/
 ├── MainActivity.kt
+├── QuickPopupActivity.kt       # 对话框主题 Activity，承载 QuickPopupScreen
 ├── ble/
 │   ├── SonyBleClient.kt          # 设备发现、GATT 握手、SPP 选择、诊断
 │   ├── SonySppTransport.kt       # Sony SPP 帧、ACK、转义、校验和
@@ -73,6 +74,14 @@ app/src/main/java/dev/ignotus/openbuds/
 │       ├── LinkBudsSProfile.kt
 │       ├── Wf1000Xm5Profile.kt
 │       └── Wh1000Xm4Profile.kt
+├── lsposed/                      # LSPosed 模块（可选系统集成层）
+│   ├── ModuleMain.kt             # XposedModule 入口，按进程分发 probe + hook
+│   ├── BluetoothProcessHook.kt   # com.android.bluetooth 进程探测
+│   ├── XiaomiBluetoothHook.kt    # com.xiaomi.bluetooth hook（MiuiBluetoothNotification 构造函数）
+│   ├── SystemUiHook.kt           # com.android.systemui 进程探测
+│   ├── CrossProcessActions.kt    # 跨进程 action 常量和 extra key 定义
+│   ├── HyperOsBatteryNotification.kt # HyperOS 风格电量通知 BroadcastReceiver
+│   └── ProbeResultCache.kt       # 类存在性 JSON 持久化，供 Settings 页读取
 ├── media/
 │   └── MediaPlaybackController.kt
 ├── protocol/
@@ -85,6 +94,12 @@ app/src/main/java/dev/ignotus/openbuds/
 │   ├── SonyTandemV1Table2Protocol.kt
 │   ├── SonyTandemV2Table1Protocol.kt  # 含 SonyTandemFrame + TandemMessage 定义
 │   └── SonyTandemV2Table2Protocol.kt
+├── receiver/
+│   └── SystemIntegrationReceiver.kt # 跨进程广播接收器，处理系统进程→App 通信
+├── service/
+│   ├── SonyControlService.kt       # 前台 Service，持有 Repository，暴露 LiveData 状态
+│   ├── DeviceStateSnapshot.kt      # 精简状态 DTO，支持 Bundle 序列化
+│   └── ControlCommand.kt           # sealed class：SetNoiseControl / Playback / Refresh
 ├── theme/
 │   └── Theme.kt
 └── ui/
@@ -98,6 +113,7 @@ app/src/main/java/dev/ignotus/openbuds/
         ├── AboutScreen.kt
         ├── DeviceScreen.kt
         ├── HomeScreen.kt
+        ├── QuickPopupScreen.kt     # 连接弹窗 Compose 布局
         └── SettingsScreen.kt
 ```
 
