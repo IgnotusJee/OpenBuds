@@ -19,26 +19,20 @@ import dev.ignotus.openbuds.ui.screen.QuickPopupScreen
 
 class QuickPopupActivity : ComponentActivity() {
 
-    private var binder: SonyControlService.LocalBinder? = null
+    private val connectedBinder = mutableStateOf<SonyControlService.LocalBinder?>(null)
     private var bound = false
 
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
-            binder = service as? SonyControlService.LocalBinder
             bound = true
-            // trigger recomposition with the now-available binder
-            _connectedBinder = binder
+            connectedBinder.value = service as? SonyControlService.LocalBinder
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
-            binder = null
             bound = false
-            _connectedBinder = null
+            connectedBinder.value = null
         }
     }
-
-    @Volatile
-    private var _connectedBinder: SonyControlService.LocalBinder? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,28 +44,25 @@ class QuickPopupActivity : ComponentActivity() {
         )
 
         setContent {
-            var currentBinder by remember { mutableStateOf(_connectedBinder) }
+            val binder by connectedBinder
+            var snapshot by remember { mutableStateOf(DeviceStateSnapshot.EMPTY) }
 
-            // Observe LiveData from the connected binder
-            val snapshot = remember(currentBinder) {
-                currentBinder?.state?.let { liveData ->
-                    object {
-                        var value by mutableStateOf(liveData.value ?: DeviceStateSnapshot.EMPTY)
-                    }.also { observer ->
-                        liveData.observe(this@QuickPopupActivity) { newValue ->
-                            observer.value = newValue ?: DeviceStateSnapshot.EMPTY
-                        }
-                    }
+            // Bridge LiveData → Compose state. Uses Activity-lifecycle-aware observe(),
+            // which auto-removes the observer when the Activity is destroyed.
+            androidx.compose.runtime.DisposableEffect(binder) {
+                binder?.state?.observe(this@QuickPopupActivity) { newValue ->
+                    snapshot = newValue ?: DeviceStateSnapshot.EMPTY
                 }
+                onDispose { }
             }
 
             QuickPopupScreen(
-                state = snapshot?.value ?: DeviceStateSnapshot.EMPTY,
+                state = snapshot,
                 onExecuteCommand = { command ->
-                    currentBinder?.execute(command) ?: false
+                    binder?.execute(command) ?: false
                 },
                 onOpenFullApp = {
-                    val intent = Intent(this, MainActivity::class.java).apply {
+                    val intent = Intent(this@QuickPopupActivity, MainActivity::class.java).apply {
                         addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
                     }
                     startActivity(intent)

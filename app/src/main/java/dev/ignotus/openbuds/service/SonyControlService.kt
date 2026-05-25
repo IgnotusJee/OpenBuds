@@ -13,6 +13,7 @@ import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import dev.ignotus.openbuds.MainActivity
+import dev.ignotus.openbuds.QuickPopupActivity
 import dev.ignotus.openbuds.data.SonyHeadphoneRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -83,11 +84,7 @@ class SonyControlService : Service() {
         when (intent?.action) {
             ACTION_DISCONNECT -> repository.disconnect()
             ACTION_SHOW_POPUP -> {
-                val popupIntent = Intent(ACTION_SHOW_POPUP).apply {
-                    setClassName(
-                        this@SonyControlService,
-                        "dev.ignotus.openbuds.QuickPopupActivity"
-                    )
+                val popupIntent = Intent(this@SonyControlService, QuickPopupActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 startActivity(popupIntent)
@@ -127,8 +124,7 @@ class SonyControlService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
-        val popupIntent = Intent(ACTION_SHOW_POPUP).apply {
-            setClassName(this@SonyControlService, "dev.ignotus.openbuds.QuickPopupActivity")
+        val popupIntent = Intent(this@SonyControlService, QuickPopupActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         val popupPending = PendingIntent.getActivity(
