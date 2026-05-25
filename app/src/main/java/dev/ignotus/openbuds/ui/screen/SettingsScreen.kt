@@ -80,10 +80,12 @@ internal fun SettingsScreen(
     notificationPersistent: Boolean,
     connectionPopup: Boolean,
     hyperOsNotification: Boolean,
+    controlCenterIntercept: Boolean,
     onServiceBackgroundRunChanged: (Boolean) -> Unit,
     onNotificationPersistentChanged: (Boolean) -> Unit,
     onConnectionPopupChanged: (Boolean) -> Unit,
     onHyperOsNotificationChanged: (Boolean) -> Unit,
+    onControlCenterInterceptChanged: (Boolean) -> Unit,
 ) {
     val routeScope = rememberCoroutineScope()
     val currentRoute = routeStack.lastOrNull() ?: SettingsRoute.Root
@@ -164,10 +166,12 @@ internal fun SettingsScreen(
                 notificationPersistent = notificationPersistent,
                 connectionPopup = connectionPopup,
                 hyperOsNotification = hyperOsNotification,
+                controlCenterIntercept = controlCenterIntercept,
                 onServiceBackgroundRunChanged = onServiceBackgroundRunChanged,
                 onNotificationPersistentChanged = onNotificationPersistentChanged,
                 onConnectionPopupChanged = onConnectionPopupChanged,
                 onHyperOsNotificationChanged = onHyperOsNotificationChanged,
+                onControlCenterInterceptChanged = onControlCenterInterceptChanged,
             )
         }
     }
@@ -413,10 +417,12 @@ internal fun SettingsModulesScreen(
     notificationPersistent: Boolean,
     connectionPopup: Boolean,
     hyperOsNotification: Boolean,
+    controlCenterIntercept: Boolean,
     onServiceBackgroundRunChanged: (Boolean) -> Unit,
     onNotificationPersistentChanged: (Boolean) -> Unit,
     onConnectionPopupChanged: (Boolean) -> Unit,
     onHyperOsNotificationChanged: (Boolean) -> Unit,
+    onControlCenterInterceptChanged: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
     var probeStatus by remember { mutableStateOf("Loading...") }
@@ -472,6 +478,20 @@ internal fun SettingsModulesScreen(
                         Switch(
                             checked = hyperOsNotification,
                             onCheckedChange = onHyperOsNotificationChanged,
+                        )
+                    },
+                )
+            }
+            val ccCompat = ProbeResultCache.allResults()
+                .any { it.className == "com.android.systemui.shared.plugins.PluginInstance" && it.found }
+            if (ccCompat) {
+                SettingRow(
+                    title = "Control center device card interception",
+                    subtitle = "Open OpenBuds popup when tapping the headphone card in HyperOS control center (requires LSPosed)",
+                    trailing = {
+                        Switch(
+                            checked = controlCenterIntercept,
+                            onCheckedChange = onControlCenterInterceptChanged,
                         )
                     },
                 )

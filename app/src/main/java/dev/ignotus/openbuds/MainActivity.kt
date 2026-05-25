@@ -33,7 +33,7 @@ class MainActivity : ComponentActivity() {
         configureInitialSystemBars()
         setContent {
             val repository = remember {
-                SonyHeadphoneRepository(applicationContext)
+                SonyHeadphoneRepository.getInstance(applicationContext)
             }
             val state by repository.state.collectAsStateWithLifecycle()
             var debugActionRan by remember { mutableStateOf(false) }
@@ -47,6 +47,9 @@ class MainActivity : ComponentActivity() {
                         add(Manifest.permission.BLUETOOTH_CONNECT)
                     } else {
                         add(Manifest.permission.ACCESS_FINE_LOCATION)
+                    }
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        add(Manifest.permission.POST_NOTIFICATIONS)
                     }
                 }.toTypedArray()
             }

@@ -33,7 +33,11 @@ class ModuleMain : XposedModule() {
                 hook.probe()
                 hook.hook()
             }
-            "com.android.systemui" -> SystemUiHook(cl).probe()
+            "com.android.systemui" -> {
+                val hook = SystemUiHook(cl)
+                hook.probe()
+                hook.hook()
+            }
         }
         ProbeResultCache.persistShared()
     }

@@ -33,7 +33,7 @@ class SonyControlService : Service() {
     private var lastBroadcastMac: String? = null
 
     inner class LocalBinder : Binder() {
-        val state: LiveData<DeviceStateSnapshot> = stateLiveData
+        val state: LiveData<DeviceStateSnapshot> get() = stateLiveData
         fun execute(command: ControlCommand): Boolean {
             if (!stateLiveData.value!!.isProtocolReady && command !is ControlCommand.Refresh) {
                 Log.w(TAG, "Command ignored: protocol not ready")
@@ -70,13 +70,14 @@ class SonyControlService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        repository = SonyHeadphoneRepository(this)
+        repository = SonyHeadphoneRepository.getInstance(this)
         startForeground(NOTIFICATION_ID, createNotification(DeviceStateSnapshot.EMPTY))
 
         val settingsStore = AppUiSettingsStore(this)
         serviceScope.launch {
             settingsStore.settings.collect { settings ->
                 hyperOsEnabled = settings.hyperOsNotification
+                Companion.controlCenterInterceptEnabled = settings.controlCenterIntercept
             }
         }
 
@@ -93,6 +94,7 @@ class SonyControlService : Service() {
                     sendHyperOsCancelBroadcast(lastBroadcastMac!!)
                 }
                 lastBroadcastMac = snapshot.deviceMac
+                Companion.currentDeviceMac = snapshot.deviceMac
             }
         }
     }
@@ -215,5 +217,13 @@ class SonyControlService : Service() {
         private const val NOTIFICATION_ID = 2001
         const val ACTION_DISCONNECT = "dev.ignotus.openbuds.action.DISCONNECT"
         const val ACTION_SHOW_POPUP = "dev.ignotus.openbuds.action.SHOW_QUICK_POPUP"
+
+        @Volatile
+        var currentDeviceMac: String? = null
+            private set
+
+        @Volatile
+        var controlCenterInterceptEnabled: Boolean = false
+            private set
     }
 }

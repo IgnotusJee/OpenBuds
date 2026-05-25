@@ -257,17 +257,40 @@ HyperOS notification drawer (渠道 BTHeadset$MAC, ID 10003)
 
 ---
 
-## 阶段 P6：控制中心设备卡片入口（条件性）
+## 阶段 P6 ✅ 已完成：控制中心设备卡片入口（条件性）
 
 风险：高
-前提：`PluginInstance.loadPlugin`、`DeviceInfoWrapper.performClicked`、`MainPanelController` 均存在。
+前提：`PluginInstance.loadPlugin` 在 ProbeResultCache 中标记为存在。（`DeviceInfoWrapper.performClicked`、`MainPanelController` 的类存在性在 hook 时通过 plugin ClassLoader 动态判断，失败则跳过并记录日志。）
 
-待实现：
+完成内容：
 
-- [ ] 修改 `SystemUiHook.kt`：在 `loadPlugin` after hook 中获取 `miui.systemui.plugin` 的 ClassLoader，加载 `DeviceCardHook`。
-- [ ] 新增 `lsposed/DeviceCardHook.kt`：hook `DeviceInfoWrapper.performClicked`，过滤 `deviceType == "third_headset"`，通过广播查询 MAC，匹配后打开弹窗。
-- [ ] 新增 `lsposed/MainPanelControllerProxy.kt`：薄反射封装调用 `exitOrHide()` 隐藏控制中心。
-- [ ] 新增开关："Control center device card interception"（默认关）。
+- [x] 新增 `lsposed/DeviceCardHook.kt` — hook `DeviceInfoWrapper.performClicked`，过滤 `deviceType == "third_headset"`，通过广播查询 MAC（`ACTION_QUERY_DEVICE_MAC` / `ACTION_DEVICE_MAC_RECEIVED`），匹配后调用 `MainPanelControllerProxy.exitOrHide()` 隐藏控制中心并启动 `QuickPopupActivity`。使用 `CountDownLatch` 等待 200ms 超时，超时或 MAC 不匹配时透传原始点击。
+- [x] 新增 `lsposed/MainPanelControllerProxy.kt` — 薄反射封装调用 `exitOrHide()` 隐藏控制中心，null-safe，异常安全。
+- [x] 修改 `lsposed/SystemUiHook.kt` — 新增 `hook()` 方法：hook `PluginInstance.loadPlugin`（after-hook），检查 `getPackage()` 返回 `"miui.systemui.plugin"` 后通过 `mPluginFactory.mClassLoaderFactory.get()` 反射链提取 plugin ClassLoader，创建 `DeviceCardHook` 并调用 `.hook()`。注：probe 仅检测 `PluginInstance`（SystemUI ClassLoader 可访问），插件类存在性在 hook 时动态判断。
+- [x] 修改 `lsposed/ModuleMain.kt` — `com.android.systemui` 分发逻辑改为同时调用 `probe()` 和 `hook()`。
+- [x] 修改 `receiver/SystemIntegrationReceiver.kt` — 实现 `ACTION_QUERY_DEVICE_MAC` 处理：检查 `SonyControlService.controlCenterInterceptEnabled`，读取 `SonyControlService.currentDeviceMac`，发送 `ACTION_DEVICE_MAC_RECEIVED` 显式广播到 `com.android.systemui`。toggle 关闭时直接返回（不响应），hook 超时后透传点击。
+- [x] 修改 `service/SonyControlService.kt` — 新增 companion 字段 `currentDeviceMac` 和 `controlCenterInterceptEnabled`（`@Volatile`），在 settings collector 和 state collector 中同步更新。
+- [x] 更新 `AppUiSettingsStore.kt` — 新增 `controlCenterIntercept: Boolean = false` 偏好、`ControlCenterInterceptKey` 键、`setControlCenterIntercept()` setter。
+- [x] 更新 `SettingsModulesScreen` — 在 "Background service" SectionCard 内新增 "Control center device card interception" 开关行，仅当 ProbeResultCache 中 `PluginInstance` class 标记为 found 时可见。
+- [x] 更新 `OpenBudsApp.kt` — 在 `SettingsScreen` 调用点接入 `controlCenterIntercept` 参数。
+
+架构流：
+```
+User taps device card in HyperOS control center
+  → DeviceInfoWrapper.performClicked() [hooked by DeviceCardHook, runs in SystemUI process]
+    → Check getDeviceType() == "third_headset"
+    → Register dynamic BroadcastReceiver (ACTION_DEVICE_MAC_RECEIVED)
+    → Send ACTION_QUERY_DEVICE_MAC explicit broadcast to dev.ignotus.openbuds
+    → SystemIntegrationReceiver (app process) checks toggle, responds with MAC
+    → DeviceCardHook receives MAC via dynamic receiver
+    → If MAC == getDeviceInfo().getId():
+      → Launch QuickPopupActivity (NEW_TASK)
+      → MainPanelControllerProxy.exitOrHide(panelController)
+      → Cancel original click (return non-null)
+    → If timeout or mismatch: let original click through (chain.proceed())
+```
+
+回退：`controlCenterIntercept` 默认 `false`，toggle 关闭时 `SystemIntegrationReceiver` 不响应 MAC 查询，hook 200ms 超时后透传点击。`PluginInstance` 不存在时 toggle 不显示，`loadPlugin` hook 不注册。插件类不存在时 `DeviceCardHook.hook()` 跳过并记录日志，不影响 SystemUI 稳定性。
 
 ---
 
@@ -365,7 +388,7 @@ HyperOS notification drawer (渠道 BTHeadset$MAC, ID 10003)
 - [x] 常驻通知开关（`notificationPersistent`，默认开）
 - [x] 连接弹窗开关（`connectionPopup`，默认关）
 - [x] HyperOS 通知增强开关（`hyperOsNotification`，默认关）
-- [ ] Control Center 卡片接管开关（默认关）
+- [x] Control Center 卡片接管开关（`controlCenterIntercept`，默认关）
 - [ ] 状态栏增强开关（默认关）
 - [ ] 系统设置入口开关（默认关）
 - [ ] 实验性系统设置内嵌控制开关（默认关）

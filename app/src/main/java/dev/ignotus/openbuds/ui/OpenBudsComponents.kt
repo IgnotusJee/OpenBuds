@@ -70,11 +70,11 @@ internal fun ModeButton(
 ) {
     if (selected) {
         Button(onClick = onClick, enabled = enabled, modifier = modifier) {
-            Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(text, softWrap = false)
         }
     } else {
         OutlinedButton(onClick = onClick, enabled = enabled, modifier = modifier) {
-            Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(text, softWrap = false)
         }
     }
 }

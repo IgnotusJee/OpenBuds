@@ -27,10 +27,8 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -44,7 +42,6 @@ import dev.ignotus.openbuds.service.ControlCommand
 import dev.ignotus.openbuds.service.DeviceStateSnapshot
 import dev.ignotus.openbuds.ui.ModeButton
 import dev.ignotus.openbuds.ui.StatusPill
-import kotlinx.coroutines.delay
 
 @Composable
 fun QuickPopupScreen(
@@ -53,26 +50,12 @@ fun QuickPopupScreen(
     onOpenFullApp: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var dismissCountdown by remember { mutableStateOf(0) }
     var ambientSliderValue by remember(state.ambientLevel) { mutableFloatStateOf((state.ambientLevel ?: 10).toFloat()) }
-
-    LaunchedEffect(state.isConnected) {
-        if (!state.isConnected) {
-            dismissCountdown = 5
-            while (dismissCountdown > 0) {
-                delay(1000)
-                dismissCountdown--
-            }
-            onDismiss()
-        } else {
-            dismissCountdown = 0
-        }
-    }
 
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(24.dp),
+            .padding(12.dp),
         contentAlignment = Alignment.TopCenter,
     ) {
         Card(
@@ -84,7 +67,7 @@ fun QuickPopupScreen(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Column(
-                modifier = Modifier.padding(24.dp),
+                modifier = Modifier.padding(16.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 // Header: device icon + name
@@ -137,13 +120,6 @@ fun QuickPopupScreen(
                     // Playback control row
                     PlaybackControlRow(state, onExecuteCommand)
 
-                } else if (dismissCountdown > 0) {
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        text = "Closing in $dismissCountdown...",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 } else {
                     Spacer(Modifier.height(12.dp))
                     Icon(

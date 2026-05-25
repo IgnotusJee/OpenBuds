@@ -1,11 +1,14 @@
 package dev.ignotus.openbuds.ui
 
 import android.app.Activity
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.content.Context
 import android.os.Build
 import android.util.LruCache
+import androidx.core.content.ContextCompat
+import dev.ignotus.openbuds.service.SonyControlService
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ContentTransform
@@ -294,6 +297,12 @@ fun OpenBudsApp(
         )
         return
     }
+    LaunchedEffect(Unit) {
+        if (loadedAppUiSettings.serviceBackgroundRun) {
+            val intent = Intent(context, SonyControlService::class.java)
+            ContextCompat.startForegroundService(context, intent)
+        }
+    }
     val navigationBarMode = remember(loadedAppUiSettings.navigationBarMode) {
         enumValueOrDefault(loadedAppUiSettings.navigationBarMode, ReareyeNavigationBarMode.Floating)
     }
@@ -443,8 +452,15 @@ fun OpenBudsApp(
                                     notificationPersistent = loadedAppUiSettings.notificationPersistent,
                                     connectionPopup = loadedAppUiSettings.connectionPopup,
                                     hyperOsNotification = loadedAppUiSettings.hyperOsNotification,
-                                    onServiceBackgroundRunChanged = {
-                                        scope.launch { settingsStore.setServiceBackgroundRun(it) }
+                                    controlCenterIntercept = loadedAppUiSettings.controlCenterIntercept,
+                                    onServiceBackgroundRunChanged = { enabled ->
+                                        scope.launch { settingsStore.setServiceBackgroundRun(enabled) }
+                                        val intent = Intent(context, SonyControlService::class.java)
+                                        if (enabled) {
+                                            ContextCompat.startForegroundService(context, intent)
+                                        } else {
+                                            context.stopService(intent)
+                                        }
                                     },
                                     onNotificationPersistentChanged = {
                                         scope.launch { settingsStore.setNotificationPersistent(it) }
@@ -454,6 +470,9 @@ fun OpenBudsApp(
                                     },
                                     onHyperOsNotificationChanged = {
                                         scope.launch { settingsStore.setHyperOsNotification(it) }
+                                    },
+                                    onControlCenterInterceptChanged = {
+                                        scope.launch { settingsStore.setControlCenterIntercept(it) }
                                     },
                                 )
                                 AppRoute.About -> AboutScreen(

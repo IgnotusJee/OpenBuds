@@ -77,8 +77,10 @@ app/src/main/java/dev/ignotus/openbuds/
 ├── lsposed/                      # LSPosed 模块（可选系统集成层）
 │   ├── ModuleMain.kt             # XposedModule 入口，按进程分发 probe + hook
 │   ├── BluetoothProcessHook.kt   # com.android.bluetooth 进程探测
-│   ├── XiaomiBluetoothHook.kt    # com.xiaomi.bluetooth hook（MiuiBluetoothNotification 构造函数）
-│   ├── SystemUiHook.kt           # com.android.systemui 进程探测
+│   ├── XiaomiBluetoothHook.kt    # com.xiaomi.bluetooth hook（MiuiBluetoothNotification 构造函数 + HyperOsBatteryReceiver 注册）
+│   ├── SystemUiHook.kt           # com.android.systemui 进程探测 + PluginInstance.loadPlugin hook
+│   ├── DeviceCardHook.kt         # 控制中心设备卡片点击拦截：DeviceInfoWrapper.performClicked → MAC 匹配 → QuickPopup
+│   ├── MainPanelControllerProxy.kt # 反射封装 exitOrHide()，隐藏控制中心
 │   ├── CrossProcessActions.kt    # 跨进程 action 常量和 extra key 定义
 │   ├── HyperOsBatteryNotification.kt # HyperOS 风格电量通知 BroadcastReceiver
 │   └── ProbeResultCache.kt       # 类存在性 JSON 持久化，供 Settings 页读取
@@ -281,6 +283,8 @@ Start-Sleep -Seconds 5
 5. **EQ raw band 0 = Clear Bass**，非可见频段。
 6. **LE Audio切换会触发蓝牙重连**，不能按普通开关实现。
 7. **SonyTandemFrame.kt 不存在**：TandemMessage定义在 `SonyTandemV2Table1Protocol.kt` 底部，协议枚举在 `SonyTandemEnums.kt`，常量在 `SonyTandemConstants.kt`，响应类型在 `SonyTandemTypes.kt`。文档中如有引用需注意。
+8. **SystemUiHook probe 只检测 PluginInstance**：`MainPanelController` 和 `DeviceInfoWrapper` 位于 `miui.systemui.plugin` 的 ClassLoader 中，SystemUI ClassLoader 无法加载。probe 阶段仅检测 `PluginInstance`（SystemUI ClassLoader 中），插件类存在性在 hook 时动态判断（不存在则跳过并记录日志）。
+9. **控制中心 hook 依赖 HyperOS 版本**：`PluginInstance.mPluginFactory.mClassLoaderFactory` 反射链和 `MainPanelController.exitOrHide()` / `DeviceInfoWrapper.performClicked` 在不同 HyperOS 版本中可能变化。未知版本默认 hook 会跳过（try/catch 保护），不影响控制中心稳定性。禁用模块或关闭 toggle 后，点击 third_headset 卡片有 200ms 延迟（MAC 查询超时）后正常透传。
 
 ## 已解决的重大风险（供参考）
 

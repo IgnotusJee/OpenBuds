@@ -8,6 +8,8 @@ import android.os.Bundle
 import android.os.IBinder
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -15,22 +17,32 @@ import androidx.compose.runtime.setValue
 import dev.ignotus.openbuds.service.ControlCommand
 import dev.ignotus.openbuds.service.DeviceStateSnapshot
 import dev.ignotus.openbuds.service.SonyControlService
+import dev.ignotus.openbuds.theme.OpenBudsTheme
+import dev.ignotus.openbuds.ui.AppColorMode
+import dev.ignotus.openbuds.ui.AppUiSettingsStore
+import dev.ignotus.openbuds.ui.resolveDarkTheme
 import dev.ignotus.openbuds.ui.screen.QuickPopupScreen
 
 class QuickPopupActivity : ComponentActivity() {
 
-    private val connectedBinder = mutableStateOf<SonyControlService.LocalBinder?>(null)
+    private val currentSnapshot = mutableStateOf(DeviceStateSnapshot.EMPTY)
     private var bound = false
+    private var serviceBinder: SonyControlService.LocalBinder? = null
 
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             bound = true
-            connectedBinder.value = service as? SonyControlService.LocalBinder
+            val binder = service as? SonyControlService.LocalBinder ?: return
+            serviceBinder = binder
+            binder.state.observe(this@QuickPopupActivity) { newValue ->
+                currentSnapshot.value = newValue ?: DeviceStateSnapshot.EMPTY
+            }
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
             bound = false
-            connectedBinder.value = null
+            serviceBinder = null
+            currentSnapshot.value = DeviceStateSnapshot.EMPTY
         }
     }
 
@@ -43,33 +55,40 @@ class QuickPopupActivity : ComponentActivity() {
             Context.BIND_AUTO_CREATE,
         )
 
-        setContent {
-            val binder by connectedBinder
-            var snapshot by remember { mutableStateOf(DeviceStateSnapshot.EMPTY) }
+        val settingsStore = AppUiSettingsStore(applicationContext)
 
-            // Bridge LiveData → Compose state. Uses Activity-lifecycle-aware observe(),
-            // which auto-removes the observer when the Activity is destroyed.
-            androidx.compose.runtime.DisposableEffect(binder) {
-                binder?.state?.observe(this@QuickPopupActivity) { newValue ->
-                    snapshot = newValue ?: DeviceStateSnapshot.EMPTY
-                }
-                onDispose { }
+        setContent {
+            val snapshot by currentSnapshot
+            val appUiSettings by settingsStore.settings.collectAsState(initial = null)
+            val loaded = appUiSettings
+            val darkTheme = if (loaded != null) {
+                resolveDarkTheme(
+                    remember(loaded.colorMode) {
+                        try { AppColorMode.valueOf(loaded.colorMode) }
+                        catch (_: IllegalArgumentException) { AppColorMode.System }
+                    },
+                    isSystemInDarkTheme(),
+                )
+            } else {
+                isSystemInDarkTheme()
             }
 
-            QuickPopupScreen(
-                state = snapshot,
-                onExecuteCommand = { command ->
-                    binder?.execute(command) ?: false
-                },
-                onOpenFullApp = {
-                    val intent = Intent(this@QuickPopupActivity, MainActivity::class.java).apply {
-                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                    }
-                    startActivity(intent)
-                    finish()
-                },
-                onDismiss = { finish() },
-            )
+            OpenBudsTheme(darkTheme = darkTheme, configureSystemBars = false) {
+                QuickPopupScreen(
+                    state = snapshot,
+                    onExecuteCommand = { command ->
+                        serviceBinder?.execute(command) ?: false
+                    },
+                    onOpenFullApp = {
+                        val intent = Intent(this@QuickPopupActivity, MainActivity::class.java).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                        }
+                        startActivity(intent)
+                        finish()
+                    },
+                    onDismiss = { finish() },
+                )
+            }
         }
     }
 

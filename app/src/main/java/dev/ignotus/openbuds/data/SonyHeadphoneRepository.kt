@@ -169,7 +169,7 @@ data class SonyHeadphoneUiState(
     val preferredProtocol: String = "Sony Tandem",
 )
 
-class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
+class SonyHeadphoneRepository private constructor(context: Context) : SonyBleClientListener {
     private val appContext = context.applicationContext
     private val client = SonyBleClient(appContext, this)
     private val mediaController = MediaPlaybackController(appContext)
@@ -1108,7 +1108,16 @@ class SonyHeadphoneRepository(context: Context) : SonyBleClientListener {
         }
     }
 
-    private companion object {
+    companion object {
+        @Volatile
+        private var instance: SonyHeadphoneRepository? = null
+
+        fun getInstance(context: Context): SonyHeadphoneRepository {
+            return instance ?: synchronized(this) {
+                instance ?: SonyHeadphoneRepository(context.applicationContext).also { instance = it }
+            }
+        }
+
         const val LOG_TAG = "OpenBuds"
         const val PLAY_NTFY_PARAM = 0xA9
         const val LEA_NTFY_STATUS = 0x45

@@ -7,6 +7,7 @@ import android.os.Binder
 import android.util.Log
 import dev.ignotus.openbuds.QuickPopupActivity
 import dev.ignotus.openbuds.lsposed.CrossProcessActions
+import dev.ignotus.openbuds.service.SonyControlService
 
 class SystemIntegrationReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -32,8 +33,17 @@ class SystemIntegrationReceiver : BroadcastReceiver() {
                 context.startActivity(popupIntent)
             }
             CrossProcessActions.ACTION_QUERY_DEVICE_MAC -> {
-                // Phase 5+: respond with MAC if currently connected Sony device matches
-                Log.d(TAG, "QUERY_DEVICE_MAC received — stub, full implementation in Phase 5")
+                if (!SonyControlService.controlCenterInterceptEnabled) {
+                    Log.d(TAG, "QUERY_DEVICE_MAC ignored: control center intercept disabled")
+                    return
+                }
+                val mac = SonyControlService.currentDeviceMac ?: ""
+                val response = Intent(CrossProcessActions.ACTION_DEVICE_MAC_RECEIVED).apply {
+                    setPackage("com.android.systemui")
+                    putExtra(CrossProcessActions.EXTRA_DEVICE_MAC, mac)
+                }
+                context.sendBroadcast(response)
+                Log.d(TAG, "QUERY_DEVICE_MAC responded with MAC: ${if (mac.isNotEmpty()) mac else "(empty)"}")
             }
         }
     }

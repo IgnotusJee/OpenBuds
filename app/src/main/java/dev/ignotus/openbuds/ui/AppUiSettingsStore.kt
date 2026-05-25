@@ -26,6 +26,7 @@ data class AppUiSettings(
     val notificationLockscreen: Boolean = true,
     val connectionPopup: Boolean = false,
     val hyperOsNotification: Boolean = false,
+    val controlCenterIntercept: Boolean = false,
 )
 
 class AppUiSettingsStore(private val context: Context) {
@@ -40,6 +41,7 @@ class AppUiSettingsStore(private val context: Context) {
             notificationLockscreen = prefs[NotificationLockscreenKey] ?: true,
             connectionPopup = prefs[ConnectionPopupKey] ?: false,
             hyperOsNotification = prefs[HyperOsNotificationKey] ?: false,
+            controlCenterIntercept = prefs[ControlCenterInterceptKey] ?: false,
         )
     }
 
@@ -97,6 +99,12 @@ class AppUiSettingsStore(private val context: Context) {
         }
     }
 
+    suspend fun setControlCenterIntercept(enabled: Boolean) {
+        context.openbudsUiSettingsDataStore.edit { prefs ->
+            prefs[ControlCenterInterceptKey] = enabled
+        }
+    }
+
     private companion object {
         val NavigationBarModeKey = stringPreferencesKey("navigation_bar_mode")
         val ThemeStyleKey = stringPreferencesKey("theme_style")
@@ -107,6 +115,7 @@ class AppUiSettingsStore(private val context: Context) {
         val NotificationLockscreenKey = booleanPreferencesKey("notification_lockscreen")
         val ConnectionPopupKey = booleanPreferencesKey("connection_popup")
         val HyperOsNotificationKey = booleanPreferencesKey("hyper_os_notification")
+        val ControlCenterInterceptKey = booleanPreferencesKey("control_center_intercept")
     }
 }
 
