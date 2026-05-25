@@ -15,6 +15,8 @@ import androidx.lifecycle.MutableLiveData
 import dev.ignotus.openbuds.MainActivity
 import dev.ignotus.openbuds.QuickPopupActivity
 import dev.ignotus.openbuds.data.SonyHeadphoneRepository
+import dev.ignotus.openbuds.lsposed.CrossProcessActions
+import dev.ignotus.openbuds.ui.AppUiSettingsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -27,6 +29,8 @@ class SonyControlService : Service() {
     private val binder = LocalBinder()
     private val stateLiveData = MutableLiveData(DeviceStateSnapshot.EMPTY)
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private var hyperOsEnabled = false
+    private var lastBroadcastMac: String? = null
 
     inner class LocalBinder : Binder() {
         val state: LiveData<DeviceStateSnapshot> = stateLiveData
@@ -69,11 +73,26 @@ class SonyControlService : Service() {
         repository = SonyHeadphoneRepository(this)
         startForeground(NOTIFICATION_ID, createNotification(DeviceStateSnapshot.EMPTY))
 
+        val settingsStore = AppUiSettingsStore(this)
+        serviceScope.launch {
+            settingsStore.settings.collect { settings ->
+                hyperOsEnabled = settings.hyperOsNotification
+            }
+        }
+
         serviceScope.launch {
             repository.state.collect { uiState ->
                 val snapshot = DeviceStateSnapshot.fromUiState(uiState)
                 stateLiveData.postValue(snapshot)
                 updateNotification(snapshot)
+
+                if (hyperOsEnabled && snapshot.isConnected && snapshot.deviceMac != null) {
+                    sendHyperOsBatteryBroadcast(snapshot)
+                }
+                if (hyperOsEnabled && !snapshot.isConnected && lastBroadcastMac != null) {
+                    sendHyperOsCancelBroadcast(lastBroadcastMac!!)
+                }
+                lastBroadcastMac = snapshot.deviceMac
             }
         }
     }
@@ -165,6 +184,29 @@ class SonyControlService : Service() {
                 )
             }
         }
+    }
+
+    private fun sendHyperOsBatteryBroadcast(snapshot: DeviceStateSnapshot) {
+        val mac = snapshot.deviceMac ?: return
+        val intent = Intent(CrossProcessActions.ACTION_UPDATE_HYPEROS_NOTIFICATION).apply {
+            setPackage("com.xiaomi.bluetooth")
+            putExtra(CrossProcessActions.EXTRA_DEVICE_NAME, snapshot.deviceName)
+            putExtra(CrossProcessActions.EXTRA_DEVICE_MAC, mac)
+            putExtra(CrossProcessActions.EXTRA_IS_CONNECTED, true)
+            snapshot.batterySingle?.let { putExtra(CrossProcessActions.EXTRA_BATTERY_SINGLE, it) }
+            snapshot.batteryLeft?.let { putExtra(CrossProcessActions.EXTRA_BATTERY_LEFT, it) }
+            snapshot.batteryRight?.let { putExtra(CrossProcessActions.EXTRA_BATTERY_RIGHT, it) }
+            snapshot.batteryCradle?.let { putExtra(CrossProcessActions.EXTRA_BATTERY_CRADLE, it) }
+        }
+        sendBroadcast(intent)
+    }
+
+    private fun sendHyperOsCancelBroadcast(mac: String) {
+        val intent = Intent(CrossProcessActions.ACTION_CANCEL_HYPEROS_NOTIFICATION).apply {
+            setPackage("com.xiaomi.bluetooth")
+            putExtra(CrossProcessActions.EXTRA_DEVICE_MAC, mac)
+        }
+        sendBroadcast(intent)
     }
 
     companion object {

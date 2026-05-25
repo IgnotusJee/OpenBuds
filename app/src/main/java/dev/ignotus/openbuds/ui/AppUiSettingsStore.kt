@@ -25,6 +25,7 @@ data class AppUiSettings(
     val notificationPersistent: Boolean = true,
     val notificationLockscreen: Boolean = true,
     val connectionPopup: Boolean = false,
+    val hyperOsNotification: Boolean = false,
 )
 
 class AppUiSettingsStore(private val context: Context) {
@@ -38,6 +39,7 @@ class AppUiSettingsStore(private val context: Context) {
             notificationPersistent = prefs[NotificationPersistentKey] ?: true,
             notificationLockscreen = prefs[NotificationLockscreenKey] ?: true,
             connectionPopup = prefs[ConnectionPopupKey] ?: false,
+            hyperOsNotification = prefs[HyperOsNotificationKey] ?: false,
         )
     }
 
@@ -89,6 +91,12 @@ class AppUiSettingsStore(private val context: Context) {
         }
     }
 
+    suspend fun setHyperOsNotification(enabled: Boolean) {
+        context.openbudsUiSettingsDataStore.edit { prefs ->
+            prefs[HyperOsNotificationKey] = enabled
+        }
+    }
+
     private companion object {
         val NavigationBarModeKey = stringPreferencesKey("navigation_bar_mode")
         val ThemeStyleKey = stringPreferencesKey("theme_style")
@@ -98,6 +106,7 @@ class AppUiSettingsStore(private val context: Context) {
         val NotificationPersistentKey = booleanPreferencesKey("notification_persistent")
         val NotificationLockscreenKey = booleanPreferencesKey("notification_lockscreen")
         val ConnectionPopupKey = booleanPreferencesKey("connection_popup")
+        val HyperOsNotificationKey = booleanPreferencesKey("hyper_os_notification")
     }
 }
 

@@ -79,9 +79,11 @@ internal fun SettingsScreen(
     serviceBackgroundRun: Boolean,
     notificationPersistent: Boolean,
     connectionPopup: Boolean,
+    hyperOsNotification: Boolean,
     onServiceBackgroundRunChanged: (Boolean) -> Unit,
     onNotificationPersistentChanged: (Boolean) -> Unit,
     onConnectionPopupChanged: (Boolean) -> Unit,
+    onHyperOsNotificationChanged: (Boolean) -> Unit,
 ) {
     val routeScope = rememberCoroutineScope()
     val currentRoute = routeStack.lastOrNull() ?: SettingsRoute.Root
@@ -161,9 +163,11 @@ internal fun SettingsScreen(
                 serviceBackgroundRun = serviceBackgroundRun,
                 notificationPersistent = notificationPersistent,
                 connectionPopup = connectionPopup,
+                hyperOsNotification = hyperOsNotification,
                 onServiceBackgroundRunChanged = onServiceBackgroundRunChanged,
                 onNotificationPersistentChanged = onNotificationPersistentChanged,
                 onConnectionPopupChanged = onConnectionPopupChanged,
+                onHyperOsNotificationChanged = onHyperOsNotificationChanged,
             )
         }
     }
@@ -408,9 +412,11 @@ internal fun SettingsModulesScreen(
     serviceBackgroundRun: Boolean,
     notificationPersistent: Boolean,
     connectionPopup: Boolean,
+    hyperOsNotification: Boolean,
     onServiceBackgroundRunChanged: (Boolean) -> Unit,
     onNotificationPersistentChanged: (Boolean) -> Unit,
     onConnectionPopupChanged: (Boolean) -> Unit,
+    onHyperOsNotificationChanged: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
     var probeStatus by remember { mutableStateOf("Loading...") }
@@ -456,6 +462,20 @@ internal fun SettingsModulesScreen(
                     )
                 },
             )
+            val miuiNotifFound = ProbeResultCache.allResults()
+                .any { it.className == "com.android.bluetooth.ble.app.MiuiBluetoothNotification" && it.found }
+            if (miuiNotifFound) {
+                SettingRow(
+                    title = "HyperOS-style notification",
+                    subtitle = "Use Xiaomi Bluetooth system notification for battery display (requires LSPosed)",
+                    trailing = {
+                        Switch(
+                            checked = hyperOsNotification,
+                            onCheckedChange = onHyperOsNotificationChanged,
+                        )
+                    },
+                )
+            }
         }
 
         SectionCard(title = "LSPosed System Integration") {

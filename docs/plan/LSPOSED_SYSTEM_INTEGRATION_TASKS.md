@@ -106,7 +106,7 @@
 - [x] 新增 `META-INF/xposed/scope.list` — `com.android.bluetooth`, `com.xiaomi.bluetooth`, `com.android.systemui`。
 - [x] 新增 `lsposed/ModuleMain.kt` — `XposedModule()` 子类，`onPackageLoaded()` 按进程分发探测。
 - [x] 新增 `lsposed/BluetoothProcessHook.kt` — 探测 `A2dpService.handleConnectionStateChanged`、`MiuiBluetoothNotification`，使用 ClassLoader 反射，仅日志。
-- [x] 新增 `lsposed/XiaomiBluetoothHook.kt` — 探测 `MiuiBluetoothNotification` 构造函数，仅日志。
+- [x] 新增 `lsposed/XiaomiBluetoothHook.kt` — 探测 `MiuiBluetoothNotification` 构造函数，仅日志。（P5 已扩展为完整 hook）
 - [x] 新增 `lsposed/SystemUiHook.kt` — 探测 `PluginInstance.loadPlugin`、`MainPanelController.onCreate`、`DeviceInfoWrapper.performClicked`，仅日志。
 - [x] 新增 `lsposed/ProbeResultCache.kt` — 类存在性 JSON 持久化，供 Settings 页读取。
 - [x] 更新 `SettingsModulesScreen` — 新增 "LSPosed System Integration" 卡片，显示 ROM 兼容等级、最近探测时间、实验性警告。
@@ -199,25 +199,61 @@
 
 已知遗留问题：
 
-- ⚠️ **Phase 5+ IPC 阻止**：`SystemIntegrationReceiver` 使用 `signature` 保护级别权限。LSPosed 模块在系统进程（`com.android.bluetooth` 等）中运行时使用不同签名，无法向 Receiver 发送广播。进入 Phase 5 前需改为 `protectionLevel="normal"` + 在 `onReceive` 中验证调用包名，或使用显式 Activity Intent（`FLAG_ACTIVITY_NEW_TASK`）绕过 Receiver。
+- [x] ~~**Phase 5+ IPC 阻止**~~ ✅ 已修复（commit `03731d9`）：`SystemIntegrationReceiver` 权限降级为 `normal` + `onReceive` 中 UID→包名白名单校验（`ALLOWED_CALLER_PACKAGES`：`com.android.bluetooth`、`com.android.systemui`、`com.xiaomi.bluetooth`），系统进程 LSPosed 模块可正常发送广播。
 - ⚠️ `notificationLockscreen` 偏好已连接但未被 `SonyControlService` 消费 — 留待后续通知增强时使用。
+
+### 第三次审计（2026-05-25，commit `03731d9`）
+
+P5 前置条件修复：
+
+- [x] **`SystemIntegrationReceiver` IPC 权限降级** — `protectionLevel` 从 `signature` 改为 `normal`，移除 `PERMISSION_SYSTEM_INTEGRATION` 常量，新增 `ALLOWED_CALLER_PACKAGES` 白名单和 `Binder.getCallingUid()` → `getPackagesForUid()` 运行时校验。
+
+P5 入口条件现已全部满足，可进入 HyperOS 通知集成。
 
 ---
 
-## 阶段 P5：HyperOS 通知集成（条件性）
+## 阶段 P5 ✅ 已完成：HyperOS 通知集成（条件性）
 
 风险：中到高
 前提：
 - `com.android.bluetooth.ble.app.MiuiBluetoothNotification` 在 ProbeResultCache 中标记为存在。
-- ⚠️ `SystemIntegrationReceiver` 权限需先从 `signature` 改为 `normal` + 调用包名白名单校验，否则系统进程（不同签名）无法通过广播与 App 通信。
+- [x] `SystemIntegrationReceiver` 权限已从 `signature` 改为 `normal` + 调用包名白名单校验（commit `03731d9`），系统进程可正常发送广播。
 
-待实现：
+完成内容：
 
-- [ ] 修改 `XiaomiBluetoothHook.kt`：使用 libxposed API hook `MiuiBluetoothNotification` 构造函数，在 `com.xiaomi.bluetooth` 进程中注册 `BroadcastReceiver`。
-- [ ] 新增 `lsposed/HyperOsBatteryNotification.kt`：构建 HyperOS 风格电量通知（独立逻辑，不复制 GPL 代码）。
-- [ ] App Service 广播电量变化 → hook 接收 → 创建/更新通知。
-- [ ] 新增开关："HyperOS-style notification"（默认关），集中在 Settings > Modules。
-- [ ] 类不存在时自动回退标准通知（Phase 2 已实现）。
+- [x] 更新 `lsposed/CrossProcessActions.kt` — 新增 `ACTION_UPDATE_HYPEROS_NOTIFICATION`、`ACTION_CANCEL_HYPEROS_NOTIFICATION` 两个 action 常量和 `EXTRA_BATTERY_SINGLE/LEFT/RIGHT/CRADLE`、`EXTRA_IS_CONNECTED` 五个 extra key。
+- [x] 新增 `lsposed/HyperOsBatteryNotification.kt` — `BroadcastReceiver` 子类在 `com.xiaomi.bluetooth` 进程中运行：
+  - `ACTION_UPDATE_HYPEROS_NOTIFICATION`：提取设备名/MAC/电量/连接状态，连接时构建或更新 HyperOS 风格通知，断开时取消通知。
+  - `ACTION_CANCEL_HYPEROS_NOTIFICATION`：按 MAC 取消通知。
+  - 通知构建通过 `resources.getIdentifier()` 动态解析 `com.xiaomi.bluetooth` 包内资源 ID（`miheadset_notification_Box/LeftEar/RightEar/Disconnect`、`system_notification_accent_color`、`ic_headset_notification`），零值时有英文 fallback。
+  - 通知渠道 ID 格式 `BTHeadset$address`，通知 ID `10003`（观察到的 HyperOS 事实）。
+  - Sony 特有电量格式：TWS 显示 Case/L/R 三行，头戴式显示单行 Battery。
+  - 使用反射调用 `notifyAsUser(UserHandle.ALL)` 支持多用户，反射失败 fallback 到标准 `notify()`。
+  - 所有逻辑独立编写，action 字符串使用 `dev.ignotus.openbuds.*` 命名空间，不复制 GPL 代码。
+- [x] 修改 `lsposed/XiaomiBluetoothHook.kt`：
+  - 保留原有 `probe()` 方法不变。
+  - 新增 `hook()` 方法：通过 libxposed API (`ModuleMain.instance.hook(constructor).intercept(...)`) hook `MiuiBluetoothNotification` 2 参数构造函数。
+  - after-hook 回调中通过反射获取 `mContext` 字段，注册 `HyperOsBatteryReceiver`。
+  - `@Volatile receiverRegistered` 标志防止重复注册；`RECEIVER_EXPORTED` 用于跨 UID 广播（API < 33 时无 flag）。
+- [x] 修改 `lsposed/ModuleMain.kt` — `com.xiaomi.bluetooth` 分发逻辑改为同时调用 `probe()` 和 `hook()`。
+- [x] 修改 `service/SonyControlService.kt`：
+  - 新增 `AppUiSettingsStore` 依赖，通过协程收集 `hyperOsNotification` 偏好。
+  - 在现有 `repository.state.collect` 块中，当 `hyperOsEnabled && isConnected` 时发送 `ACTION_UPDATE_HYPEROS_NOTIFICATION` 显式广播（`setPackage("com.xiaomi.bluetooth")`）。
+  - 跟踪 `lastBroadcastMac`，断开时发送 `ACTION_CANCEL_HYPEROS_NOTIFICATION`。
+- [x] 更新 `AppUiSettingsStore.kt` — 新增 `hyperOsNotification: Boolean = false` 偏好、`HyperOsNotificationKey` 键、`setHyperOsNotification()` setter。
+- [x] 更新 `SettingsModulesScreen` — 在 "Background service" SectionCard 内新增 "HyperOS-style notification" 开关行，仅当 ProbeResultCache 中 `MiuiBluetoothNotification` class 标记为 found 时可见。
+- [x] 更新 `OpenBudsApp.kt` — 在 `SettingsScreen` 调用点接入 `hyperOsNotification` 参数。
+
+架构流：
+```
+SonyControlService (app process)
+  ──[setPackage("com.xiaomi.bluetooth") explicit broadcast]──→
+HyperOsBatteryReceiver (com.xiaomi.bluetooth process, registered by hook)
+  ──[notifyAsUser(UserHandle.ALL) via reflection]──→
+HyperOS notification drawer (渠道 BTHeadset$MAC, ID 10003)
+```
+
+回退：类不存在时 toggle 不显示，`hyperOsNotification` 默认 `false`，标准 Phase 2 通知始终作为 fallback。
 
 ---
 
@@ -328,7 +364,7 @@
 - [x] 后台服务开关（`serviceBackgroundRun`，默认关）
 - [x] 常驻通知开关（`notificationPersistent`，默认开）
 - [x] 连接弹窗开关（`connectionPopup`，默认关）
-- [ ] HyperOS 通知增强开关（默认关）
+- [x] HyperOS 通知增强开关（`hyperOsNotification`，默认关）
 - [ ] Control Center 卡片接管开关（默认关）
 - [ ] 状态栏增强开关（默认关）
 - [ ] 系统设置入口开关（默认关）

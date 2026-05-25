@@ -442,6 +442,7 @@ fun OpenBudsApp(
                                     serviceBackgroundRun = loadedAppUiSettings.serviceBackgroundRun,
                                     notificationPersistent = loadedAppUiSettings.notificationPersistent,
                                     connectionPopup = loadedAppUiSettings.connectionPopup,
+                                    hyperOsNotification = loadedAppUiSettings.hyperOsNotification,
                                     onServiceBackgroundRunChanged = {
                                         scope.launch { settingsStore.setServiceBackgroundRun(it) }
                                     },
@@ -450,6 +451,9 @@ fun OpenBudsApp(
                                     },
                                     onConnectionPopupChanged = {
                                         scope.launch { settingsStore.setConnectionPopup(it) }
+                                    },
+                                    onHyperOsNotificationChanged = {
+                                        scope.launch { settingsStore.setHyperOsNotification(it) }
                                     },
                                 )
                                 AppRoute.About -> AboutScreen(
