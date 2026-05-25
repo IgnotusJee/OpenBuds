@@ -4,6 +4,13 @@ plugins {
   alias(libs.plugins.kotlin.serialization)
 }
 
+val appBaseVersionName = "0.1.0"
+val gitCommitId = providers.exec {
+    commandLine("git", "rev-parse", "--short", "HEAD")
+}.standardOutput.asText.map { output ->
+    output.trim().ifEmpty { "unknown" }
+}
+
 android {
     namespace = "dev.ignotus.openbuds"
     compileSdk = 37
@@ -12,7 +19,7 @@ android {
         minSdk = 31
         targetSdk = 37
         versionCode = 1
-        versionName = "1.0"
+        versionName = "$appBaseVersionName-${gitCommitId.get()}"
     }
 
     buildTypes {
