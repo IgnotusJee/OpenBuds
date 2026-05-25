@@ -35,6 +35,7 @@ class ModuleMain : XposedModule() {
             }
             "com.android.systemui" -> SystemUiHook(cl).probe()
         }
+        ProbeResultCache.persistShared()
     }
 
     fun log(msg: String) {

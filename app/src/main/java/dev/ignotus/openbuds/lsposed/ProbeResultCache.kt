@@ -20,6 +20,11 @@ object ProbeResultCache {
     private val lock = Any()
     private val results = mutableMapOf<String, ProbeStatus>()
 
+    // Shared location accessible from both system processes and the app process.
+    // /data/local/tmp/ is world-readable/writable on all Android devices.
+    private val sharedFile: java.io.File
+        get() = java.io.File("/data/local/tmp", FILE_NAME)
+
     fun markFound(className: String) {
         synchronized(lock) {
             results[className] = (results[className] ?: ProbeStatus(className, true)).copy(found = true)
@@ -72,44 +77,98 @@ object ProbeResultCache {
         results.values.maxOfOrNull { it.timestamp } ?: 0L
     }
 
-    fun save(context: Context) {
+    // ---- Shared-file persistence (cross-process) ----
+
+    /** Persist current in-memory results to the shared file, merging with
+     *  any existing results written by other processes. */
+    fun persistShared() {
         synchronized(lock) {
             try {
-                val json = JSONObject()
+                val existing = loadFromFile()
                 for ((name, status) in results) {
-                    val obj = JSONObject()
-                    obj.put("found", status.found)
-                    obj.put("methodsFound", status.methodsFound.joinToString(","))
-                    obj.put("methodsNotFound", status.methodsNotFound.joinToString(","))
-                    obj.put("timestamp", status.timestamp)
-                    json.put(name, obj)
+                    existing[name] = status
                 }
-                File(context.filesDir, FILE_NAME).writeText(json.toString())
+                results.putAll(existing)
+                sharedFile.parentFile?.mkdirs()
+                sharedFile.writeText(toJson(existing))
+                sharedFile.setReadable(true, false)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to persist probe results", e)
+            }
+        }
+    }
+
+    /** Load results from the shared file into memory. Safe to call from any process. */
+    fun loadShared() {
+        synchronized(lock) {
+            try {
+                if (!sharedFile.exists()) return
+                val loaded = loadFromFile()
+                results.putAll(loaded)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load probe results", e)
+            }
+        }
+    }
+
+    // ---- Legacy Context-based save/load (kept for compatibility) ----
+
+    fun save(context: android.content.Context) {
+        synchronized(lock) {
+            try {
+                val json = toJson(results)
+                java.io.File(context.filesDir, FILE_NAME).writeText(json)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to save $FILE_NAME", e)
             }
         }
     }
 
-    fun load(context: Context) {
+    fun load(context: android.content.Context) {
+        // Try shared file first (system processes write there), fall back to app-local.
+        loadShared()
+        if (results.isNotEmpty()) return
         synchronized(lock) {
             try {
-                val file = File(context.filesDir, FILE_NAME)
+                val file = java.io.File(context.filesDir, FILE_NAME)
                 if (!file.exists()) return
-                val json = JSONObject(file.readText())
-                for (key in json.keys()) {
-                    val obj = json.getJSONObject(key)
-                    results[key] = ProbeStatus(
-                        className = key,
-                        found = obj.getBoolean("found"),
-                        methodsFound = obj.getString("methodsFound").split(",").filter { it.isNotEmpty() },
-                        methodsNotFound = obj.getString("methodsNotFound").split(",").filter { it.isNotEmpty() },
-                        timestamp = obj.getLong("timestamp"),
-                    )
-                }
+                val loaded = loadFromFile(file)
+                results.putAll(loaded)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load $FILE_NAME", e)
             }
         }
+    }
+
+    // ---- Internal helpers ----
+
+    private fun loadFromFile(file: java.io.File = sharedFile): MutableMap<String, ProbeStatus> {
+        val map = mutableMapOf<String, ProbeStatus>()
+        if (!file.exists()) return map
+        val json = org.json.JSONObject(file.readText())
+        for (key in json.keys()) {
+            val obj = json.getJSONObject(key)
+            map[key] = ProbeStatus(
+                className = key,
+                found = obj.getBoolean("found"),
+                methodsFound = obj.getString("methodsFound").split(",").filter { it.isNotEmpty() },
+                methodsNotFound = obj.getString("methodsNotFound").split(",").filter { it.isNotEmpty() },
+                timestamp = obj.getLong("timestamp"),
+            )
+        }
+        return map
+    }
+
+    private fun toJson(results: Map<String, ProbeStatus>): String {
+        val json = org.json.JSONObject()
+        for ((name, status) in results) {
+            val obj = org.json.JSONObject()
+            obj.put("found", status.found)
+            obj.put("methodsFound", status.methodsFound.joinToString(","))
+            obj.put("methodsNotFound", status.methodsNotFound.joinToString(","))
+            obj.put("timestamp", status.timestamp)
+            json.put(name, obj)
+        }
+        return json.toString()
     }
 }
