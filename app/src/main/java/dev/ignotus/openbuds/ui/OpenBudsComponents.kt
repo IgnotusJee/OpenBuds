@@ -44,6 +44,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -171,9 +172,10 @@ internal fun GlassCard(
         alpha = if (isLight) 0.94f else 0.98f,
     )
     val borderColor = MaterialTheme.colorScheme.outline.copy(alpha = if (glassEnabled) 0.16f else 0.14f)
-    val blurColors = BlurColors(
-        blendColors = rememberGlassVisualTokens().cardBlendColors,
-    )
+    val visualTokens = rememberGlassVisualTokens()
+    val blurColors = remember(visualTokens.cardBlendColors) {
+        BlurColors(blendColors = visualTokens.cardBlendColors)
+    }
     val tier = renderCapabilities.tier
     val blurRadius = EffectsTierManager.glassBlurRadius(tier)
     Card(

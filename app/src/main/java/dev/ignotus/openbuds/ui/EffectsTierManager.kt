@@ -4,10 +4,10 @@ import android.content.Context
 import top.yukonga.miuix.kmp.blur.isRenderEffectSupported
 
 enum class EffectsTier {
-    FULL_GLASS,
-    LIGHT_GLASS,
-    BLUR_ONLY,
     DISABLED,
+    BLUR_ONLY,
+    LIGHT_GLASS,
+    FULL_GLASS,
 }
 
 object EffectsTierManager {

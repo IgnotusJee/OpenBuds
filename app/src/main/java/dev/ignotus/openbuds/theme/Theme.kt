@@ -7,6 +7,7 @@ import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
@@ -23,15 +24,18 @@ fun OpenBudsTheme(
     configureSystemBars: Boolean = true,
     content: @Composable () -> Unit,
 ) {
-    val colorScheme = openbudsColorScheme(darkTheme)
+    val config = remember(darkTheme) {
+        OpenBudsThemeConfig(
+            style = 0,
+            colorMode = if (darkTheme) 2 else 1,
+            darkTheme = darkTheme,
+        )
+    }
     if (configureSystemBars) {
+        val colorScheme = openbudsColorScheme(darkTheme)
         ConfigureSystemBars(colorScheme, darkTheme)
     }
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = MaterialTheme.typography,
-        content = content,
-    )
+    dev.ignotus.openbuds.theme.OpenBudsTheme(config = config, content = content)
 }
 
 @Composable

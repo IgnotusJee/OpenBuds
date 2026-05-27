@@ -3,24 +3,27 @@ package dev.ignotus.openbuds.ui
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.MutatorMutex
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.input.pointer.AwaitPointerEventScope
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerId
 import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.changedToUpIgnoreConsumed
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
-import androidx.compose.ui.input.pointer.util.VelocityTracker
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.util.fastCoerceIn
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.android.awaitFrame
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -53,6 +56,8 @@ internal class DampedDragAnimation(
     private val mutatorMutex = MutatorMutex()
     private val velocityTracker = VelocityTracker()
 
+    private var animationJob: Job? = null
+
     val value: Float get() = valueAnimation.value
     val targetValue: Float get() = valueAnimation.targetValue
     val pressProgress: Float get() = pressProgressAnimation.value
@@ -68,11 +73,9 @@ internal class DampedDragAnimation(
             },
             onDragEnd = {
                 onDragStopped()
-                release()
             },
             onDragCancel = {
                 onDragStopped()
-                release()
             },
         ) { change, dragAmount ->
             val isInside = canDrag(change.position)
@@ -92,15 +95,20 @@ internal class DampedDragAnimation(
         }
     }
 
-    fun release() {
-        animationScope.launch {
+    private suspend fun release() {
+        try {
             awaitFrame()
-            if (value != targetValue) {
-                val threshold = (valueRange.endInclusive - valueRange.start) * 0.025f
+            val range = valueRange.endInclusive - valueRange.start
+            if (value != targetValue && range > 0f) {
+                val threshold = range * 0.025f
                 snapshotFlow { valueAnimation.value }
                     .filter { abs(it - valueAnimation.targetValue) < threshold }
                     .first()
             }
+        } catch (_: CancellationException) {
+            return
+        }
+        coroutineScope {
             launch { pressProgressAnimation.animateTo(0f, pressProgressAnimationSpec) }
             launch { scaleXAnimation.animateTo(initialScale, scaleXAnimationSpec) }
             launch { scaleYAnimation.animateTo(initialScale, scaleYAnimationSpec) }
@@ -129,9 +137,14 @@ internal class DampedDragAnimation(
     }
 
     fun animateToValue(value: Float) {
-        animationScope.launch {
+        animationJob?.cancel()
+        animationJob = animationScope.launch {
             mutatorMutex.mutate {
-                press()
+                velocityTracker.resetTracking()
+                launch { pressProgressAnimation.animateTo(1f, pressProgressAnimationSpec) }
+                launch { scaleXAnimation.animateTo(pressedScale, scaleXAnimationSpec) }
+                launch { scaleYAnimation.animateTo(pressedScale, scaleYAnimationSpec) }
+
                 val targetValue = value.fastCoerceIn(valueRange.start, valueRange.endInclusive)
                 launch { valueAnimation.animateTo(targetValue, valueAnimationSpec) }
                 if (velocity != 0f) {
@@ -142,18 +155,25 @@ internal class DampedDragAnimation(
         }
     }
 
+    fun cancelAnimation() {
+        animationJob?.cancel()
+        animationJob = null
+    }
+
     private fun updateVelocity() {
-        velocityTracker.addPosition(
-            System.currentTimeMillis(),
-            Offset(value, 0f),
-        )
         val range = valueRange.endInclusive - valueRange.start
-        val targetVelocity = if (range == 0f) 0f else velocityTracker.calculateVelocity().x / range
-        animationScope.launch { velocityAnimation.animateTo(targetVelocity, velocityAnimationSpec) }
+        if (range > 0f) {
+            velocityTracker.addPosition(
+                System.currentTimeMillis(),
+                Offset(value, 0f),
+            )
+            val targetVelocity = velocityTracker.calculateVelocity().x / range
+            animationScope.launch { velocityAnimation.animateTo(targetVelocity, velocityAnimationSpec) }
+        }
     }
 }
 
-private suspend fun PointerInputScope.inspectDragGestures(
+internal suspend fun PointerInputScope.inspectDragGestures(
     onDragStart: (down: PointerInputChange) -> Unit = {},
     onDragEnd: (change: PointerInputChange) -> Unit = {},
     onDragCancel: () -> Unit = {},

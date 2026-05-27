@@ -360,12 +360,6 @@ fun OpenBudsApp(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background),
         ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .textureBackdropSource(textureBackdrop)
-                    .background(appColorScheme.background),
-            )
             CompositionLocalProvider(
                 LocalTextureBackdrop provides if (renderCapabilities.glassCardsEnabled) textureBackdrop else null,
                 LocalUiRenderCapabilities provides renderCapabilities,
@@ -373,6 +367,7 @@ fun OpenBudsApp(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
+                        .textureBackdropSource(textureBackdrop)
                         .then(
                             if (renderCapabilities.navigationBackdropEnabled && backdrop != null) {
                                 Modifier.layerBackdrop(backdrop)
@@ -951,6 +946,9 @@ private fun FloatingLiquidNavigationBar(
             },
         ).also { holder.instance = it }
     }
+    val interactiveHighlight = remember(animationScope) {
+        InteractiveHighlight(animationScope)
+    }
 
     LaunchedEffect(selectedIndex) {
         if (currentIndex != selectedIndex) {
@@ -1035,7 +1033,8 @@ private fun FloatingLiquidNavigationBar(
                             .background(containerColor)
                     }
                 )
-                .padding(4.dp),
+                .padding(4.dp)
+                .then(interactiveHighlight.modifier),
         ) {
             if (liquidGlassEnabled && backdrop != null && tabsBackdrop != null) {
                 val duplicateProgress = dampedDragAnimation.pressProgress
@@ -1045,6 +1044,7 @@ private fun FloatingLiquidNavigationBar(
                         .alpha(0f)
                         .layerBackdrop(tabsBackdrop)
                         .graphicsLayer { translationX = panelOffsetPx }
+                        .then(interactiveHighlight.gestureModifier)
                         .fillMaxWidth()
                         .height(56.dp)
                         .drawBackdrop(
@@ -1081,7 +1081,9 @@ private fun FloatingLiquidNavigationBar(
             }
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(interactiveHighlight.gestureModifier),
             ) {
                 tabs.forEach { tab ->
                         NavigationTabContent(

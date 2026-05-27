@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -38,6 +39,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -48,7 +50,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.res.stringResource
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import top.yukonga.miuix.kmp.blur.BlurColors
@@ -384,35 +385,38 @@ internal fun AboutGradientBackground(progress: Float) {
         return
     }
     val alpha = 1f - progress
+    val primary = MaterialTheme.colorScheme.primary
+    val tertiary = MaterialTheme.colorScheme.tertiary
+    val bg = MaterialTheme.colorScheme.background
+    val secondary = MaterialTheme.colorScheme.secondary
     Box(
         modifier = Modifier
             .fillMaxSize()
             .alpha(alpha)
-            .background(
-                Brush.linearGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.28f),
-                        MaterialTheme.colorScheme.tertiary.copy(alpha = 0.22f),
-                        MaterialTheme.colorScheme.background.copy(alpha = 0.0f),
-                    ),
-                    start = Offset.Zero,
-                    end = Offset(900f, 1200f),
+            .drawBehind {
+                val w = size.width
+                val h = size.height
+                drawRect(
+                    brush = Brush.linearGradient(
+                        colors = listOf(
+                            primary.copy(alpha = 0.28f),
+                            tertiary.copy(alpha = 0.22f),
+                            bg.copy(alpha = 0.0f),
+                        ),
+                        start = Offset.Zero,
+                        end = Offset(w * 0.7f, h * 0.8f),
+                    )
                 )
-            )
-    )
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .alpha(alpha)
-            .background(
-                Brush.radialGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.secondary.copy(alpha = 0.34f),
-                        Color.Transparent,
-                    ),
-                    center = Offset(160f, 180f),
-                    radius = 620f,
+                drawRect(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            secondary.copy(alpha = 0.34f),
+                            Color.Transparent,
+                        ),
+                        center = Offset(w * 0.12f, h * 0.15f),
+                        radius = w * 0.48f,
+                    )
                 )
-            )
+            }
     )
 }

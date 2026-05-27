@@ -11,7 +11,7 @@ class UiEffectsPolicyTest {
         ReareyeNavigationBarMode.entries.forEach { mode ->
             val capabilities = UiRenderCapabilities(
                 mode = mode,
-                userEffectsEnabled = false,
+                tier = EffectsTier.DISABLED,
             )
 
             assertFalse(capabilities.effectsEnabled)
@@ -32,7 +32,7 @@ class UiEffectsPolicyTest {
                 rootBackdrop = false,
                 navigationBackdrop = false,
                 liquidGlass = false,
-                glassCards = false,
+                glassCards = true,
             ),
             ReareyeNavigationBarMode.SemiTransparent to ExpectedCapabilities(
                 floating = false,
@@ -40,7 +40,7 @@ class UiEffectsPolicyTest {
                 rootBackdrop = false,
                 navigationBackdrop = false,
                 liquidGlass = false,
-                glassCards = false,
+                glassCards = true,
             ),
             ReareyeNavigationBarMode.Floating to ExpectedCapabilities(
                 floating = true,
@@ -48,7 +48,7 @@ class UiEffectsPolicyTest {
                 rootBackdrop = false,
                 navigationBackdrop = false,
                 liquidGlass = false,
-                glassCards = false,
+                glassCards = true,
             ),
             ReareyeNavigationBarMode.FloatingGlass to ExpectedCapabilities(
                 floating = true,
@@ -63,7 +63,7 @@ class UiEffectsPolicyTest {
         ReareyeNavigationBarMode.entries.forEach { mode ->
             val capabilities = UiRenderCapabilities(
                 mode = mode,
-                userEffectsEnabled = true,
+                tier = EffectsTier.FULL_GLASS,
             )
             val expectedCapabilities = requireNotNull(expected[mode])
 
@@ -82,7 +82,7 @@ class UiEffectsPolicyTest {
     fun semiTransparentModeOnlyEnablesBottomBarSurface() {
         val capabilities = UiRenderCapabilities(
             mode = ReareyeNavigationBarMode.SemiTransparent,
-            userEffectsEnabled = true,
+            tier = EffectsTier.FULL_GLASS,
         )
 
         assertTrue(capabilities.effectsEnabled)
@@ -91,7 +91,7 @@ class UiEffectsPolicyTest {
         assertFalse(capabilities.rootBackdropEnabled)
         assertFalse(capabilities.navigationBackdropEnabled)
         assertFalse(capabilities.liquidGlassEnabled)
-        assertFalse(capabilities.glassCardsEnabled)
+        assertTrue(capabilities.glassCardsEnabled)
     }
 
     private data class ExpectedCapabilities(

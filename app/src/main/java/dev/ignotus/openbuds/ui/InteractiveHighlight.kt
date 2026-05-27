@@ -1,84 +1,109 @@
 package dev.ignotus.openbuds.ui
 
+import android.annotation.SuppressLint
+import android.graphics.RuntimeShader
 import android.os.Build
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.spring
-import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.drag
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxScope
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.ShaderBrush
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.util.fastCoerceIn
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
-import kotlin.math.min
 
-@Composable
-internal fun BoxScope.InteractiveHighlight(
-    enabled: Boolean,
-    highlightColor: Color = Color.White,
+@SuppressLint("NewApi")
+class InteractiveHighlight(
+    val animationScope: CoroutineScope,
+    val position: (size: Size, offset: Offset) -> Offset = { _, offset -> offset }
 ) {
-    if (!enabled) return
+    private val pressProgressAnimationSpec = spring<Float>(dampingRatio = 0.5f, stiffness = 300f)
+    private val positionAnimationSpec = spring<Offset>(dampingRatio = 0.5f, stiffness = 300f)
 
-    var touchPosition by remember { mutableStateOf(Offset.Zero) }
-    val highlightAlpha = remember { Animatable(0f) }
-    val scope = rememberCoroutineScope()
-    var size by remember { mutableStateOf(IntSize.Zero) }
+    private val pressProgressAnimation = Animatable(0f)
+    private val positionAnimation = Animatable(Offset.Zero, typeConverter = Offset.VectorConverter)
 
-    Box(
-        modifier = Modifier
-            .matchParentSize()
-            .clipToBounds()
-            .onSizeChanged { size = it }
-            .pointerInput(Unit) {
-                awaitEachGesture {
-                    val down = awaitFirstDown(false)
-                    touchPosition = down.position
-                    scope.launch { highlightAlpha.animateTo(1f, spring(0.5f, 300f)) }
-                    drag(down.id) { change ->
-                        touchPosition = change.position
+    private var startPosition = Offset.Zero
+    val offset: Offset get() = positionAnimation.value - startPosition
+
+    private val shader: RuntimeShader? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        RuntimeShader(
+            """
+    uniform float2 size;
+    layout(color) uniform half4 color;
+    uniform float radius;
+    uniform float2 position;
+
+    half4 main(float2 coord) {
+        float dist = distance(coord, position);
+        float intensity = smoothstep(radius, radius * 0.5, dist);
+        return color * intensity;
+    }"""
+        )
+    } else {
+        null
+    }
+
+    val modifier: Modifier =
+        Modifier.drawWithContent {
+            val progress = pressProgressAnimation.value
+            if (progress > 0f) {
+                drawRect(
+                    Color.White.copy(0.06f * progress),
+                    blendMode = BlendMode.Plus
+                )
+                shader?.let { s ->
+                    s.apply {
+                        val shaderPosition = position(size, positionAnimation.value)
+                        setFloatUniform("size", size.width, size.height)
+                        setColorUniform("color", Color.White.copy(0.12f * progress).toArgb())
+                        setFloatUniform("radius", size.minDimension * 1.2f)
+                        setFloatUniform(
+                            "position",
+                            shaderPosition.x.fastCoerceIn(0f, size.width),
+                            shaderPosition.y.fastCoerceIn(0f, size.height)
+                        )
                     }
-                    scope.launch { highlightAlpha.animateTo(0f, spring(0.5f, 300f)) }
-                }
-            },
-    ) {
-        if (size != IntSize.Zero && highlightAlpha.value > 0f) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val radius = min(size.width, size.height).toFloat() * 1.2f
-                val alpha = highlightAlpha.value
-                clipRect {
-                    drawCircle(
-                        color = highlightColor.copy(alpha = 0.06f * alpha),
-                        radius = radius,
-                    )
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            colors = listOf(
-                                highlightColor.copy(alpha = 0.18f * alpha),
-                                highlightColor.copy(alpha = 0f),
-                            ),
-                            center = touchPosition,
-                            radius = radius,
-                        ),
-                        radius = radius,
+                    drawRect(
+                        ShaderBrush(s),
+                        blendMode = BlendMode.Plus
                     )
                 }
             }
+            drawContent()
         }
-    }
+
+    val gestureModifier: Modifier =
+        Modifier.pointerInput(animationScope) {
+            inspectDragGestures(
+                onDragStart = { down ->
+                    startPosition = down.position
+                    animationScope.launch {
+                        launch { pressProgressAnimation.animateTo(1f, pressProgressAnimationSpec) }
+                        launch { positionAnimation.snapTo(startPosition) }
+                    }
+                },
+                onDragEnd = {
+                    animationScope.launch {
+                        launch { pressProgressAnimation.animateTo(0f, pressProgressAnimationSpec) }
+                        launch { positionAnimation.animateTo(startPosition, positionAnimationSpec) }
+                    }
+                },
+                onDragCancel = {
+                    animationScope.launch {
+                        launch { pressProgressAnimation.animateTo(0f, pressProgressAnimationSpec) }
+                        launch { positionAnimation.animateTo(startPosition, positionAnimationSpec) }
+                    }
+                }
+            ) { change, _ ->
+                animationScope.launch { positionAnimation.snapTo(change.position) }
+            }
+        }
 }

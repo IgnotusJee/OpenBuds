@@ -27,7 +27,8 @@ internal data class UiRenderCapabilities(
 
     val vibrancyEnabled: Boolean = tier == EffectsTier.FULL_GLASS
 
-    val glassCardsEnabled: Boolean = rootBackdropEnabled
+    val glassCardsEnabled: Boolean = effectsEnabled &&
+        tier >= EffectsTier.BLUR_ONLY
 
     val backgroundGradientEnabled: Boolean = effectsEnabled
 }
