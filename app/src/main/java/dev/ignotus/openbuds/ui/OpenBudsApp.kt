@@ -92,8 +92,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.getValue
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.currentStateAsState
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -341,7 +343,8 @@ fun OpenBudsApp(
     }
     val appContent: @Composable () -> Unit = {
         val lifecycleOwner = LocalLifecycleOwner.current
-        val backdropInLifecycle = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+        val lifecycleState by lifecycleOwner.lifecycle.currentStateAsState()
+        val backdropInLifecycle = lifecycleState.isAtLeast(Lifecycle.State.STARTED)
         val backdrop = if (renderCapabilities.navigationBackdropEnabled && renderEffectsSupported && backdropInLifecycle) {
             rememberLayerBackdrop {
                 drawRect(appColorScheme.background)
