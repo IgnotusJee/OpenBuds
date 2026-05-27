@@ -1,6 +1,6 @@
 # OpenBuds LSPosed 系统集成任务清单
 
-更新日期：2026-05-25
+更新日期：2026-05-26
 
 本文把"参考 OppoPods / HyperPods，为 Sony 耳机实现 HyperOS 弹窗、状态栏、控制中心入口，以及最终接近小米原生耳机设置体验"的目标拆成仓库级任务。使用 **libxposed 现代 API** (`io.github.libxposed:api:101.0.1`)，同一 hook 挂载点，更类型安全。
 
@@ -11,9 +11,10 @@
 - 主 App 保持独立可用，不依赖 root、LSPosed 或 HyperOS。
 - LSPosed 模块作为可选系统集成层，负责系统入口、系统提示和系统 UI 注入。
 - Sony 协议、状态缓存和写入命令只保留一份实现，避免 App 和模块各自维护协议逻辑。
-- 第一可交付目标是"连接弹窗 + 常驻通知 + 快捷控制面板"。
-- 第二可交付目标是"控制中心/设备卡片点击进入 OpenBuds 快捷面板"。
-- 第三可交付目标才是"系统蓝牙设置页中的 Sony 耳机入口"。
+- 第一可交付目标是"HyperOS 原生风格连接弹窗（Strong Toast / Focus Island）+ 常驻通知"。
+- 第二可交付目标是"弹窗/通知点击 → 系统蓝牙设置页（含注入条目）→ App 详情页"的完整导航流。
+- 第三可交付目标是"控制中心/设备卡片点击进入设置页"。
+- 第四可交付目标才是"系统蓝牙设置页中的内嵌控制项（ANC、EQ、播放等）"。
 
 明确不做：
 
@@ -103,7 +104,7 @@
 
 - [x] 新增 `META-INF/xposed/module.prop` — `minApiVersion=100`, `targetApiVersion=101`, `staticScope=true`。
 - [x] 新增 `META-INF/xposed/java_init.list` — 入口类 `dev.ignotus.openbuds.lsposed.ModuleMain`。
-- [x] 新增 `META-INF/xposed/scope.list` — `com.android.bluetooth`, `com.xiaomi.bluetooth`, `com.android.systemui`。
+- [x] 新增 `META-INF/xposed/scope.list` — `com.android.bluetooth`, `com.xiaomi.bluetooth`, `com.android.systemui`, `com.android.settings`（P7 调研阶段可选）。
 - [x] 新增 `lsposed/ModuleMain.kt` — `XposedModule()` 子类，`onPackageLoaded()` 按进程分发探测。
 - [x] 新增 `lsposed/BluetoothProcessHook.kt` — 探测 `A2dpService.handleConnectionStateChanged`、`MiuiBluetoothNotification`，使用 ClassLoader 反射，仅日志。
 - [x] 新增 `lsposed/XiaomiBluetoothHook.kt` — 探测 `MiuiBluetoothNotification` 构造函数，仅日志。（P5 已扩展为完整 hook）
@@ -257,6 +258,131 @@ HyperOS notification drawer (渠道 BTHeadset$MAC, ID 10003)
 
 ---
 
+## 阶段 P5.5：HyperOS 原生风格连接弹窗（Strong Toast / Focus Island）
+
+风险：高
+前提：
+- `MiuiBluetoothNotification` 在 ProbeResultCache 中标记为存在（P5 已验证）。
+- `StatusBarManager.setStatus()` 或 Focus Island 通知 extras 机制在目标 HyperOS 版本可用。
+
+目标：耳机连接/断开时显示与小米第一方耳机完全相同的系统级弹窗动画。
+
+### 5.5.1 两种机制的对比与选择
+
+| 特性 | Strong Toast (`StatusBarManager.setStatus`) | Focus Island (通知 extras) |
+|------|-------------------------------------------|---------------------------|
+| API 方式 | 反射调用隐藏 API `StatusBarManager.setStatus(1, "strong_toast_action", bundle)` | 标准 `NotificationManager.notify()` + `miui.focus.*` extras |
+| 动画支持 | MP4 视频（需 FileProvider）+ SVG/PNG | PNG 静态图（`Icon.createWithBitmap()`） |
+| 布局 category | `video_text_text_video`（TWS）、`video_text`（头戴） | `param_v2.protocol=3`，`imageTextInfoLeft/Right` |
+| 风险 | 隐藏 API 可能被 Android 限制 | 仅依赖通知 extras，更安全 |
+| 参考来源 | HyperPods `MiuiStrongToastUtil` | OppoPods `FocusIslandUtil` |
+
+**选择策略**：优先使用 Focus Island 机制（更低风险、支持静态图片、与用户需求一致），若 Focus Island extras 在目标版本不生效则回退到 Strong Toast。
+
+### 5.5.2 Sony 耳机静态图片资源
+
+需要准备以下图片资源（PNG，约 110×110 至 200×200，`drawable-nodpi`）：
+
+- `img_sony_left.png` — 左耳塞（入耳状态）
+- `img_sony_right.png` — 右耳塞（入耳状态）
+- `img_sony_case.png` — 充电盒
+- `img_sony_headset.png` — 头戴式耳机（WH 系列使用）
+
+图片来源可选：
+1. 从 Sony 官方产品图片中裁剪（推荐，版权风险低——属于用户设备配图）
+2. 自行绘制简化版线框图
+3. 复用 `SonyModelImageCatalog` 中的产品图片 URL（需先下载缓存）
+
+### 5.5.3 实现任务
+
+- [ ] 新增 `lsposed/MiuiFocusIslandHelper.kt` — Focus Island 弹窗构建器：
+  - `showEarphoneIsland(context, batteryParams, deviceName)` — TWS 耳机弹窗
+  - `showHeadsetIsland(context, batterySingle, deviceName)` — 头戴式耳机弹窗
+  - `cancelIsland(context)` — 取消弹窗
+  - 构建 `miui.focus.param` JSON（协议版本 3，`bigIslandArea` 含左右耳图文信息）
+  - 从模块 APK 资源加载静态图片为 `Icon.createWithBitmap()`
+  - `miui.focus.pics` Bundle 携带 `miui.focus.pic_left` / `miui.focus.pic_right`
+  - 通知渠道 ID `openbuds_focus_island`，通知 ID `10086`
+  - 超时 4 秒后自动取消（`Handler.postDelayed`）
+- [ ] 新增 `lsposed/MiuiStrongToastHelper.kt` — Strong Toast 回退方案：
+  - 构建 `StringToastBundle`（参考 `HyperPods/StringToastBundle.kt` 的字段结构）
+  - `showPodsBatteryToast(context, leftUri, rightUri, caseUri, batteryParams)` — TWS 弹窗
+  - `showHeadsetBatteryToast(context, headsetUri, batterySingle)` — 头戴弹窗
+  - 通过反射调用 `StatusBarManager.setStatus(1, "strong_toast_action", bundle)`
+  - 支持 `FileType.PNG`（非 MP4），category 使用 `text_bitmap_intent`（纯图片无视频）
+  - `target` PendingIntent 指向系统蓝牙设置页（见 P7）或 QuickPopupActivity（回退）
+- [ ] 新增 earphone PNG 图片资源到 `app/src/main/res/drawable-nodpi/`
+- [ ] 修改 `HyperOsBatteryNotification.kt` — 在 `ACTION_UPDATE_HYPEROS_NOTIFICATION` 处理中：
+  - 保留现有通知创建/更新逻辑
+  - 连接事件（`isConnected=true` 且电量数据有效）→ 调用 Focus Island 弹窗
+  - 断开事件 → 取消 Focus Island 弹窗
+- [ ] 新增 `CrossProcessActions` — `EXTRA_IS_CHARGING_LEFT/RIGHT/CRADLE/SINGLE` extra key（充电状态）
+- [ ] 修改 `SonyControlService.kt` `sendHyperOsBatteryBroadcast()` — 携带充电状态 extra
+- [ ] 修改 `DeviceStateSnapshot.kt` — 新增 `isChargingLeft/isChargingRight/isChargingCradle/isChargingSingle` 字段（若协议支持）
+- [ ] 更新 `AppUiSettingsStore.kt` — 新增 `focusIslandPopup: Boolean = false` 偏好
+- [ ] 更新 `SettingsModulesScreen` — 新增 "Focus Island popup (first-party style)" 开关
+
+架构流（Focus Island 路径）：
+```
+SonyControlService (app process)
+  ──[显式广播，携带电量+充电状态]──→
+HyperOsBatteryReceiver (com.xiaomi.bluetooth process)
+  ──[MiuiFocusIslandHelper.showEarphoneIsland()]──→
+NotificationManager.notify(10086, focusIslandNotification)
+  ──[SystemUI 解析 miui.focus.* extras]──→
+HyperOS 原生风格顶部弹窗（左耳图+电量 | 右耳图+电量）
+```
+
+回退：类/Method 不存在或 Focus Island extras 无响应时 fallback 到 Strong Toast（`StatusBarManager.setStatus`），若 Strong Toast 也不可用则仅依赖通知栏（P5）。toggle 默认关闭。
+
+### 5.5.4 Focus Island JSON 格式参考
+
+```json
+{
+  "param_v2": {
+    "protocol": 3,
+    "enableFloat": true,
+    "updatable": true,
+    "ticker": "WF-1000XM5",
+    "isShowNotification": false,
+    "param_island": {
+      "islandProperty": 1,
+      "islandTimeout": 3,
+      "bigIslandArea": {
+        "imageTextInfoLeft": {
+          "type": 1,
+          "picInfo": { "type": 1, "pic": "miui.focus.pic_left" },
+          "textInfo": { "title": "85", "content": "%" }
+        },
+        "imageTextInfoRight": {
+          "type": 2,
+          "picInfo": { "type": 1, "pic": "miui.focus.pic_right" },
+          "textInfo": { "title": "90", "content": "%" }
+        }
+      }
+    }
+  }
+}
+```
+
+---
+
+## 阶段 P5.6：QuickPopupActivity 功能禁用
+
+风险：低
+目标：保留 `QuickPopupActivity` 和 `QuickPopupScreen` 代码但禁用其自动启动逻辑，留待未来决定使用还是移除。当前 App 级弹窗体验远不如系统级 Strong Toast / Focus Island，且外观与小米第一方耳机不一致。
+
+- [ ] 修改 `SonyControlService.kt` — `ACTION_SHOW_POPUP` 处理改为 no-op（或移除），通知中的 "Popup" action 移除。
+- [ ] 修改 `DeviceCardHook.kt` — 控制中心卡片点击目标从 `QuickPopupActivity` 改为系统蓝牙设置页（P7 实现后）或 `MainActivity`（临时）。
+- [ ] 修改 `SystemIntegrationReceiver.kt` — `ACTION_SHOW_QUICK_POPUP` 处理改为 no-op 或移除。
+- [ ] `QuickPopupActivity` 代码保留不删，`AndroidManifest.xml` 声明保留，但移除所有自动触发路径。
+- [ ] 更新 `AppUiSettingsStore.kt` — `connectionPopup` 偏好标记为 `@Deprecated` 或移除 UI 开关。
+- [ ] 更新 `SettingsModulesScreen` — 移除 "Connection popup" 开关行。
+
+回退：如需恢复，恢复上述触发路径即可。
+
+---
+
 ## 阶段 P6 ✅ 已完成：控制中心设备卡片入口（条件性）
 
 风险：高
@@ -264,7 +390,8 @@ HyperOS notification drawer (渠道 BTHeadset$MAC, ID 10003)
 
 完成内容：
 
-- [x] 新增 `lsposed/DeviceCardHook.kt` — hook `DeviceInfoWrapper.performClicked`，过滤 `deviceType == "third_headset"`，通过广播查询 MAC（`ACTION_QUERY_DEVICE_MAC` / `ACTION_DEVICE_MAC_RECEIVED`），匹配后调用 `MainPanelControllerProxy.exitOrHide()` 隐藏控制中心并启动 `QuickPopupActivity`。使用 `CountDownLatch` 等待 200ms 超时，超时或 MAC 不匹配时透传原始点击。
+- [x] 新增 `lsposed/DeviceCardHook.kt` — hook `DeviceInfoWrapper.performClicked`，过滤 `deviceType == "third_headset"`，通过广播查询 MAC（`ACTION_QUERY_DEVICE_MAC` / `ACTION_DEVICE_MAC_RECEIVED`），匹配后调用 `MainPanelControllerProxy.exitOrHide()` 隐藏控制中心并启动目标页面。使用 `CountDownLatch` 等待 200ms 超时，超时或 MAC 不匹配时透传原始点击。
+  - 注：启动目标当前为 `QuickPopupActivity`，P5.6 后改为 `MainActivity`（临时），P7 实现后改为系统蓝牙设置页。
 - [x] 新增 `lsposed/MainPanelControllerProxy.kt` — 薄反射封装调用 `exitOrHide()` 隐藏控制中心，null-safe，异常安全。
 - [x] 修改 `lsposed/SystemUiHook.kt` — 新增 `hook()` 方法：hook `PluginInstance.loadPlugin`（after-hook），检查 `getPackage()` 返回 `"miui.systemui.plugin"` 后通过 `mPluginFactory.mClassLoaderFactory.get()` 反射链提取 plugin ClassLoader，创建 `DeviceCardHook` 并调用 `.hook()`。注：probe 仅检测 `PluginInstance`（SystemUI ClassLoader 可访问），插件类存在性在 hook 时动态判断。
 - [x] 修改 `lsposed/ModuleMain.kt` — `com.android.systemui` 分发逻辑改为同时调用 `probe()` 和 `hook()`。
@@ -294,7 +421,127 @@ User taps device card in HyperOS control center
 
 ---
 
-## 阶段 P7：状态栏耳机图标（条件性）
+## 阶段 P7：系统蓝牙设置页入口（条件性）—— 弹窗/通知点击目标
+
+风险：很高
+前提：
+- P5.5（Focus Island/Strong Toast 弹窗）已完成。
+- `com.android.settings` 或小米设置包目标类存在（需调研确认）。
+- P5（HyperOS 通知）已实现，通知点击可配置跳转目标。
+- 🔒 **调研依赖**：需一台已配对小米第一方耳机（Redmi Buds / Xiaomi Buds 等）的真机来触发已配对设备详情页并进行逆向。
+
+目标：弹窗中的"更多设置"按钮和通知栏的点击目标指向系统蓝牙设备详情页，该页面已注入 OpenBuds 的菜单条目。用户看到的是与小米第一方耳机完全相同的设置入口体验。
+
+### 7.1 方案 A（优先）：Hook 系统蓝牙设置页注入条目
+
+在系统 Settings App 的蓝牙设备详情页中，为 Sony 耳机设备动态注入自定义 Preference 条目。
+
+**⚠️ 调研阻断（2026-05-26）：**
+- `dumpsys activity top` 抓取到的是**蓝牙配对引导页**（`SubSettings` 承载未配对设备的连接向导），不是已配对设备的详情设置页。
+- 已配对蓝牙设备的详情页（含"断开连接"、"取消配对"、编码选项等系统条目）需要**小米第一方耳机（或任何已配对的 Untethered Headset）**作为触发条件。
+- 配对引导页的 Activity 栈：`Settings$BluetoothSettingsActivity` → `MiuiSettings` → `SubSettings`，但 SubSettings 内的 Fragment 是配对向导而非设备详情。
+- dump 超时/NPE 问题已确认：`CachedAppOptimizer.dumpCompact()` 在 HyperOS 上存在空指针崩溃，`dumpsys activity pkg` 不可用。
+- dump 原始输出已保存至 `references/mi/dump_acitvity.txt` 供后续参考。
+
+**前置条件（需小米第一方耳机）：**
+1. 将小米耳机（如 Redmi Buds / Xiaomi Buds）与手机配对
+2. 进入 设置 → 蓝牙 → 已配对设备 → 点击小米耳机进入设备详情页
+3. 此时执行 `adb shell dumpsys activity top` 抓取详情页的 Fragment 类名和 Intent extras
+4. 记录详情页中系统显示的条目结构（电量、编码、LE Audio、增强设置入口等）
+
+**调研任务：**
+
+- [ ] 🔒 **阻断中 — 需小米第一方耳机**：确定 HyperOS 蓝牙设备详情页的 Fragment 类名和 Intent extras
+  - 候选：`com.android.settings.bluetooth.BluetoothDeviceDetailsFragment`
+  - 候选：`com.xiaomi.settings.bluetooth.DeviceDetailsFragment`
+  - 方法：打开已配对小米耳机的设备详情页 → `adb shell dumpsys activity top` → 查找 `:settings:show_fragment` extra
+- [ ] 确定设备对象的获取方式：
+  - `getActivity().getIntent().getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)`
+  - 或通过 `CachedBluetoothDevice` / `LocalBluetoothManager` 获取
+- [ ] 调研 Preference 注入时机（`onCreatePreferences` / `onResume`）
+- [ ] 调研 `METADATA_ENHANCED_SETTINGS_UI_URI`（metadata key 16）机制：
+  - 设置 `BluetoothDevice.setMetadata(16, "content://dev.ignotus.openbuds/settings".toByteArray())` 
+  - 系统 Settings 是否自动显示 "Enhanced settings" 入口
+  - 若可用则无需 hook Settings App，仅设置 metadata 即可（更安全）
+- [ ] 🔒 **阻断中 — 需小米第一方耳机**：观察小米第一方耳机详情页中系统原生的条目结构（电量显示方式、编码选择器、是否有"增强设置"/"更多设置"入口），确定注入条目的最佳位置
+
+**实现任务（若需 hook Settings App）：**
+
+- [ ] 把 `com.android.settings` 或小米设置包加入 scope（可选，默认不启用）。
+- [ ] Hook 蓝牙设备详情页 Fragment/Activity，在 `onCreatePreferences` 后注入自定义条目：
+  - 标题统一为设备名相关的描述（或 "Sony Sound settings"）
+  - Summary 动态显示：电量百分比 + ANC 当前模式
+  - 点击跳转 OpenBuds MainActivity（DeviceScreen 锚点）
+  - 条目只在 Sony 设备（通过 MAC/名称/device type metadata 匹配）时出现
+- [ ] 不覆盖、不移除系统原有蓝牙设置项。
+- [ ] 所有注入逻辑包在 try/catch + class-exists guard 中。
+
+**实现任务（若仅需 metadata）：**
+
+- [ ] 在 `BluetoothProcessHook` 或 `XiaomiBluetoothHook` 中，设备连接时调用 `BluetoothDevice.setMetadata()` 注入：
+  - `METADATA_DEVICE_TYPE(17)` = `"Untethered Headset"`
+  - `METADATA_IS_UNTETHERED_HEADSET(6)` = 对应值
+  - `METADATA_UNTETHERED_LEFT_BATTERY(10)` / `RIGHT(11)` / `CASE(12)` — 电量
+  - `METADATA_UNTETHERED_LEFT_ICON(7)` / `RIGHT(8)` / `CASE(9)` — 图标 URI
+  - `METADATA_ENHANCED_SETTINGS_UI_URI(16)` — 指向 OpenBuds 的 SliceProvider 或 Deep Link
+  - `METADATA_COMPANION_APP(4)` = `"dev.ignotus.openbuds"`
+- [ ] `HeadsetStateDispatcher`（`com.android.bluetooth` 进程）中在 A2DP 连接/断开时设定/清除 metadata。
+- [ ] 新增 `BluetoothProcessHook.hook()` — hook `A2dpService.handleConnectionStateChanged`，after-hook 中检测 Sony 设备并写入 metadata。
+
+**通知/弹窗点击流程改造：**
+
+- [ ] 修改 `HyperOsBatteryNotification.kt` — 通知的 `contentIntent` PendingIntent 指向系统蓝牙设备详情页。
+  - 构造 Intent：`new Intent(Settings.ACTION_BLUETOOTH_SETTINGS)` 或带 device address extra 的特定 intent
+  - 若无法直接打开设备详情页（需调研具体的 intent action/extra），则指向 P7 方案 B 的自建页面
+- [ ] 修改 Strong Toast / Focus Island 的 `target` PendingIntent，同样指向系统蓝牙设备详情页。
+
+### 7.2 方案 B（回退）：自建 Miuix 主题仿原生设置页
+
+若方案 A 不可行（系统 Settings 类无法 hook、metadata 机制不生效、或版本兼容性太差），创建外观与系统设置页一致的 Activity。
+
+**实现任务：**
+
+- [ ] 新增 `DeviceSettingsActivity.kt` — 仿系统蓝牙设备详情页：
+  - 使用 Miuix 主题组件（参考 OppoPods 的 `top.yukonga.miuix.kmp` 库）— `Scaffold`、`TopAppBar`、`Card`、`TextButton`
+  - 顶部：设备名 + 连接状态
+  - 电量卡片：Case / Left / Right 电量 + 充电状态图标
+  - ANC 卡片：当前模式 + 三态切换（仅在 protocolReady 时启用写入）
+  - 环境声等级 SeekBar（仅在 Ambient 模式下显示）
+  - "更多 Sound settings" 按钮 → 打开 MainActivity DeviceScreen
+  - "断开" 按钮
+  - 外观与 `com.android.settings.bluetooth.BluetoothDeviceDetailsFragment` 一致
+- [ ] 新增 `ui/screen/DeviceSettingsScreen.kt` — Compose 布局（Miuix 风格）
+- [ ] `AndroidManifest.xml` 声明 `DeviceSettingsActivity`，`exported=false`，dialog 主题
+- [ ] 此 Activity 作为 P5.5 弹窗和 P5 通知的点击目标
+- [ ] 更新 `SettingsModulesScreen` — 新增 "System settings page integration" 卡片和开关（默认关）
+
+**Miuix 依赖（方案 B 启用时添加）：**
+```kotlin
+// 参考 OppoPods 的 build.gradle
+implementation("top.yukonga.miuix:kmp:2.3.5")
+```
+
+### 7.3 方案选择逻辑（运行时）
+
+```
+if (ProbeResultCache.hasClass("com.android.settings.bluetooth.BluetoothDeviceDetailsFragment")) {
+    if (hookSettingsSuccess) {
+        → 方案 A: 系统设置页 + 注入条目
+    } else {
+        → 方案 B: 自建 Miuix 仿原生页面
+    }
+} else if (metadataEnhancedSettingsSupported) {
+    → 方案 A (metadata路径): 仅设置 BluetoothDevice metadata
+} else {
+    → 方案 B: 自建 Miuix 仿原生页面
+}
+```
+
+回退：`settingsPageIntegration` 默认 `false`，toggle 关闭时弹窗/通知点击直接跳转 `MainActivity`。方案 A hook 失败不影响系统 Settings 稳定性（try/catch 保护）。方案 B 作为独立 Activity 零风险。
+
+---
+
+## 阶段 P8：状态栏耳机图标（条件性）
 
 风险：高
 前提：`StatusBarManager.setIconVisibility` 有效。
@@ -309,27 +556,10 @@ User taps device card in HyperOS control center
 
 ---
 
-## 阶段 P8：系统蓝牙设置页入口（条件性）
-
-风险：很高
-前提：`com.android.settings` 目标类存在。
-
-待实现：
-
-- [ ] 把 `com.android.settings` 或小米设置包加入可选 scope（默认不启用）。
-- [ ] Modules 页提示用户这是实验功能。
-- [ ] 调研系统蓝牙设备详情页类（Fragment/Activity 名、Preference screen 构建时机、当前设备对象读取方式）。
-- [ ] 只对 Sony 设备插入入口：标题 "Sony Sound settings / OpenBuds"，summary 显示电量/ANC 当前状态，点击打开主 App 设备页。
-- [ ] 不在第一版直接嵌入复杂 Compose UI。
-- [ ] 不覆盖系统原有蓝牙设置项。
-- [ ] 新增开关："System settings entry"（默认关）。
-
----
-
 ## 阶段 P9：系统设置页内嵌控制（条件性）
 
 风险：最高
-前提：P8 已验证，仅经验证的 HyperOS 构建启用。
+前提：P7 方案 A 已验证，仅经验证的 HyperOS 构建启用。
 
 待实现（按功能逐项加入，不做一次性大页面）：
 
@@ -386,12 +616,43 @@ User taps device card in HyperOS control center
 
 - [x] 后台服务开关（`serviceBackgroundRun`，默认关）
 - [x] 常驻通知开关（`notificationPersistent`，默认开）
-- [x] 连接弹窗开关（`connectionPopup`，默认关）
+- [x] 连接弹窗开关（`connectionPopup`，默认关）→ P5.6 禁用，后续移除
 - [x] HyperOS 通知增强开关（`hyperOsNotification`，默认关）
 - [x] Control Center 卡片接管开关（`controlCenterIntercept`，默认关）
-- [ ] 状态栏增强开关（默认关）
-- [ ] 系统设置入口开关（默认关）
-- [ ] 实验性系统设置内嵌控制开关（默认关）
+- [ ] Focus Island 弹窗开关（`focusIslandPopup`，默认关）— P5.5
+- [ ] 系统设置页集成开关（`settingsPageIntegration`，默认关）— P7
+- [ ] 状态栏增强开关（默认关）— P8
+- [ ] 实验性系统设置内嵌控制开关（默认关）— P9
+
+### 完整导航流（P5.5 + P7 完成后）
+
+```
+耳机蓝牙连接
+  └─→ SonyControlService 检测连接
+       ├─→ sendHyperOsBatteryBroadcast() [com.xiaomi.bluetooth]
+       │    └─→ HyperOsBatteryReceiver
+       │         ├─→ Notification (P5): BTHeadset$MAC, ID 10003
+       │         └─→ Focus Island popup (P5.5): 顶部弹窗动画
+       │              └─→ 用户点击 "更多设置" 或通知
+       │                   └─→ P7: 系统蓝牙设备详情页 (方案A)
+       │                        └─→ [OpenBuds 注入条目] → MainActivity DeviceScreen
+       │                        或 P7: DeviceSettingsActivity (方案B)
+       │                             └─→ "Sound Settings" → MainActivity DeviceScreen
+       │
+       └─→ Control Center (P6): 用户点击 third_headset 卡片
+            └─→ DeviceCardHook → 同上 P7 页面
+```
+
+### 图片资源清单（P5.5 需要）
+
+| 文件名 | 用途 | 尺寸 | 来源 |
+|--------|------|------|------|
+| `drawable-nodpi/img_sony_left.png` | TWS 左耳塞（入耳状态） | ~200×200 | Sony 官网产品图裁剪 |
+| `drawable-nodpi/img_sony_right.png` | TWS 右耳塞（入耳状态） | ~200×200 | Sony 官网产品图裁剪 |
+| `drawable-nodpi/img_sony_case.png` | TWS 充电盒 | ~200×200 | Sony 官网产品图裁剪 |
+| `drawable-nodpi/img_sony_headset.png` | 头戴式耳机（WH 系列） | ~200×200 | Sony 官网产品图裁剪 |
+| `drawable-nodpi/img_sony_left_out.png` | TWS 左耳塞（未入耳） | ~200×200 | 可选 |
+| `drawable-nodpi/img_sony_right_out.png` | TWS 右耳塞（未入耳） | ~200×200 | 可选 |
 
 ---
 
@@ -401,8 +662,11 @@ User taps device card in HyperOS control center
 
 - HyperOS 类名和方法名随版本变化。
 - SystemUI hook 失败可能影响控制中心稳定性。
-- Settings hook 失败可能影响系统设置稳定性。
+- Settings hook 失败可能影响系统设置稳定性（P7 方案 A）。
 - 蓝牙系统进程 hook 失败可能影响连接稳定性。
+- Focus Island extras 格式在不同 HyperOS 版本可能不同。
+- `StatusBarManager.setStatus()` 为隐藏 API，未来 Android 版本可能被限制。
+- Sony 无官方耳塞动画资源，需自行准备静态图片。
 - GPL 参考项目代码不能直接混入 clean-room 实现（详见 `lsposed/GPL_BOUNDARY.md`）。
 
 回退要求：
@@ -412,3 +676,5 @@ User taps device card in HyperOS control center
 - 未知 ROM 版本默认关闭高风险功能。
 - App 标准通知和主 UI 永远作为 fallback。
 - 模块禁用后不能留下系统侧脏状态。
+- P5.5 Focus Island 失败 → Strong Toast；Strong Toast 失败 → 仅 P5 通知。
+- P7 方案 A 失败 → 方案 B（自建 Miuix 页面）；方案 B 也不可用 → 直接跳转 MainActivity。

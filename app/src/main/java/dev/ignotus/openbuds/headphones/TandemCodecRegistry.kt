@@ -7,7 +7,7 @@ import dev.ignotus.openbuds.protocol.EqPresetId
 import dev.ignotus.openbuds.protocol.LeaInquiredType
 import dev.ignotus.openbuds.protocol.NcAsmInquiredType
 import dev.ignotus.openbuds.protocol.NoiseControlMode
-import dev.ignotus.openbuds.protocol.ParsedTandemResponse
+import dev.ignotus.openbuds.protocol.ParsedHeadphoneResponse
 import dev.ignotus.openbuds.protocol.PlaybackControl
 import dev.ignotus.openbuds.protocol.PlayInquiredType
 import dev.ignotus.openbuds.protocol.PowerInquiredType
@@ -19,7 +19,7 @@ import dev.ignotus.openbuds.protocol.SonyTandemV2Table2Protocol
 interface TandemCodec {
     val variant: HeadphoneProtocolVariant
     val defaultChannel: TandemChannel
-    fun parse(raw: ByteArray): ParsedTandemResponse
+    fun parse(raw: ByteArray): ParsedHeadphoneResponse
     fun buildGetProtocolInfo(): ByteArray? = null
     fun buildGetDeviceInfo(type: DeviceInfoType): ByteArray? = null
     fun buildGetDisplayFirmwareVersion(): ByteArray? = null
@@ -69,6 +69,7 @@ object TandemCodecRegistry {
         HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1 -> SonyTandemV2Table1Codec
         HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE2 -> SonyTandemV2Table2Codec
         HeadphoneProtocolVariant.UNKNOWN -> UnknownTandemCodec
+        HeadphoneProtocolVariant.QCY -> UnknownTandemCodec // QCY uses its own protocol, not Tandem
     }
 }
 
@@ -76,8 +77,8 @@ object UnknownTandemCodec : TandemCodec {
     override val variant: HeadphoneProtocolVariant = HeadphoneProtocolVariant.UNKNOWN
     override val defaultChannel: TandemChannel
         get() = error("Unknown codec has no default channel")
-    override fun parse(raw: ByteArray): ParsedTandemResponse =
-        ParsedTandemResponse.Unknown(
+    override fun parse(raw: ByteArray): ParsedHeadphoneResponse =
+        ParsedHeadphoneResponse.SonyTandem.Unknown(
             dataType = raw.getOrNull(0)?.toInt()?.and(0xFF),
             command = raw.getOrNull(1)?.toInt()?.and(0xFF),
             payload = raw.drop(2).toByteArray(),
@@ -162,14 +163,14 @@ object SonyTandemV1Table1Codec : TandemCodec {
     override fun buildPlayback(control: PlaybackControl, type: PlayInquiredType): ByteArray =
         SonyTandemV1Table1Protocol.buildPlayback(control)
 
-    override fun parse(raw: ByteArray): ParsedTandemResponse =
+    override fun parse(raw: ByteArray): ParsedHeadphoneResponse =
         SonyTandemV1Table1Protocol.parse(raw)
 }
 
 object SonyTandemV1Table2Codec : TandemCodec {
     override val variant: HeadphoneProtocolVariant = HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE2
     override val defaultChannel: TandemChannel = TandemChannel.GATT_V1_MC
-    override fun parse(raw: ByteArray): ParsedTandemResponse =
+    override fun parse(raw: ByteArray): ParsedHeadphoneResponse =
         SonyTandemV1Table2Protocol.parse(raw)
 }
 
@@ -285,13 +286,13 @@ object SonyTandemV2Table1Codec : TandemCodec {
     override fun buildGetWearingStatus(): ByteArray =
         SonyTandemV2Table1Protocol.buildGetWearingStatus()
 
-    override fun parse(raw: ByteArray): ParsedTandemResponse =
+    override fun parse(raw: ByteArray): ParsedHeadphoneResponse =
         SonyTandemV2Table1Protocol.parse(raw)
 }
 
 object SonyTandemV2Table2Codec : TandemCodec {
     override val variant: HeadphoneProtocolVariant = HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE2
     override val defaultChannel: TandemChannel = TandemChannel.GATT_V2_MC
-    override fun parse(raw: ByteArray): ParsedTandemResponse =
+    override fun parse(raw: ByteArray): ParsedHeadphoneResponse =
         SonyTandemV2Table2Protocol.parse(raw)
 }

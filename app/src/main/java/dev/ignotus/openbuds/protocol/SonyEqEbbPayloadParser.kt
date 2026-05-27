@@ -21,7 +21,7 @@ internal object SonyEqEbbPayloadParser {
         command: Byte,
         payload: ByteArray,
         raw: ByteArray,
-    ): ParsedTandemResponse {
+    ): ParsedHeadphoneResponse {
         val type = payload.firstOrNull()?.let { typeFor(version, it) }
         val values = payload.drop(1).map { it.unsigned }
         val isParamResponse = command == EQEBB_RET_PARAM || command == EQEBB_NTFY_PARAM
@@ -40,7 +40,7 @@ internal object SonyEqEbbPayloadParser {
                 payload.drop(offset + 1).take(count).map { it.unsigned }
             }
         }.orEmpty()
-        return ParsedTandemResponse.EqEbb(
+        return ParsedHeadphoneResponse.SonyTandem.EqEbb(
             type = type,
             enabled = enabled,
             preset = if (isParamResponse) parsePreset(version, type, payload) else null,
@@ -55,7 +55,7 @@ internal object SonyEqEbbPayloadParser {
         version: EqEbbPayloadVersion,
         payload: ByteArray,
         raw: ByteArray,
-    ): ParsedTandemResponse {
+    ): ParsedHeadphoneResponse {
         val type = payload.firstOrNull()?.let { typeFor(version, it) }
         val count = payload.getOrNull(1)?.unsigned ?: 0
         val bands = buildList {
@@ -63,11 +63,11 @@ internal object SonyEqEbbPayloadParser {
             while (size < count && offset + 2 < payload.size) {
                 val infoType = payload[offset].toEqBandInformationType()
                 val value = (payload[offset + 1].unsigned shl 8) or payload[offset + 2].unsigned
-                add(ParsedTandemResponse.EqBandInfo(infoType, value))
+                add(ParsedHeadphoneResponse.SonyTandem.EqBandInfo(infoType, value))
                 offset += 3
             }
         }
-        return ParsedTandemResponse.EqEbbExtendedInfo(
+        return ParsedHeadphoneResponse.SonyTandem.EqEbbExtendedInfo(
             type = type,
             bands = bands,
             values = payload.drop(1).map { it.unsigned },

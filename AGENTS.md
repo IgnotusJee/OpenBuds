@@ -13,9 +13,10 @@ The Android rebuild lives in `app/` as a Jetpack Compose project with package `d
 The project root is the git repository root (formerly `App/`). Subdirectories:
 
 - **`app/`** — Android module (formerly `App/app/`), Jetpack Compose, package `dev.ignotus.openbuds`.
-  - `app/src/main/java/dev/ignotus/openbuds/ble/` — BLE, GATT, SPP transport, endpoint diagnostics.
-  - `app/src/main/java/dev/ignotus/openbuds/protocol/` — GATT UUIDs and Tandem V1/V2 command builders/parsers.
-  - `app/src/main/java/dev/ignotus/openbuds/data/` — Repository, UI state, model image catalog.
+  - `app/src/main/java/dev/ignotus/openbuds/ble/` — BLE, GATT, SPP transport, endpoint diagnostics. Brand clients: `SonyBleClient.kt`, `QcyBleClient.kt`.
+  - `app/src/main/java/dev/ignotus/openbuds/protocol/` — GATT UUIDs and Tandem V1/V2 command builders/parsers. QCY: `QcyProtocol.kt`, `QcyGatt.kt`.
+  - `app/src/main/java/dev/ignotus/openbuds/data/` — Repository, UI state, model image catalog. QCY mapper: `qcy/QcyResponseMapper.kt`.
+  - `app/src/main/java/dev/ignotus/openbuds/headphones/` — Adapters: `SonyTandemHeadphoneAdapter.kt`, `QcyHeadphoneAdapter.kt`. QCY profile: `qcydevices/QcyC30SProfile.kt`.
   - `app/src/main/java/dev/ignotus/openbuds/ui/` — Compose UI.
 - **`docs/`** — Development documentation.
   - `DEVELOPMENT.md` — Dev guide: environment, code structure, feature workflow, UI conventions, testing.
@@ -27,6 +28,8 @@ The project root is the git repository root (formerly `App/`). Subdirectories:
   - `SonyConnect/` — Decompiled Sony Sound Connect APK (jadx output). Original reverse engineering source.
   - `HyperPods/` — Apple headphone Xposed module (L2CAP/BLE control reference).
   - `OppoPods/` — OPPO headphone Xposed module (HyperOS integration reference).
+  - `QCY/` — Decompiled QCY earphone setup APK (jadx output).
+    - `QCY_C30S_PROTOCOL.md` — Full protocol reference (BLE GATT UUIDs, TLV frame format, CMDID table).
   - `REAREye/` — Backscreen Xposed module (Compose UI reference).
 - **`tools/`** — Agent and development helper tools (e.g., `analyze_btsnoop.py` for BLE HCI log analysis).
 - Root Gradle files — `build.gradle.kts`, `settings.gradle.kts` (rootProject.name = "OpenBuds").
@@ -93,3 +96,33 @@ Decompiled sources are in `references/SonyConnect/sources/` (read-only reference
 - The j2objc bridge is the best place to understand how a feature works end-to-end (it connects protocol layer to application logic)
 - `param/` subdirectories contain the enum/constant definitions for each protocol feature
 - JSON assets in `resources/assets/` and `resources/res/raw/` contain Lottie animations, service configurations, and region maps
+
+## Working with QCY Reference
+
+QCY decompiled sources are in `references/QCY/outshell/sources/` (read-only). Key files:
+
+| Purpose | Path |
+|---------|------|
+| Protocol reference (framing, CMDIDs) | `references/QCY/QCY_C30S_PROTOCOL.md` |
+| BLE client (UUIDs, connection flow) | `outshell/sources/com/qcymall/qcylibrary/QCYHeadsetClient.java` |
+| Frame serialize/deserialize | `outshell/sources/com/qcymall/qcylibrary/dataBean/DataAnalyse.java` |
+| CMDID constants | `outshell/sources/com/qcymall/qcylibrary/dataBean/DataBean.java` |
+| Complete UUID map (V1+V2) | `outshell/sources/com/qcymall/earphonesetup/model/ControlerPanl.java` |
+
+### QCY Protocol Quick Facts
+
+- **Frame format**: `[0xFF] [PayloadLen] [CMD_ID:1] [DATA_LEN:1] [DATA:N]...` (multi-TLV per frame)
+- **Read request**: `FF 03 FE 01 <TARGET_CMD>`
+- **Strict length**: parser requires `raw.size == (byte[1] & 0xFF) + 2` (exact match; frame truncated → invalid)
+- **Battery**: bit 7 = charging flag, low 7 bits = level (0–100) on 0x0008 notify
+- **ANC**: CMD 12 (mode: 0=off/1=ANC/2=outdoor/3=transparency) + CMD 7 (value: 0–255)
+- **EQ**: CMD 32 (6B/band, old) or CMD 34 (7B/band, new) on 0x1001 → response on 0x1002
+- **Service UUID**: `0000A001-0000-1000-8000-00805F9B34FB`
+
+### Transport Layer Abstraction
+
+OpenBuds now supports multi-brand transport through `HeadphoneTransportClient`. See:
+
+- `ble/HeadphoneTransportClient.kt` — interface
+- `ble/HeadphoneTransportSelector.kt` — client selection and scan dedup
+- `docs/BRAND_INTEGRATION_GUIDE.md` — how to add a new brand

@@ -67,6 +67,7 @@ import dev.ignotus.openbuds.headphones.ConnectedHeadphoneProfile
 import dev.ignotus.openbuds.headphones.EqUiCapability
 import dev.ignotus.openbuds.headphones.HeadphoneFeature
 import dev.ignotus.openbuds.headphones.HeadphoneFormFactor
+import dev.ignotus.openbuds.headphones.InfoLayoutHint
 import dev.ignotus.openbuds.protocol.EqPresetId
 import dev.ignotus.openbuds.protocol.NoiseControlMode
 import dev.ignotus.openbuds.protocol.PlaybackStatus
@@ -330,14 +331,22 @@ internal fun DeviceInfoCard(state: SonyHeadphoneUiState) {
             imageUrl = info.modelImageUrl,
             modelName = info.modelName ?: state.connectedDevice?.name,
         )
-        InfoLine("Protocol channel", if (info.protocolReady) "Sony Tandem ready" else "Not ready")
+        InfoLine("Protocol channel", if (info.protocolReady) {
+            state.connectedProfile?.protocolName?.let { "$it ready" } ?: "GATT ready"
+        } else {
+            "Not ready"
+        })
         state.connectedProfile?.let { profile ->
             InfoLine("Adapter", "${profile.adapterId} / ${profile.protocolName}")
             InfoLine("Transport", profile.transport.name)
         }
         InfoLine("Model", info.modelName ?: state.connectedDevice?.name ?: "Unknown")
         InfoLine("Firmware", info.firmwareVersion ?: "Unknown")
-        InfoLine("Series / color", info.seriesAndColor ?: "Unknown")
+        if (state.connectedProfile?.infoLayoutHint == InfoLayoutHint.SONY_SERIES) {
+            InfoLine("Series / color", info.seriesAndColor ?: "Unknown")
+        } else {
+            InfoLine("Brand / Model", "${state.connectedProfile?.brand ?: "Unknown"} ${state.connectedProfile?.displayName ?: ""}".trim())
+        }
         InfoLine("Image match", info.modelImageUrl?.let { info.modelColor ?: "Default" } ?: "Default placeholder")
     }
 }

@@ -30,11 +30,12 @@ class SonyTandemTable2RoutingTest {
     @Test
     fun protocolVariant_hasAllFourSpecificVariantsPlusUnknown() {
         val variants = HeadphoneProtocolVariant.entries
-        assertEquals(5, variants.size)
+        assertEquals(6, variants.size)
         assertTrue(variants.contains(HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1))
         assertTrue(variants.contains(HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE2))
         assertTrue(variants.contains(HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1))
         assertTrue(variants.contains(HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE2))
+        assertTrue(variants.contains(HeadphoneProtocolVariant.QCY))
         assertTrue(variants.contains(HeadphoneProtocolVariant.UNKNOWN))
     }
 
@@ -50,8 +51,8 @@ class SonyTandemTable2RoutingTest {
         val raw = byteArrayOf(0x0F.toByte(), 0x32, 0x00)
         val parsed = SonyTandemV2Table2Protocol.parse(raw)
 
-        assertTrue("Expected Unknown but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Unknown)
-        parsed as ParsedTandemResponse.Unknown
+        assertTrue("Expected Unknown but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.Unknown)
+        parsed as ParsedHeadphoneResponse.SonyTandem.Unknown
         // Phase 6: normalizer recognises 0x0F natively
         assertEquals(0x0F, parsed.dataType)
         assertEquals(0x32, parsed.command)
@@ -62,8 +63,8 @@ class SonyTandemTable2RoutingTest {
         val raw = byteArrayOf(0x0F.toByte(), 0x42, 0x01, 0x02, 0x03)
         val parsed = SonyTandemV2Table2Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.Unknown)
-        parsed as ParsedTandemResponse.Unknown
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.Unknown)
+        parsed as ParsedHeadphoneResponse.SonyTandem.Unknown
         // Phase 6: normalizer recognises 0x0F, so payload = [01, 02, 03]
         assertTrue(parsed.payload.contentEquals(byteArrayOf(0x01, 0x02, 0x03)))
         assertTrue(parsed.raw.contentEquals(raw))
@@ -74,8 +75,8 @@ class SonyTandemTable2RoutingTest {
         val raw = byteArrayOf(0x0F.toByte(), 0x32)
         val parsed = SonyTandemV2Table2Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.Unknown)
-        parsed as ParsedTandemResponse.Unknown
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.Unknown)
+        parsed as ParsedHeadphoneResponse.SonyTandem.Unknown
         // Phase 6: normalised=[0F, 32], payload=[], size=0
         assertEquals(0, parsed.payload.size)
     }
@@ -85,8 +86,8 @@ class SonyTandemTable2RoutingTest {
         val raw = byteArrayOf(0x32, 0x00)
         val parsed = SonyTandemV2Table2Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.Unknown)
-        parsed as ParsedTandemResponse.Unknown
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.Unknown)
+        parsed as ParsedHeadphoneResponse.SonyTandem.Unknown
         // Phase 6: DATA_MDR_NO2 prepended when no data type byte present
         assertEquals(0x0F, parsed.dataType)
         assertEquals(0x32, parsed.command)
@@ -104,8 +105,8 @@ class SonyTandemTable2RoutingTest {
         val raw = byteArrayOf(0x0F.toByte(), 0x32, 0x00)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue("Expected Unknown but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Unknown)
-        parsed as ParsedTandemResponse.Unknown
+        assertTrue("Expected Unknown but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.Unknown)
+        parsed as ParsedHeadphoneResponse.SonyTandem.Unknown
         // After normalization, dataType=0x0E (prepended), command=0x0F (original dataType)
         assertEquals(0x0E, parsed.dataType)
     }
@@ -117,7 +118,7 @@ class SonyTandemTable2RoutingTest {
         val raw = byteArrayOf(0x0E, 0x32, 0x00)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue("Expected Unknown but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Unknown)
+        assertTrue("Expected Unknown but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.Unknown)
     }
 
     @Test
@@ -129,7 +130,7 @@ class SonyTandemTable2RoutingTest {
 
         assertTrue(
             "Peripheral RET_STATUS (0x33) should be Unknown in V2 Table1, got ${parsed::class.simpleName}",
-            parsed is ParsedTandemResponse.Unknown,
+            parsed is ParsedHeadphoneResponse.SonyTandem.Unknown,
         )
     }
 
@@ -157,14 +158,16 @@ class SonyTandemTable2RoutingTest {
 
     @Test
     fun codecRegistry_allVariantsAreCovered() {
-        HeadphoneProtocolVariant.entries.forEach { variant ->
-            val resolved = resolveCodecVariant(variant)
-            assertEquals(
-                "Registry must return the same variant for $variant",
-                variant,
-                resolved,
-            )
-        }
+        HeadphoneProtocolVariant.entries
+            .filter { it != HeadphoneProtocolVariant.QCY } // QCY uses its own protocol, not Tandem
+            .forEach { variant ->
+                val resolved = resolveCodecVariant(variant)
+                assertEquals(
+                    "Registry must return the same variant for $variant",
+                    variant,
+                    resolved,
+                )
+            }
     }
 
     @Test

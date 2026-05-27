@@ -71,17 +71,17 @@ object SonyTandemV1Table2Protocol {
 
     // ── Parser ──────────────────────────────────────────────────────────────
 
-    fun parse(raw: ByteArray): ParsedTandemResponse {
+    fun parse(raw: ByteArray): ParsedHeadphoneResponse {
         val normalized = if (raw.firstOrNull() == DT) raw else byteArrayOf(DT) + raw
         if (normalized.size < 2) {
-            return ParsedTandemResponse.Unknown(null, null, byteArrayOf(), raw)
+            return ParsedHeadphoneResponse.SonyTandem.Unknown(null, null, byteArrayOf(), raw)
         }
         val dataType = normalized[0]
         val command = normalized[1]
         val payload = normalized.drop(2).map { it }.toByteArray()
 
         if (dataType != DT) {
-            return ParsedTandemResponse.Unknown(dataType.unsigned, command.unsigned, payload, raw)
+            return ParsedHeadphoneResponse.SonyTandem.Unknown(dataType.unsigned, command.unsigned, payload, raw)
         }
 
         return when (command) {
@@ -89,13 +89,13 @@ object SonyTandemV1Table2Protocol {
             PERI_RET_PARAM, PERI_NTFY_PARAM -> parsePeripheral(payload, raw)
             VG_RET_CAPABILITY, VG_RET_STATUS, VG_NTFY_STATUS,
             VG_RET_PARAM, VG_NTFY_PARAM -> parseVoiceGuidance(payload, raw)
-            else -> ParsedTandemResponse.Unknown(dataType.unsigned, command.unsigned, payload, raw)
+            else -> ParsedHeadphoneResponse.SonyTandem.Unknown(dataType.unsigned, command.unsigned, payload, raw)
         }
     }
 
-    private fun parsePeripheral(payload: ByteArray, raw: ByteArray): ParsedTandemResponse {
+    private fun parsePeripheral(payload: ByteArray, raw: ByteArray): ParsedHeadphoneResponse {
         val type = payload.firstOrNull()?.let { PeripheralInquiredTypeV1Table2.fromCode(it) }
-        return ParsedTandemResponse.Table2Generic(
+        return ParsedHeadphoneResponse.SonyTandem.Table2Generic(
             family = Table2Family.PERIPHERAL.name,
             inquiredType = type?.code?.unsigned,
             values = payload.drop(1).map { it.unsigned },
@@ -103,9 +103,9 @@ object SonyTandemV1Table2Protocol {
         )
     }
 
-    private fun parseVoiceGuidance(payload: ByteArray, raw: ByteArray): ParsedTandemResponse {
+    private fun parseVoiceGuidance(payload: ByteArray, raw: ByteArray): ParsedHeadphoneResponse {
         val type = payload.firstOrNull()?.let { VoiceGuidanceInquiredTypeV1Table2.fromCode(it) }
-        return ParsedTandemResponse.Table2Generic(
+        return ParsedHeadphoneResponse.SonyTandem.Table2Generic(
             family = Table2Family.VOICE_GUIDANCE.name,
             inquiredType = type?.code?.unsigned,
             values = payload.drop(1).map { it.unsigned },

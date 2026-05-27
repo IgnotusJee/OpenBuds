@@ -228,16 +228,16 @@ object SonyTandemV2Table1Protocol {
             byteArrayOf(type.code, VALUE_ENABLE, control.code),
         )
 
-    fun parse(raw: ByteArray): ParsedTandemResponse {
+    fun parse(raw: ByteArray): ParsedHeadphoneResponse {
         val normalized = if (raw.firstOrNull() == DATA_MDR) raw else byteArrayOf(DATA_MDR) + raw
         if (normalized.size < 2) {
-            return ParsedTandemResponse.Unknown(null, null, byteArrayOf(), raw)
+            return ParsedHeadphoneResponse.SonyTandem.Unknown(null, null, byteArrayOf(), raw)
         }
         val dataType = normalized[0]
         val command = normalized[1]
         val payload = normalized.drop(2).map { it }.toByteArray()
         if (dataType != DATA_MDR) {
-            return ParsedTandemResponse.Unknown(dataType.unsigned, command.unsigned, payload, raw)
+            return ParsedHeadphoneResponse.SonyTandem.Unknown(dataType.unsigned, command.unsigned, payload, raw)
         }
 
         return when (command) {
@@ -249,13 +249,13 @@ object SonyTandemV2Table1Protocol {
             EQEBB_RET_EXTENDED_INFO -> SonyEqEbbPayloadParser.parseExtendedInfo(EqEbbPayloadVersion.V2, payload, raw)
             NCASM_RET_STATUS, NCASM_NTFY_STATUS -> parseNoiseControl(command, payload, raw)
             NCASM_RET_PARAM, NCASM_NTFY_PARAM -> parseNoiseControl(command, payload, raw)
-            PLAY_RET_STATUS -> ParsedTandemResponse.PlaybackAck(
+            PLAY_RET_STATUS -> ParsedHeadphoneResponse.SonyTandem.PlaybackAck(
                 values = payload.unsignedList(),
                 status = parsePlaybackStatus(payload),
                 isUnsolicited = false,
                 raw = raw,
             )
-            PLAY_NTFY_STATUS -> ParsedTandemResponse.PlaybackAck(
+            PLAY_NTFY_STATUS -> ParsedHeadphoneResponse.SonyTandem.PlaybackAck(
                 values = payload.unsignedList(),
                 status = parsePlaybackStatus(payload),
                 isUnsolicited = true,
@@ -264,11 +264,11 @@ object SonyTandemV2Table1Protocol {
             LEA_RET_STATUS, LEA_NTFY_STATUS -> parseLeaStatus(payload, raw)
             LEA_RET_PARAM, LEA_NTFY_PARAM -> parseLeaParam(payload, raw)
             SYSTEM_RET_PARAM -> parseSystemRetParam(payload, raw)
-            else -> ParsedTandemResponse.Unknown(dataType.unsigned, command.unsigned, payload, raw)
+            else -> ParsedHeadphoneResponse.SonyTandem.Unknown(dataType.unsigned, command.unsigned, payload, raw)
         }
     }
 
-    private fun parseDeviceInfo(payload: ByteArray, raw: ByteArray): ParsedTandemResponse {
+    private fun parseDeviceInfo(payload: ByteArray, raw: ByteArray): ParsedHeadphoneResponse {
         val type = payload.firstOrNull()?.let { code ->
             DeviceInfoType.entries.firstOrNull { it.code == code }
         }
@@ -279,10 +279,10 @@ object SonyTandemV2Table1Protocol {
             DeviceInfoType.SERIES_AND_COLOR_INFO -> parseSeriesAndColor(payload)
             null -> null
         }
-        return ParsedTandemResponse.DeviceInfo(type, text, raw)
+        return ParsedHeadphoneResponse.SonyTandem.DeviceInfo(type, text, raw)
     }
 
-    private fun parseCommonStatus(payload: ByteArray, raw: ByteArray): ParsedTandemResponse {
+    private fun parseCommonStatus(payload: ByteArray, raw: ByteArray): ParsedHeadphoneResponse {
         val type = payload.firstOrNull()?.let { code ->
             CommonInquiredType.entries.firstOrNull { it.code == code }
         }
@@ -291,7 +291,7 @@ object SonyTandemV2Table1Protocol {
             null -> null
             else -> null
         }
-        return ParsedTandemResponse.CommonStatus(
+        return ParsedHeadphoneResponse.SonyTandem.CommonStatus(
             type = type,
             text = text,
             values = payload.drop(1).map { it.unsigned },
@@ -375,7 +375,7 @@ object SonyTandemV2Table1Protocol {
             else -> "Unknown color 0x%02X".format(code)
         }
 
-    private fun parseBattery(payload: ByteArray, raw: ByteArray): ParsedTandemResponse {
+    private fun parseBattery(payload: ByteArray, raw: ByteArray): ParsedHeadphoneResponse {
         val kind = payload.firstOrNull()?.let { code ->
             PowerInquiredType.entries.firstOrNull { it.code == code }
         }
@@ -388,21 +388,21 @@ object SonyTandemV2Table1Protocol {
             )
             else -> payload.drop(1).map { it.unsigned }
         }
-        return ParsedTandemResponse.Battery(kind, values, raw)
+        return ParsedHeadphoneResponse.SonyTandem.Battery(kind, values, raw)
     }
 
-    private fun parseEqEbb(command: Byte, payload: ByteArray, raw: ByteArray): ParsedTandemResponse {
+    private fun parseEqEbb(command: Byte, payload: ByteArray, raw: ByteArray): ParsedHeadphoneResponse {
         return SonyEqEbbPayloadParser.parse(EqEbbPayloadVersion.V2, command, payload, raw)
     }
 
-    private fun parseNoiseControl(command: Byte, payload: ByteArray, raw: ByteArray): ParsedTandemResponse {
+    private fun parseNoiseControl(command: Byte, payload: ByteArray, raw: ByteArray): ParsedHeadphoneResponse {
         val type = payload.firstOrNull()?.let { code ->
             NcAsmInquiredType.entries.firstOrNull { it.code == code }
         }
         val values = payload.drop(1).map { it.unsigned }
         val isParamResponse = command == NCASM_RET_PARAM || command == NCASM_NTFY_PARAM
         if (!isParamResponse) {
-            return ParsedTandemResponse.NoiseControl(
+            return ParsedHeadphoneResponse.SonyTandem.NoiseControl(
                 type = type,
                 values = values,
                 raw = raw,
@@ -465,7 +465,7 @@ object SonyTandemV2Table1Protocol {
             }
             else -> null
         }
-        return ParsedTandemResponse.NoiseControl(
+        return ParsedHeadphoneResponse.SonyTandem.NoiseControl(
             type = type,
             values = values,
             enabled = when (type) {
@@ -511,7 +511,7 @@ object SonyTandemV2Table1Protocol {
             else -> PlaybackStatus.UNKNOWN
         }
 
-    private fun parseLeaStatus(payload: ByteArray, raw: ByteArray): ParsedTandemResponse {
+    private fun parseLeaStatus(payload: ByteArray, raw: ByteArray): ParsedHeadphoneResponse {
         val typeCode = payload.firstOrNull()
         val type = LeaInquiredType.entries.firstOrNull { it.code == typeCode }
         val values = payload.unsignedList()
@@ -526,7 +526,7 @@ object SonyTandemV2Table1Protocol {
                 payload.getOrNull(2)?.toLeaStreamingStatus() to payload.getOrNull(3)?.toLeaStreamingStatus()
             null -> null to null
         }
-        return ParsedTandemResponse.LeaStatus(
+        return ParsedHeadphoneResponse.SonyTandem.LeaStatus(
             type = type,
             values = values,
             enabled = enabled,
@@ -536,13 +536,13 @@ object SonyTandemV2Table1Protocol {
         )
     }
 
-    private fun parseLeaParam(payload: ByteArray, raw: ByteArray): ParsedTandemResponse {
+    private fun parseLeaParam(payload: ByteArray, raw: ByteArray): ParsedHeadphoneResponse {
         val typeCode = payload.firstOrNull()
         val type = LeaInquiredType.entries.firstOrNull { it.code == typeCode }
         val pairedHistory = payload.getOrNull(1)?.let { code ->
             LeaPairedHistory.entries.firstOrNull { it.code == code }
         }
-        return ParsedTandemResponse.LeaPairedHistoryStatus(
+        return ParsedHeadphoneResponse.SonyTandem.LeaPairedHistoryStatus(
             type = type,
             values = payload.unsignedList(),
             pairedHistory = pairedHistory,
@@ -553,21 +553,21 @@ object SonyTandemV2Table1Protocol {
     private fun Byte.toLeaStreamingStatus(): LeaStreamingStatus? =
         LeaStreamingStatus.entries.firstOrNull { it.code == this }
 
-    private fun parseSystemRetParam(payload: ByteArray, raw: ByteArray): ParsedTandemResponse =
+    private fun parseSystemRetParam(payload: ByteArray, raw: ByteArray): ParsedHeadphoneResponse =
         when (payload.firstOrNull()) {
             SystemInquiredType.QUICK_ACCESS.code -> parseQuickAccess(payload, raw)
             SystemInquiredType.WEARING_STATUS_DETECTOR.code -> parseWearingStatus(payload, raw)
-            else -> ParsedTandemResponse.Unknown(null, SYSTEM_RET_PARAM.unsigned, payload, raw)
+            else -> ParsedHeadphoneResponse.SonyTandem.Unknown(null, SYSTEM_RET_PARAM.unsigned, payload, raw)
         }
 
-    private fun parseQuickAccess(payload: ByteArray, raw: ByteArray): ParsedTandemResponse {
+    private fun parseQuickAccess(payload: ByteArray, raw: ByteArray): ParsedHeadphoneResponse {
         val key = payload.getOrNull(1)?.let { k ->
             QuickAccessKey.entries.firstOrNull { it.code == k }
         }
         val function = payload.getOrNull(2)?.let { f ->
             QuickAccessFunction.entries.firstOrNull { it.code == f }
         }
-        return ParsedTandemResponse.QuickAccess(
+        return ParsedHeadphoneResponse.SonyTandem.QuickAccess(
             key = key,
             function = function,
             values = payload.unsignedList(),
@@ -575,14 +575,14 @@ object SonyTandemV2Table1Protocol {
         )
     }
 
-    private fun parseWearingStatus(payload: ByteArray, raw: ByteArray): ParsedTandemResponse {
+    private fun parseWearingStatus(payload: ByteArray, raw: ByteArray): ParsedHeadphoneResponse {
         val status = payload.getOrNull(1)?.let { s ->
             WearingDetectionStatus.entries.firstOrNull { it.code == s }
         }
         val result = payload.getOrNull(2)?.let { r ->
             WearingDetectionResult.entries.firstOrNull { it.code == r }
         }
-        return ParsedTandemResponse.WearingStatus(
+        return ParsedHeadphoneResponse.SonyTandem.WearingStatus(
             status = status,
             result = result,
             values = payload.unsignedList(),

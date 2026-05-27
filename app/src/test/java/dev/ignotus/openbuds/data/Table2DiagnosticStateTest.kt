@@ -1,7 +1,7 @@
 package dev.ignotus.openbuds.data
 
 import dev.ignotus.openbuds.headphones.TandemChannel
-import dev.ignotus.openbuds.protocol.ParsedTandemResponse
+import dev.ignotus.openbuds.protocol.ParsedHeadphoneResponse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -11,7 +11,7 @@ class Table2DiagnosticStateTest {
     fun table2Common_mapsToDiagnosticState() {
         val diagnostic = table2DiagnosticStateFor(
             TandemChannel.GATT_V2_MC,
-            ParsedTandemResponse.Table2Common(
+            ParsedHeadphoneResponse.SonyTandem.Table2Common(
                 family = "CONNECT",
                 command = 0x07,
                 values = listOf(0x01, 0x02),
@@ -32,7 +32,7 @@ class Table2DiagnosticStateTest {
     fun table2Generic_mapsToDiagnosticState() {
         val diagnostic = table2DiagnosticStateFor(
             TandemChannel.GATT_V1_MC,
-            ParsedTandemResponse.Table2Generic(
+            ParsedHeadphoneResponse.SonyTandem.Table2Generic(
                 family = "PERIPHERAL",
                 inquiredType = 0x01,
                 values = listOf(0x02, 0x03),

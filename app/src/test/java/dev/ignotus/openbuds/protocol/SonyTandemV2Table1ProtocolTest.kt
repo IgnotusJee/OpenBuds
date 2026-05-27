@@ -224,8 +224,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x7F, 0x10, 0x20)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.Unknown)
-        parsed as ParsedTandemResponse.Unknown
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.Unknown)
+        parsed as ParsedHeadphoneResponse.SonyTandem.Unknown
         assertEquals(0x7F, parsed.command)
         assertArrayEquals(byteArrayOf(0x10, 0x20), parsed.payload)
         assertArrayEquals(raw, parsed.raw)
@@ -237,8 +237,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x05, 0x01, model.size.toByte()) + model
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.DeviceInfo)
-        parsed as ParsedTandemResponse.DeviceInfo
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.DeviceInfo)
+        parsed as ParsedHeadphoneResponse.SonyTandem.DeviceInfo
         assertEquals(DeviceInfoType.MODEL_NAME, parsed.type)
         assertEquals("WF-1000XM5", parsed.text)
     }
@@ -248,8 +248,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x05, 0x03, 0x60, 0x01)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.DeviceInfo)
-        parsed as ParsedTandemResponse.DeviceInfo
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.DeviceInfo)
+        parsed as ParsedHeadphoneResponse.SonyTandem.DeviceInfo
         assertEquals(DeviceInfoType.SERIES_AND_COLOR_INFO, parsed.type)
         assertEquals("LINK_BUDS / Black", parsed.text)
     }
@@ -259,8 +259,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x23, 0x01, 80.toByte(), 0x01, 70.toByte(), 0x01)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.Battery)
-        parsed as ParsedTandemResponse.Battery
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.Battery)
+        parsed as ParsedHeadphoneResponse.SonyTandem.Battery
         assertEquals(PowerInquiredType.LEFT_RIGHT_BATTERY, parsed.kind)
         assertEquals(listOf(80, 70), parsed.values)
     }
@@ -270,8 +270,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x23, 0x00, 60.toByte(), 0x01)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.Battery)
-        parsed as ParsedTandemResponse.Battery
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.Battery)
+        parsed as ParsedHeadphoneResponse.SonyTandem.Battery
         assertEquals(PowerInquiredType.BATTERY, parsed.kind)
         assertEquals(listOf(60), parsed.values)
     }
@@ -281,8 +281,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x11, 0x00, 88.toByte(), 0x00)
         val parsed = SonyTandemV1Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.Battery)
-        parsed as ParsedTandemResponse.Battery
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.Battery)
+        parsed as ParsedHeadphoneResponse.SonyTandem.Battery
         assertEquals(PowerInquiredType.BATTERY, parsed.kind)
         assertEquals(listOf(88), parsed.values)
     }
@@ -293,8 +293,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x05, 0x02, version.size.toByte()) + version
         val parsed = SonyTandemV1Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.DeviceInfo)
-        parsed as ParsedTandemResponse.DeviceInfo
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.DeviceInfo)
+        parsed as ParsedHeadphoneResponse.SonyTandem.DeviceInfo
         assertEquals(DeviceInfoType.FW_VERSION, parsed.type)
         assertEquals("2.5.1", parsed.text)
     }
@@ -304,8 +304,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0xA3.toByte(), 0x01, 0x00, 0x03)
         val parsed = SonyTandemV1Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.PlaybackAck)
-        parsed as ParsedTandemResponse.PlaybackAck
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.PlaybackAck)
+        parsed as ParsedHeadphoneResponse.SonyTandem.PlaybackAck
         assertEquals(listOf(1, 0, 3), parsed.values)
         assertEquals(PlaybackStatus.STOPPED, parsed.status)
     }
@@ -315,8 +315,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x23, 0x00)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.Battery)
-        parsed as ParsedTandemResponse.Battery
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.Battery)
+        parsed as ParsedHeadphoneResponse.SonyTandem.Battery
         assertEquals(PowerInquiredType.BATTERY, parsed.kind)
         assertEquals(emptyList<Int>(), parsed.values)
     }
@@ -326,8 +326,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x23, 0x02, 90.toByte(), 0x00)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.Battery)
-        parsed as ParsedTandemResponse.Battery
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.Battery)
+        parsed as ParsedHeadphoneResponse.SonyTandem.Battery
         assertEquals(PowerInquiredType.CRADLE_BATTERY, parsed.kind)
         assertEquals(listOf(90), parsed.values)
     }
@@ -337,8 +337,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x67, 0x17, 0x01, 0x00, 0x01, 0x00, 0x0C)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.NoiseControl)
-        parsed as ParsedTandemResponse.NoiseControl
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.NoiseControl)
+        parsed as ParsedHeadphoneResponse.SonyTandem.NoiseControl
         assertEquals(NcAsmInquiredType.MODE_NC_ASM_DUAL_NC_MODE_SWITCH_AND_ASM_SEAMLESS, parsed.type)
         assertEquals(NoiseControlMode.AMBIENT_SOUND, parsed.controlMode)
         assertEquals(12, parsed.ambientLevel)
@@ -351,8 +351,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x13, 0x09, version.size.toByte()) + version
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.CommonStatus)
-        parsed as ParsedTandemResponse.CommonStatus
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.CommonStatus)
+        parsed as ParsedHeadphoneResponse.SonyTandem.CommonStatus
         assertEquals(CommonInquiredType.DISPLAY_FW_VERSION, parsed.type)
         assertEquals("2.5.0", parsed.text)
     }
@@ -362,8 +362,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x67, 0x22, 0x01, 0x00, 0x00, 0x0C)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.NoiseControl)
-        parsed as ParsedTandemResponse.NoiseControl
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.NoiseControl)
+        parsed as ParsedHeadphoneResponse.SonyTandem.NoiseControl
         assertEquals(NcAsmInquiredType.ASM_SEAMLESS, parsed.type)
         assertEquals(NoiseControlMode.AMBIENT_SOUND, parsed.controlMode)
         assertEquals(12, parsed.ambientLevel)
@@ -374,8 +374,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x67, 0x14, 0x01, 0x00, 0x00, 0x00, 0x0B)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.NoiseControl)
-        parsed as ParsedTandemResponse.NoiseControl
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.NoiseControl)
+        parsed as ParsedHeadphoneResponse.SonyTandem.NoiseControl
         assertEquals(NcAsmInquiredType.NC_MODE_SWITCH_AND_ASM_SEAMLESS, parsed.type)
         assertEquals(NoiseControlMode.AMBIENT_SOUND, parsed.controlMode)
         assertEquals(12, parsed.ambientLevel)
@@ -387,8 +387,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x67, 0x14, 0x01, 0x00, 0x02, 0x00, 0x00)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.NoiseControl)
-        parsed as ParsedTandemResponse.NoiseControl
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.NoiseControl)
+        parsed as ParsedHeadphoneResponse.SonyTandem.NoiseControl
         assertEquals(NcAsmInquiredType.NC_MODE_SWITCH_AND_ASM_SEAMLESS, parsed.type)
         assertEquals(NoiseControlMode.NOISE_CANCELLING, parsed.controlMode)
     }
@@ -398,8 +398,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x67, 0x02, 0x01, 0x02, 0x02, 0x01, 0x00, 0x00)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.NoiseControl)
-        parsed as ParsedTandemResponse.NoiseControl
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.NoiseControl)
+        parsed as ParsedHeadphoneResponse.SonyTandem.NoiseControl
         assertEquals(NcAsmInquiredType.V1_TABLE_SET1_NC_ASM, parsed.type)
         assertEquals(NoiseControlMode.NOISE_CANCELLING, parsed.controlMode)
         assertEquals(0, parsed.ambientLevel)
@@ -411,8 +411,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x69, 0x02, 0x01, 0x02, 0x00, 0x01, 0x01, 0x14)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.NoiseControl)
-        parsed as ParsedTandemResponse.NoiseControl
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.NoiseControl)
+        parsed as ParsedHeadphoneResponse.SonyTandem.NoiseControl
         assertEquals(NcAsmInquiredType.V1_TABLE_SET1_NC_ASM, parsed.type)
         assertEquals(NoiseControlMode.AMBIENT_SOUND, parsed.controlMode)
         assertEquals(20, parsed.ambientLevel)
@@ -424,8 +424,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x69, 0x7F, 0x01)
         val parsed = SonyTandemV1Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.Unknown)
-        parsed as ParsedTandemResponse.Unknown
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.Unknown)
+        parsed as ParsedHeadphoneResponse.SonyTandem.Unknown
         assertEquals(0x0E, parsed.dataType)
         assertEquals(0x69, parsed.command)
         assertArrayEquals(byteArrayOf(0x7F, 0x01), parsed.payload)
@@ -436,8 +436,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x63, 0x01, 0x00)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.NoiseControl)
-        parsed as ParsedTandemResponse.NoiseControl
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.NoiseControl)
+        parsed as ParsedHeadphoneResponse.SonyTandem.NoiseControl
         assertEquals(NcAsmInquiredType.NC_ON_OFF, parsed.type)
         assertEquals(null, parsed.controlMode)
         assertEquals(null, parsed.enabled)
@@ -448,8 +448,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0xA5.toByte(), 0x01, 0x00, 0x02, 0x00)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.PlaybackAck)
-        parsed as ParsedTandemResponse.PlaybackAck
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.PlaybackAck)
+        parsed as ParsedHeadphoneResponse.SonyTandem.PlaybackAck
         assertEquals(PlaybackStatus.PAUSED, parsed.status)
     }
 
@@ -458,8 +458,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x57, 0x00, 0x16, 0x00)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.EqEbb)
-        parsed as ParsedTandemResponse.EqEbb
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.EqEbb)
+        parsed as ParsedHeadphoneResponse.SonyTandem.EqEbb
         assertEquals(EqEbbInquiredType.PRESET_EQ, parsed.type)
         assertEquals(EqPresetId.BASS, parsed.preset)
         assertEquals(emptyList<Int>(), parsed.bandSteps)
@@ -470,8 +470,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x59, 0x01, 0xFE.toByte())
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.EqEbb)
-        parsed as ParsedTandemResponse.EqEbb
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.EqEbb)
+        parsed as ParsedHeadphoneResponse.SonyTandem.EqEbb
         assertEquals(EqEbbInquiredType.EBB, parsed.type)
         assertEquals(-2, parsed.clearBass)
     }
@@ -481,8 +481,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x57, 0x01, 0x16, 0x06, 0x11, 0x0A, 0x0A, 0x0A, 0x0A, 0x0A)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.EqEbb)
-        parsed as ParsedTandemResponse.EqEbb
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.EqEbb)
+        parsed as ParsedHeadphoneResponse.SonyTandem.EqEbb
         assertEquals(EqEbbInquiredType.EBB, parsed.type)
         assertEquals(EqPresetId.BASS, parsed.preset)
         assertEquals(17, parsed.clearBass)
@@ -494,8 +494,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x57, 0x01, 0xA2.toByte(), 0x06, 0x0A, 0x0A, 0x0A, 0x0A, 0x08, 0x11)
         val parsed = SonyTandemV1Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.EqEbb)
-        parsed as ParsedTandemResponse.EqEbb
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.EqEbb)
+        parsed as ParsedHeadphoneResponse.SonyTandem.EqEbb
         assertEquals(EqEbbInquiredType.PRESET_EQ, parsed.type)
         assertEquals(EqPresetId.USER_SETTING2, parsed.preset)
         assertEquals(listOf(10, 10, 10, 10, 8, 17), parsed.bandSteps)
@@ -529,8 +529,8 @@ class SonyTandemV2Table1ProtocolTest {
         )
         val parsed = SonyTandemV1Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.EqEbbExtendedInfo)
-        parsed as ParsedTandemResponse.EqEbbExtendedInfo
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.EqEbbExtendedInfo)
+        parsed as ParsedHeadphoneResponse.SonyTandem.EqEbbExtendedInfo
         assertEquals(EqEbbInquiredType.PRESET_EQ, parsed.type)
         assertEquals(6, parsed.bands.size)
         assertEquals(EqBandInformationType.SPECIFIC_INFORMATION, parsed.bands[0].type)
@@ -545,8 +545,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x57, 0x31, 0x03, 0x09, 0x0A, 0x0B)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.EqEbb)
-        parsed as ParsedTandemResponse.EqEbb
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.EqEbb)
+        parsed as ParsedHeadphoneResponse.SonyTandem.EqEbb
         assertEquals(EqEbbInquiredType.CUSTOM_EQ, parsed.type)
         assertEquals(null, parsed.preset)
         assertEquals(listOf(9, 10, 11), parsed.bandSteps)
@@ -575,8 +575,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x43, 0x01, 0x00, 0x02)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.LeaStatus)
-        parsed as ParsedTandemResponse.LeaStatus
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.LeaStatus)
+        parsed as ParsedHeadphoneResponse.SonyTandem.LeaStatus
         assertEquals(LeaInquiredType.HBS_SUPPORTS_A2DP_LEA_UNI_LEA_BROAD_WITH_CTKD, parsed.type)
         assertEquals(LeaEnableDisable.ENABLE, parsed.enabled)
         assertEquals(LeaStreamingStatus.VIA_A2DP, parsed.streamingStatusL)
@@ -588,8 +588,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x43, 0x00, 0x00, 0x02, 0x03)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.LeaStatus)
-        parsed as ParsedTandemResponse.LeaStatus
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.LeaStatus)
+        parsed as ParsedHeadphoneResponse.SonyTandem.LeaStatus
         assertEquals(LeaInquiredType.TWS_SUPPORTS_A2DP_LEA_UNI_LEA_BROAD_WITH_CTKD, parsed.type)
         assertEquals(LeaEnableDisable.ENABLE, parsed.enabled)
         assertEquals(LeaStreamingStatus.VIA_A2DP, parsed.streamingStatusL)
@@ -601,8 +601,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x45, 0x00, 0x01, 0x01, 0x02)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.LeaStatus)
-        parsed as ParsedTandemResponse.LeaStatus
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.LeaStatus)
+        parsed as ParsedHeadphoneResponse.SonyTandem.LeaStatus
         assertEquals(LeaInquiredType.TWS_SUPPORTS_A2DP_LEA_UNI_LEA_BROAD_WITH_CTKD, parsed.type)
         assertEquals(LeaEnableDisable.DISABLE, parsed.enabled)
         assertEquals(LeaStreamingStatus.NONE, parsed.streamingStatusL)
@@ -614,8 +614,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x43, 0x7F)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.LeaStatus)
-        parsed as ParsedTandemResponse.LeaStatus
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.LeaStatus)
+        parsed as ParsedHeadphoneResponse.SonyTandem.LeaStatus
         assertEquals(null, parsed.type)
         assertEquals(null, parsed.enabled)
         assertEquals(null, parsed.streamingStatusL)
@@ -627,8 +627,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x47, 0x00, 0x01)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.LeaPairedHistoryStatus)
-        parsed as ParsedTandemResponse.LeaPairedHistoryStatus
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.LeaPairedHistoryStatus)
+        parsed as ParsedHeadphoneResponse.SonyTandem.LeaPairedHistoryStatus
         assertEquals(LeaInquiredType.TWS_SUPPORTS_A2DP_LEA_UNI_LEA_BROAD_WITH_CTKD, parsed.type)
         assertEquals(LeaPairedHistory.ONLY_CLASSIC_BT, parsed.pairedHistory)
     }
@@ -648,8 +648,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x37, 0x0D, 0x00, 0x02)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.QuickAccess)
-        parsed as ParsedTandemResponse.QuickAccess
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.QuickAccess)
+        parsed as ParsedHeadphoneResponse.SonyTandem.QuickAccess
         assertEquals(QuickAccessKey.L_R_KEY, parsed.key)
         assertEquals(QuickAccessFunction.NC_ASM, parsed.function)
     }
@@ -669,8 +669,8 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x37, 0x06, 0x02, 0x00)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.WearingStatus)
-        parsed as ParsedTandemResponse.WearingStatus
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.WearingStatus)
+        parsed as ParsedHeadphoneResponse.SonyTandem.WearingStatus
         assertEquals(WearingDetectionStatus.COMPLETED_SUCCESSFULLY, parsed.status)
         assertEquals(WearingDetectionResult.GOOD, parsed.result)
     }
@@ -680,6 +680,6 @@ class SonyTandemV2Table1ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x37, 0x7F)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.Unknown)
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.Unknown)
     }
 }

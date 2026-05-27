@@ -184,19 +184,22 @@ class SonyBleClientChannelTest {
     @Test
     fun allChannels_haveDistinctIdentities() {
         val channels = TandemChannel.entries.toSet()
-        assertEquals(4, channels.size) // SPP_MDR, GATT_V2_HPC, GATT_V2_MC, GATT_V1_MC
+        // SPP_MDR + 3 Sony GATT (V2 HPC, V2 MC, V1 MC) + 6 QCY (SETTING_WRITE,
+        // READSET, BATTERY, VERSION, EQ_RAW, FUNCTION) = 10 channels.
+        assertEquals(10, channels.size)
     }
 
     @Test
     fun gattChannels_eachHaveUniqueServiceUuid() {
-        val gattChannels = TandemChannel.entries.filter { it != TandemChannel.SPP_MDR }
-        val serviceUuids = gattChannels.map { GattEndpoint.forChannel(it).serviceUuid }
+        val tandemGattChannels = setOf(TandemChannel.GATT_V2_HPC, TandemChannel.GATT_V2_MC, TandemChannel.GATT_V1_MC)
+        val serviceUuids = tandemGattChannels.map { GattEndpoint.forChannel(it).serviceUuid }
         assertEquals(serviceUuids.size, serviceUuids.toSet().size)
     }
 
     @Test
     fun gattChannels_allHaveDefinedEndpoints() {
-        TandemChannel.entries.filter { it != TandemChannel.SPP_MDR }.forEach { channel ->
+        val tandemGattChannels = setOf(TandemChannel.GATT_V2_HPC, TandemChannel.GATT_V2_MC, TandemChannel.GATT_V1_MC)
+        tandemGattChannels.forEach { channel ->
             val endpoint = GattEndpoint.forChannel(channel)
             assertTrue("${endpoint.toAccUuid} should not be null", endpoint.toAccUuid.toString().isNotEmpty())
             assertTrue("${endpoint.fromAccUuid} should not be null", endpoint.fromAccUuid.toString().isNotEmpty())
@@ -233,6 +236,12 @@ data class GattEndpoint(
                 fromAccUuid = SonyGatt.TANDEM_MC_FROM_ACC,
             )
             TandemChannel.SPP_MDR -> throw IllegalArgumentException("SPP has no GATT endpoint")
+            TandemChannel.QCY_SETTING_WRITE,
+            TandemChannel.QCY_READSET,
+            TandemChannel.QCY_BATTERY,
+            TandemChannel.QCY_VERSION,
+            TandemChannel.QCY_EQ_RAW,
+            TandemChannel.QCY_FUNCTION -> throw IllegalArgumentException("QCY has no GATT endpoint")
         }
     }
 }

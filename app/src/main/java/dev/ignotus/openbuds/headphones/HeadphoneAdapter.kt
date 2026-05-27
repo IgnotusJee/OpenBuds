@@ -6,7 +6,7 @@ import dev.ignotus.openbuds.protocol.EqEbbInquiredType
 import dev.ignotus.openbuds.protocol.EqPresetId
 import dev.ignotus.openbuds.protocol.NcAsmInquiredType
 import dev.ignotus.openbuds.protocol.NoiseControlMode
-import dev.ignotus.openbuds.protocol.ParsedTandemResponse
+import dev.ignotus.openbuds.protocol.ParsedHeadphoneResponse
 import dev.ignotus.openbuds.protocol.PlaybackControl
 import dev.ignotus.openbuds.protocol.PlayInquiredType
 import dev.ignotus.openbuds.protocol.PowerInquiredType
@@ -16,6 +16,7 @@ enum class HeadphoneProtocolVariant {
     SONY_TANDEM_V1_TABLE2,
     SONY_TANDEM_V2_TABLE1,
     SONY_TANDEM_V2_TABLE2,
+    QCY,
     UNKNOWN,
 }
 
@@ -37,6 +38,7 @@ enum class HeadphoneFeature {
     LEA_STATUS,
     QUICK_ACCESS,
     WEARING_STATUS,
+    VOLUME,
 }
 
 enum class HeadphoneTransport {
@@ -52,6 +54,14 @@ enum class TandemChannel {
     GATT_V2_HPC,
     GATT_V2_MC,
     GATT_V1_MC,
+    // QCY channels — one per source characteristic so the adapter can dispatch
+    // raw bytes to the correct parser. All writes go to QCY_SETTING_WRITE.
+    QCY_SETTING_WRITE,  // 0x1001 — command write channel
+    QCY_READSET,        // 0x1002 — TLV response notifications
+    QCY_BATTERY,        // 0x0008 — battery notifications/reads
+    QCY_VERSION,        // 0x0007 — firmware version reads
+    QCY_EQ_RAW,         // 0x000B — raw EQ data reads/notifications
+    QCY_FUNCTION,       // 0x000F — boolean feature status (RUER, JIANTING)
     ;
 
     companion object {
@@ -122,6 +132,8 @@ data class HeadphoneCapabilities(
     val queryNoiseControlParams: Boolean = true,
 )
 
+enum class InfoLayoutHint { SONY_SERIES, BRAND_MODEL }
+
 data class ConnectedHeadphoneProfile(
     val adapterId: String,
     val brand: String,
@@ -129,6 +141,7 @@ data class ConnectedHeadphoneProfile(
     val displayName: String,
     val protocolName: String,
     val series: String? = null,
+    val infoLayoutHint: InfoLayoutHint = InfoLayoutHint.SONY_SERIES,
     val transport: HeadphoneTransport = HeadphoneTransport.UNKNOWN,
     val capabilities: HeadphoneCapabilities,
     val featureProtocolMap: Map<HeadphoneFeature, HeadphoneProtocolVariant> = emptyMap(),
@@ -161,6 +174,7 @@ data class ProfileTemplate(
     val capabilities: HeadphoneCapabilities,
     val featureProtocolMap: Map<HeadphoneFeature, HeadphoneProtocolVariant>,
     val knownStaticProfile: Boolean = true,
+    val infoLayoutHint: InfoLayoutHint = InfoLayoutHint.SONY_SERIES,
 ) {
     init {
         if (knownStaticProfile) {
@@ -210,6 +224,7 @@ data class ProfileTemplate(
             displayName = displayName.removePrefix("LE_").takeIf { it.isNotBlank() } ?: modelName,
             protocolName = protocolName,
             series = series,
+            infoLayoutHint = infoLayoutHint,
             capabilities = capabilities,
             featureProtocolMap = featureProtocolMap,
             featureBindings = featureBindings,
@@ -297,9 +312,9 @@ interface HeadphoneAdapter {
     fun buildPlaybackCommands(profile: ConnectedHeadphoneProfile, control: PlaybackControl): List<HeadphoneCommand> =
         emptyList()
 
-    fun parse(profile: ConnectedHeadphoneProfile, channel: TandemChannel, raw: ByteArray): ParsedTandemResponse
+    fun parse(profile: ConnectedHeadphoneProfile, channel: TandemChannel, raw: ByteArray): ParsedHeadphoneResponse
 
-    fun parse(profile: ConnectedHeadphoneProfile, raw: ByteArray): ParsedTandemResponse =
+    fun parse(profile: ConnectedHeadphoneProfile, raw: ByteArray): ParsedHeadphoneResponse =
         parse(profile, profile.defaultResponseChannel(), raw)
 
     fun canWrite(profile: ConnectedHeadphoneProfile, feature: HeadphoneFeature): Boolean =
@@ -307,7 +322,7 @@ interface HeadphoneAdapter {
 }
 
 object HeadphoneAdapterRegistry {
-    private val adapters: List<HeadphoneAdapter> = listOf(SonyTandemHeadphoneAdapter)
+    private val adapters: List<HeadphoneAdapter> = listOf(SonyTandemHeadphoneAdapter, QcyHeadphoneAdapter)
 
     fun resolve(device: DiscoveredSonyDevice, reportedModelName: String? = null): ConnectedHeadphoneProfile {
         adapters.forEach { adapter ->
@@ -367,10 +382,10 @@ object HeadphoneAdapterRegistry {
     fun buildPlaybackCommands(profile: ConnectedHeadphoneProfile, control: PlaybackControl): List<HeadphoneCommand> =
         adapterFor(profile).buildPlaybackCommands(profile, control)
 
-    fun parse(profile: ConnectedHeadphoneProfile, channel: TandemChannel, raw: ByteArray): ParsedTandemResponse =
+    fun parse(profile: ConnectedHeadphoneProfile, channel: TandemChannel, raw: ByteArray): ParsedHeadphoneResponse =
         adapterFor(profile).parse(profile, channel, raw)
 
-    fun parse(profile: ConnectedHeadphoneProfile, raw: ByteArray): ParsedTandemResponse =
+    fun parse(profile: ConnectedHeadphoneProfile, raw: ByteArray): ParsedHeadphoneResponse =
         adapterFor(profile).parse(profile, raw)
 
     private fun adapterFor(profile: ConnectedHeadphoneProfile): HeadphoneAdapter =
@@ -392,5 +407,6 @@ fun defaultChannelFor(variant: HeadphoneProtocolVariant): TandemChannel =
         HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE2 -> TandemChannel.GATT_V1_MC
         HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE2 -> TandemChannel.GATT_V2_MC
         HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1 -> TandemChannel.GATT_V2_HPC
+        HeadphoneProtocolVariant.QCY -> TandemChannel.QCY_SETTING_WRITE
         HeadphoneProtocolVariant.UNKNOWN -> error("Unknown protocol variant has no default channel")
     }

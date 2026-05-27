@@ -176,8 +176,8 @@ class SonyTandemTable2ProtocolTest {
         val raw = byteArrayOf(0x0F, 0x23, 0x00, 0x01)
         val parsed = SonyTandemV2Table2Protocol.parse(raw)
 
-        assertTrue("Expected Table2Generic but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Table2Generic)
-        parsed as ParsedTandemResponse.Table2Generic
+        assertTrue("Expected Table2Generic but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.Table2Generic)
+        parsed as ParsedHeadphoneResponse.SonyTandem.Table2Generic
         assertEquals("POWER", parsed.family)
         assertEquals(0x00, parsed.inquiredType)
         assertEquals(listOf(0x01), parsed.values)
@@ -188,8 +188,8 @@ class SonyTandemTable2ProtocolTest {
         val raw = byteArrayOf(0x0F, 0x33, 0x01, 0x02, 0x03)
         val parsed = SonyTandemV2Table2Protocol.parse(raw)
 
-        assertTrue("Expected Table2Generic but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Table2Generic)
-        parsed as ParsedTandemResponse.Table2Generic
+        assertTrue("Expected Table2Generic but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.Table2Generic)
+        parsed as ParsedHeadphoneResponse.SonyTandem.Table2Generic
         assertEquals("PERIPHERAL", parsed.family)
         assertEquals(0x01, parsed.inquiredType)
     }
@@ -199,8 +199,8 @@ class SonyTandemTable2ProtocolTest {
         val raw = byteArrayOf(0x0F, 0x07, 0x00)
         val parsed = SonyTandemV2Table2Protocol.parse(raw)
 
-        assertTrue("Expected Table2Common but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Table2Common)
-        parsed as ParsedTandemResponse.Table2Common
+        assertTrue("Expected Table2Common but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.Table2Common)
+        parsed as ParsedHeadphoneResponse.SonyTandem.Table2Common
         assertEquals("CONNECT", parsed.family)
     }
 
@@ -209,8 +209,8 @@ class SonyTandemTable2ProtocolTest {
         val raw = byteArrayOf(0x0F, 0xF7.toByte(), 0x00, 0x02, 0x00)
         val parsed = SonyTandemV2Table2Protocol.parse(raw)
 
-        assertTrue("Expected Table2Generic but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Table2Generic)
-        parsed as ParsedTandemResponse.Table2Generic
+        assertTrue("Expected Table2Generic but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.Table2Generic)
+        parsed as ParsedHeadphoneResponse.SonyTandem.Table2Generic
         assertEquals("SYSTEM", parsed.family)
         assertEquals(0x00, parsed.inquiredType)
     }
@@ -220,7 +220,7 @@ class SonyTandemTable2ProtocolTest {
         val raw = byteArrayOf(0x0F, 0x7F, 0x10)
         val parsed = SonyTandemV2Table2Protocol.parse(raw)
 
-        assertTrue("Expected Unknown but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Unknown)
+        assertTrue("Expected Unknown but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.Unknown)
     }
 
     @Test
@@ -230,8 +230,8 @@ class SonyTandemTable2ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x23, 0x00, 0x01)
         val parsed = SonyTandemV2Table2Protocol.parse(raw)
 
-        assertTrue("Expected Table2Generic but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Table2Generic)
-        parsed as ParsedTandemResponse.Table2Generic
+        assertTrue("Expected Table2Generic but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.Table2Generic)
+        parsed as ParsedHeadphoneResponse.SonyTandem.Table2Generic
         assertEquals("POWER", parsed.family)
     }
 
@@ -240,19 +240,19 @@ class SonyTandemTable2ProtocolTest {
         val raw = byteArrayOf(0x0F, 0x53, 0x03, 0x04, 0x05)
         val parsed = SonyTandemV2Table2Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.Table2Generic)
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.Table2Generic)
         assertArrayEquals(raw, parsed.raw)
     }
 
     @Test
     fun table2Common_equalityUsesRawContent() {
-        val first = ParsedTandemResponse.Table2Common(
+        val first = ParsedHeadphoneResponse.SonyTandem.Table2Common(
             family = "CONNECT",
             command = 0x07,
             values = listOf(0x01),
             raw = byteArrayOf(0x0F, 0x07, 0x01),
         )
-        val second = ParsedTandemResponse.Table2Common(
+        val second = ParsedHeadphoneResponse.SonyTandem.Table2Common(
             family = "CONNECT",
             command = 0x07,
             values = listOf(0x01),
@@ -265,13 +265,13 @@ class SonyTandemTable2ProtocolTest {
 
     @Test
     fun table2Generic_equalityUsesRawContent() {
-        val first = ParsedTandemResponse.Table2Generic(
+        val first = ParsedHeadphoneResponse.SonyTandem.Table2Generic(
             family = "POWER",
             inquiredType = 0x00,
             values = listOf(0x01),
             raw = byteArrayOf(0x0F, 0x23, 0x00, 0x01),
         )
-        val second = ParsedTandemResponse.Table2Generic(
+        val second = ParsedHeadphoneResponse.SonyTandem.Table2Generic(
             family = "POWER",
             inquiredType = 0x00,
             values = listOf(0x01),
@@ -333,8 +333,8 @@ class SonyTandemTable2ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x33, 0x01, 0x02, 0x03)
         val parsed = SonyTandemV1Table2Protocol.parse(raw)
 
-        assertTrue("Expected Table2Generic but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Table2Generic)
-        parsed as ParsedTandemResponse.Table2Generic
+        assertTrue("Expected Table2Generic but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.Table2Generic)
+        parsed as ParsedHeadphoneResponse.SonyTandem.Table2Generic
         assertEquals("PERIPHERAL", parsed.family)
         assertEquals(0x01, parsed.inquiredType)
     }
@@ -344,8 +344,8 @@ class SonyTandemTable2ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x43, 0x01, 0x00)
         val parsed = SonyTandemV1Table2Protocol.parse(raw)
 
-        assertTrue("Expected Table2Generic but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Table2Generic)
-        parsed as ParsedTandemResponse.Table2Generic
+        assertTrue("Expected Table2Generic but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.Table2Generic)
+        parsed as ParsedHeadphoneResponse.SonyTandem.Table2Generic
         assertEquals("VOICE_GUIDANCE", parsed.family)
     }
 
@@ -354,8 +354,8 @@ class SonyTandemTable2ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x33, 0x7F, 0x01)
         val parsed = SonyTandemV1Table2Protocol.parse(raw)
 
-        assertTrue("Expected Table2Generic but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Table2Generic)
-        parsed as ParsedTandemResponse.Table2Generic
+        assertTrue("Expected Table2Generic but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.Table2Generic)
+        parsed as ParsedHeadphoneResponse.SonyTandem.Table2Generic
         assertEquals("PERIPHERAL", parsed.family)
         assertEquals(0x00, parsed.inquiredType)
         assertEquals(listOf(0x01), parsed.values)
@@ -366,8 +366,8 @@ class SonyTandemTable2ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x43, 0x7F, 0x01)
         val parsed = SonyTandemV1Table2Protocol.parse(raw)
 
-        assertTrue("Expected Table2Generic but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Table2Generic)
-        parsed as ParsedTandemResponse.Table2Generic
+        assertTrue("Expected Table2Generic but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.Table2Generic)
+        parsed as ParsedHeadphoneResponse.SonyTandem.Table2Generic
         assertEquals("VOICE_GUIDANCE", parsed.family)
         assertEquals(0x00, parsed.inquiredType)
         assertEquals(listOf(0x01), parsed.values)
@@ -378,7 +378,7 @@ class SonyTandemTable2ProtocolTest {
         val raw = byteArrayOf(0x0E, 0x7F, 0x10)
         val parsed = SonyTandemV1Table2Protocol.parse(raw)
 
-        assertTrue("Expected Unknown but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Unknown)
+        assertTrue("Expected Unknown but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.Unknown)
     }
 
     @Test
@@ -386,6 +386,6 @@ class SonyTandemTable2ProtocolTest {
         val raw = byteArrayOf(0xFF.toByte(), 0x33, 0x01)
         val parsed = SonyTandemV1Table2Protocol.parse(raw)
 
-        assertTrue(parsed is ParsedTandemResponse.Unknown)
+        assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.Unknown)
     }
 }

@@ -2,7 +2,7 @@ package dev.ignotus.openbuds.headphones
 
 import dev.ignotus.openbuds.protocol.EqEbbInquiredType
 import dev.ignotus.openbuds.protocol.EqPresetId
-import dev.ignotus.openbuds.protocol.ParsedTandemResponse
+import dev.ignotus.openbuds.protocol.ParsedHeadphoneResponse
 
 data class EqDeviceConfig(
     val availablePresets: List<EqPresetId>,
@@ -81,9 +81,9 @@ class EqProtocolEngine(
     // ── Parse ──
 
     /** Parse delegates to the selected codec so EQ routing stays protocol-variant local. */
-    fun parseResponse(raw: ByteArray): ParsedTandemResponse.EqEbb? {
+    fun parseResponse(raw: ByteArray): ParsedHeadphoneResponse.SonyTandem.EqEbb? {
         val result = codec.parse(raw)
-        return result as? ParsedTandemResponse.EqEbb
+        return result as? ParsedHeadphoneResponse.SonyTandem.EqEbb
     }
 
     companion object {

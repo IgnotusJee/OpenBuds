@@ -196,21 +196,21 @@ object SonyTandemV2Table2Protocol {
 
     // ── Parser ──────────────────────────────────────────────────────────────
 
-    fun parse(raw: ByteArray): ParsedTandemResponse {
+    fun parse(raw: ByteArray): ParsedHeadphoneResponse {
         val normalized = when {
             raw.firstOrNull() == DT -> raw
             raw.firstOrNull() == DATA_MDR -> raw // SPP-normalized: treat 0x0E as 0x0F for Table2 context
             else -> byteArrayOf(DT) + raw
         }
         if (normalized.size < 2) {
-            return ParsedTandemResponse.Unknown(null, null, byteArrayOf(), raw)
+            return ParsedHeadphoneResponse.SonyTandem.Unknown(null, null, byteArrayOf(), raw)
         }
         val dataType = normalized[0]
         val command = normalized[1]
         val payload = normalized.drop(2).map { it }.toByteArray()
 
         if (dataType != DT && dataType != DATA_MDR) {
-            return ParsedTandemResponse.Unknown(dataType.unsigned, command.unsigned, payload, raw)
+            return ParsedHeadphoneResponse.SonyTandem.Unknown(dataType.unsigned, command.unsigned, payload, raw)
         }
 
         return when (command) {
@@ -230,21 +230,21 @@ object SonyTandemV2Table2Protocol {
             SYS_RET_CAPABILITY, SYS_RET_STATUS, SYS_NTFY_STATUS,
             SYS_RET_PARAM, SYS_NTFY_PARAM,
             SYS_RET_EXTENDED_PARAM, SYS_NTFY_EXTENDED_PARAM -> parseSystem(payload, raw)
-            else -> ParsedTandemResponse.Unknown(dataType.unsigned, command.unsigned, payload, raw)
+            else -> ParsedHeadphoneResponse.SonyTandem.Unknown(dataType.unsigned, command.unsigned, payload, raw)
         }
     }
 
-    private fun parseCommon(payload: ByteArray, raw: ByteArray, command: Byte): ParsedTandemResponse =
-        ParsedTandemResponse.Table2Common(
+    private fun parseCommon(payload: ByteArray, raw: ByteArray, command: Byte): ParsedHeadphoneResponse =
+        ParsedHeadphoneResponse.SonyTandem.Table2Common(
             family = Table2Family.CONNECT.name,
             command = command.unsigned,
             values = payload.unsignedList(),
             raw = raw,
         )
 
-    private fun parsePower(payload: ByteArray, raw: ByteArray): ParsedTandemResponse {
+    private fun parsePower(payload: ByteArray, raw: ByteArray): ParsedHeadphoneResponse {
         val type = payload.firstOrNull()?.let { PowerInquiredTypeTable2.fromCode(it) }
-        return ParsedTandemResponse.Table2Generic(
+        return ParsedHeadphoneResponse.SonyTandem.Table2Generic(
             family = Table2Family.POWER.name,
             inquiredType = type?.code?.unsigned,
             values = payload.drop(1).map { it.unsigned },
@@ -252,9 +252,9 @@ object SonyTandemV2Table2Protocol {
         )
     }
 
-    private fun parsePeripheral(payload: ByteArray, raw: ByteArray): ParsedTandemResponse {
+    private fun parsePeripheral(payload: ByteArray, raw: ByteArray): ParsedHeadphoneResponse {
         val type = payload.firstOrNull()?.let { PeripheralInquiredTypeTable2.fromCode(it) }
-        return ParsedTandemResponse.Table2Generic(
+        return ParsedHeadphoneResponse.SonyTandem.Table2Generic(
             family = Table2Family.PERIPHERAL.name,
             inquiredType = type?.code?.unsigned,
             values = payload.drop(1).map { it.unsigned },
@@ -262,9 +262,9 @@ object SonyTandemV2Table2Protocol {
         )
     }
 
-    private fun parseVoiceGuidance(payload: ByteArray, raw: ByteArray): ParsedTandemResponse {
+    private fun parseVoiceGuidance(payload: ByteArray, raw: ByteArray): ParsedHeadphoneResponse {
         val type = payload.firstOrNull()?.let { VoiceGuidanceInquiredTypeTable2.fromCode(it) }
-        return ParsedTandemResponse.Table2Generic(
+        return ParsedHeadphoneResponse.SonyTandem.Table2Generic(
             family = Table2Family.VOICE_GUIDANCE.name,
             inquiredType = type?.code?.unsigned,
             values = payload.drop(1).map { it.unsigned },
@@ -272,9 +272,9 @@ object SonyTandemV2Table2Protocol {
         )
     }
 
-    private fun parseSafeListening(payload: ByteArray, raw: ByteArray): ParsedTandemResponse {
+    private fun parseSafeListening(payload: ByteArray, raw: ByteArray): ParsedHeadphoneResponse {
         val type = payload.firstOrNull()?.let { SafeListeningInquiredTypeTable2.fromCode(it) }
-        return ParsedTandemResponse.Table2Generic(
+        return ParsedHeadphoneResponse.SonyTandem.Table2Generic(
             family = Table2Family.SAFE_LISTENING.name,
             inquiredType = type?.code?.unsigned,
             values = payload.drop(1).map { it.unsigned },
@@ -282,9 +282,9 @@ object SonyTandemV2Table2Protocol {
         )
     }
 
-    private fun parseLea(payload: ByteArray, raw: ByteArray): ParsedTandemResponse {
+    private fun parseLea(payload: ByteArray, raw: ByteArray): ParsedHeadphoneResponse {
         val type = payload.firstOrNull()?.let { LeaInquiredTypeTable2.fromCode(it) }
-        return ParsedTandemResponse.Table2Generic(
+        return ParsedHeadphoneResponse.SonyTandem.Table2Generic(
             family = Table2Family.LEA.name,
             inquiredType = type?.code?.unsigned,
             values = payload.drop(1).map { it.unsigned },
@@ -292,9 +292,9 @@ object SonyTandemV2Table2Protocol {
         )
     }
 
-    private fun parseParty(payload: ByteArray, raw: ByteArray): ParsedTandemResponse {
+    private fun parseParty(payload: ByteArray, raw: ByteArray): ParsedHeadphoneResponse {
         val type = payload.firstOrNull()?.let { PartyInquiredTypeTable2.fromCode(it) }
-        return ParsedTandemResponse.Table2Generic(
+        return ParsedHeadphoneResponse.SonyTandem.Table2Generic(
             family = Table2Family.PARTY.name,
             inquiredType = type?.code?.unsigned,
             values = payload.drop(1).map { it.unsigned },
@@ -302,9 +302,9 @@ object SonyTandemV2Table2Protocol {
         )
     }
 
-    private fun parseSystem(payload: ByteArray, raw: ByteArray): ParsedTandemResponse {
+    private fun parseSystem(payload: ByteArray, raw: ByteArray): ParsedHeadphoneResponse {
         val type = payload.firstOrNull()?.let { SystemInquiredTypeTable2.fromCode(it) }
-        return ParsedTandemResponse.Table2Generic(
+        return ParsedHeadphoneResponse.SonyTandem.Table2Generic(
             family = Table2Family.SYSTEM.name,
             inquiredType = type?.code?.unsigned,
             values = payload.drop(1).map { it.unsigned },

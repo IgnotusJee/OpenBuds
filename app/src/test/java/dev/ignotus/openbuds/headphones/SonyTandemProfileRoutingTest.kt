@@ -7,7 +7,7 @@ import dev.ignotus.openbuds.protocol.EqEbbInquiredType
 import dev.ignotus.openbuds.protocol.EqPresetId
 import dev.ignotus.openbuds.protocol.NcAsmInquiredType
 import dev.ignotus.openbuds.protocol.NoiseControlMode
-import dev.ignotus.openbuds.protocol.ParsedTandemResponse
+import dev.ignotus.openbuds.protocol.ParsedHeadphoneResponse
 import dev.ignotus.openbuds.protocol.PlaybackControl
 import dev.ignotus.openbuds.protocol.PlaybackStatus
 import dev.ignotus.openbuds.protocol.PowerInquiredType
@@ -136,8 +136,8 @@ class SonyTandemProfileRoutingTest {
         val raw = byteArrayOf(0x0F, 0x23, 0x00, 0x01)
         val parsed = SonyTandemHeadphoneAdapter.parse(profile, raw)
 
-        assertTrue("Expected Table2Generic but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Table2Generic)
-        parsed as ParsedTandemResponse.Table2Generic
+        assertTrue("Expected Table2Generic but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.Table2Generic)
+        parsed as ParsedHeadphoneResponse.SonyTandem.Table2Generic
         assertEquals("POWER", parsed.family)
     }
 
@@ -399,8 +399,8 @@ class SonyTandemProfileRoutingTest {
         val raw = byteArrayOf(0x0E, 0x11, 0x00, 88.toByte(), 0x00)
         val parsed = SonyTandemHeadphoneAdapter.parse(profile, raw)
 
-        assertTrue("Expected Battery but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Battery)
-        parsed as ParsedTandemResponse.Battery
+        assertTrue("Expected Battery but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.Battery)
+        parsed as ParsedHeadphoneResponse.SonyTandem.Battery
         assertEquals(PowerInquiredType.BATTERY, parsed.kind)
         assertEquals(listOf(88), parsed.values)
     }
@@ -413,8 +413,8 @@ class SonyTandemProfileRoutingTest {
         val raw = byteArrayOf(0x0E, 0x67, 0x02, 0x01, 0x02, 0x02, 0x01, 0x00, 0x00)
         val parsed = SonyTandemHeadphoneAdapter.parse(profile, raw)
 
-        assertTrue("Expected NoiseControl but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.NoiseControl)
-        parsed as ParsedTandemResponse.NoiseControl
+        assertTrue("Expected NoiseControl but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.NoiseControl)
+        parsed as ParsedHeadphoneResponse.SonyTandem.NoiseControl
         assertEquals(NcAsmInquiredType.V1_TABLE_SET1_NC_ASM, parsed.type)
         assertEquals(NoiseControlMode.NOISE_CANCELLING, parsed.controlMode)
     }
@@ -426,8 +426,8 @@ class SonyTandemProfileRoutingTest {
         val raw = byteArrayOf(0x0E, 0x05, 0x02, version.size.toByte()) + version
         val parsed = SonyTandemHeadphoneAdapter.parse(profile, raw)
 
-        assertTrue("Expected DeviceInfo but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.DeviceInfo)
-        parsed as ParsedTandemResponse.DeviceInfo
+        assertTrue("Expected DeviceInfo but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.DeviceInfo)
+        parsed as ParsedHeadphoneResponse.SonyTandem.DeviceInfo
         assertEquals(DeviceInfoType.FW_VERSION, parsed.type)
         assertEquals("2.5.1", parsed.text)
     }
@@ -438,8 +438,8 @@ class SonyTandemProfileRoutingTest {
         val raw = byteArrayOf(0x0E, 0xA3.toByte(), 0x01, 0x00, 0x01)
         val parsed = SonyTandemHeadphoneAdapter.parse(profile, raw)
 
-        assertTrue("Expected PlaybackAck but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.PlaybackAck)
-        parsed as ParsedTandemResponse.PlaybackAck
+        assertTrue("Expected PlaybackAck but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.PlaybackAck)
+        parsed as ParsedHeadphoneResponse.SonyTandem.PlaybackAck
         assertEquals(listOf(1, 0, 1), parsed.values)
         assertEquals(PlaybackStatus.PLAYING, parsed.status)
     }
@@ -450,7 +450,7 @@ class SonyTandemProfileRoutingTest {
         val raw = byteArrayOf(0x0F, 0x23, 0x00, 0x01)
         val parsed = SonyTandemHeadphoneAdapter.parse(profile, raw)
 
-        assertTrue("Expected Unknown but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Unknown)
+        assertTrue("Expected Unknown but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.Unknown)
     }
 
     // ── Unknown / fallback Sony device ──────────────────────────────────────

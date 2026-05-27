@@ -12,6 +12,8 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
 import dev.ignotus.openbuds.ble.DiscoveredSonyDevice
+import dev.ignotus.openbuds.ble.HeadphoneTransportSelector
+import dev.ignotus.openbuds.ble.QcyBleClient
 import dev.ignotus.openbuds.ble.SonyBleClient
 import dev.ignotus.openbuds.ble.SonyBleClientListener
 import dev.ignotus.openbuds.ble.SonyBleConnectionInfo
@@ -34,10 +36,11 @@ import dev.ignotus.openbuds.protocol.EqEbbInquiredType
 import dev.ignotus.openbuds.protocol.EqPresetId
 import dev.ignotus.openbuds.protocol.NcAsmInquiredType
 import dev.ignotus.openbuds.protocol.NoiseControlMode
-import dev.ignotus.openbuds.protocol.ParsedTandemResponse
+import dev.ignotus.openbuds.protocol.ParsedHeadphoneResponse
 import dev.ignotus.openbuds.protocol.PlaybackControl
 import dev.ignotus.openbuds.protocol.PlaybackStatus
 import dev.ignotus.openbuds.protocol.PowerInquiredType
+import dev.ignotus.openbuds.protocol.QcyProtocol
 import dev.ignotus.openbuds.protocol.QuickAccessKey
 import dev.ignotus.openbuds.protocol.hexString
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -171,7 +174,11 @@ data class SonyHeadphoneUiState(
 
 class SonyHeadphoneRepository private constructor(context: Context) : SonyBleClientListener {
     private val appContext = context.applicationContext
-    private val client = SonyBleClient(appContext, this)
+    private val sonyClient = SonyBleClient(appContext, this)
+    private val qcyClient = QcyBleClient(appContext, this)
+    private val transport = HeadphoneTransportSelector(
+        clients = listOf(sonyClient, qcyClient),
+    )
     private val mediaController = MediaPlaybackController(appContext)
     private val modelImageCatalog = SonyModelImageCatalog(appContext)
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -195,11 +202,11 @@ class SonyHeadphoneRepository private constructor(context: Context) : SonyBleCli
         }
         val strictFilter = _state.value.strictSonyScanFilter
         appendLog("Scan requested strictSonyScanFilter=$strictFilter")
-        client.startScan(strictFilter)
+        transport.startScan(strictFilter)
     }
 
     fun stopScan() {
-        client.stopScan()
+        transport.stopScan()
     }
 
     fun connect(device: DiscoveredSonyDevice) {
@@ -211,33 +218,53 @@ class SonyHeadphoneRepository private constructor(context: Context) : SonyBleCli
         }
         appendLog("Connect requested: ${device.name} (${device.address})")
         _state.update { it.copy(endpointDiagnostic = null, table2Diagnostic = null, permissionIssue = null) }
-        client.connect(device)
+
+        // QCY dual-mode devices: BLE address may differ from classic BT address.
+        // Resolve the correct BLE address before connecting via the selector.
+        val resolvedDevice = if (isQcyDevice(device.name)) {
+            val bleAddress = resolveQcyBleAddress(device)
+            appendLog("QCY device detected; resolved BLE addr: $bleAddress")
+            device.copy(address = bleAddress)
+        } else {
+            device
+        }
+        transport.connect(resolvedDevice)
     }
 
     fun connect(address: String, name: String = "Sony audio device") {
         appendLog("Debug connect requested: $name ($address)")
         _state.update { it.copy(endpointDiagnostic = null, table2Diagnostic = null, permissionIssue = null) }
-        client.connect(
-            DiscoveredSonyDevice(
-                name = name,
-                address = address,
-                rssi = 0,
-                source = "debug-adb",
-                isLikelyControlEndpoint = true,
-            )
+
+        val device = DiscoveredSonyDevice(
+            name = name,
+            address = address,
+            rssi = 0,
+            source = "debug-adb",
+            isLikelyControlEndpoint = true,
         )
+        val resolvedDevice = if (isQcyDevice(name)) {
+            val bleAddress = resolveQcyBleAddress(device)
+            appendLog("QCY device detected; resolved BLE addr: $bleAddress")
+            device.copy(address = bleAddress)
+        } else {
+            device
+        }
+        transport.connect(resolvedDevice)
     }
 
     fun disconnect() {
         appendLog("Disconnect requested")
-        client.disconnect()
+        transport.disconnect()
     }
 
     fun refreshBasics() {
-        if (!_state.value.deviceInfo.protocolReady) {
+        val connectedProfile = _state.value.connectedProfile
+        val isQcy = connectedProfile?.adapterId == "qcy"
+
+        if (!_state.value.deviceInfo.protocolReady && !isQcy) {
             if (_state.value.connectedDevice != null && _state.value.endpointDiagnostic != null) {
                 appendLog("Refresh requested for unsupported endpoint; rerunning GATT diagnostics")
-                client.refreshUnsupportedEndpointProbe()
+                transport.refreshUnsupportedEndpointProbe()
             } else {
                 onBluetoothUnavailable("Sony Tandem channel is not ready; cannot refresh device state.")
             }
@@ -409,7 +436,7 @@ class SonyHeadphoneRepository private constructor(context: Context) : SonyBleCli
                 ?: appendLog("Debug battery action ignored: current profile has no battery query")
             "raw" -> rawHex?.hexToByteArrayOrNull()?.let {
                 val channel = _state.value.connectedProfile?.defaultResponseChannel()
-                    ?: client.availableChannels().firstOrNull()
+                    ?: transport.availableChannels().firstOrNull()
                     ?: TandemChannel.SPP_MDR
                 sendCommandIfReady(HeadphoneCommand("DEBUG RAW", it, channel))
             }
@@ -458,7 +485,7 @@ class SonyHeadphoneRepository private constructor(context: Context) : SonyBleCli
 
     private fun sendCommand(command: HeadphoneCommand) {
         appendLog("${command.label} [${command.channel}] -> ${command.bytes.hexString()}")
-        client.sendToChannel(command.channel, command.bytes)
+        transport.sendToChannel(command.channel, command.bytes)
     }
 
     private fun sendCommandIfReady(command: HeadphoneCommand) {
@@ -628,21 +655,36 @@ class SonyHeadphoneRepository private constructor(context: Context) : SonyBleCli
     override fun onMessage(channel: TandemChannel, raw: ByteArray) {
         appendLog("RX [$channel] ${raw.hexString()}")
         val profile = _state.value.connectedProfile ?: ensureConnectedProfile()
-        when (val parsed = HeadphoneAdapterRegistry.parse(profile, channel, raw)) {
-            is ParsedTandemResponse.DeviceInfo -> applyDeviceInfo(parsed)
-            is ParsedTandemResponse.CommonStatus -> applyCommonStatus(parsed)
-            is ParsedTandemResponse.Battery -> applyBattery(parsed)
-            is ParsedTandemResponse.EqEbb -> applyEqEbb(parsed)
-            is ParsedTandemResponse.EqEbbExtendedInfo -> applyEqEbbExtendedInfo(parsed)
-            is ParsedTandemResponse.NoiseControl -> applyNoise(parsed)
-            is ParsedTandemResponse.PlaybackAck -> applyPlayback(parsed)
-            is ParsedTandemResponse.LeaStatus -> applyLeaStatus(parsed)
-            is ParsedTandemResponse.LeaPairedHistoryStatus -> applyLeaPairedHistory(parsed)
-            is ParsedTandemResponse.QuickAccess -> applyQuickAccess(parsed)
-            is ParsedTandemResponse.WearingStatus -> applyWearingStatus(parsed)
-            is ParsedTandemResponse.Unknown -> applyKnownOrUnknown(parsed)
-            is ParsedTandemResponse.Table2Common -> applyTable2Diagnostic(channel, parsed)
-            is ParsedTandemResponse.Table2Generic -> applyTable2Diagnostic(channel, parsed)
+        val parsed = HeadphoneAdapterRegistry.parse(profile, channel, raw)
+        dispatchParsed(channel, parsed)
+    }
+
+    private fun dispatchParsed(channel: TandemChannel, parsed: ParsedHeadphoneResponse) {
+        when (parsed) {
+            is ParsedHeadphoneResponse.SonyTandem.DeviceInfo -> applyDeviceInfo(parsed)
+            is ParsedHeadphoneResponse.SonyTandem.CommonStatus -> applyCommonStatus(parsed)
+            is ParsedHeadphoneResponse.SonyTandem.Battery -> applyBattery(parsed)
+            is ParsedHeadphoneResponse.SonyTandem.EqEbb -> applyEqEbb(parsed)
+            is ParsedHeadphoneResponse.SonyTandem.EqEbbExtendedInfo -> applyEqEbbExtendedInfo(parsed)
+            is ParsedHeadphoneResponse.SonyTandem.NoiseControl -> applyNoise(parsed)
+            is ParsedHeadphoneResponse.SonyTandem.PlaybackAck -> applyPlayback(parsed)
+            is ParsedHeadphoneResponse.SonyTandem.LeaStatus -> applyLeaStatus(parsed)
+            is ParsedHeadphoneResponse.SonyTandem.LeaPairedHistoryStatus -> applyLeaPairedHistory(parsed)
+            is ParsedHeadphoneResponse.SonyTandem.QuickAccess -> applyQuickAccess(parsed)
+            is ParsedHeadphoneResponse.SonyTandem.WearingStatus -> applyWearingStatus(parsed)
+            is ParsedHeadphoneResponse.SonyTandem.Unknown -> applyKnownOrUnknown(parsed)
+            is ParsedHeadphoneResponse.SonyTandem.Table2Common -> applyTable2Diagnostic(channel, parsed)
+            is ParsedHeadphoneResponse.SonyTandem.Table2Generic -> applyTable2Diagnostic(channel, parsed)
+            is ParsedHeadphoneResponse.Qcy.Battery,
+            is ParsedHeadphoneResponse.Qcy.NoiseControl,
+            is ParsedHeadphoneResponse.Qcy.EqData,
+            is ParsedHeadphoneResponse.Qcy.DeviceInfo,
+            is ParsedHeadphoneResponse.Qcy.Volume,
+            is ParsedHeadphoneResponse.Qcy.FunctionStatus -> {
+                appendLog("QCY ${parsed::class.simpleName}: ${parsed.raw.hexString()}")
+                _state.update { dev.ignotus.openbuds.data.qcy.QcyResponseMapper.apply(it, parsed) }
+            }
+            is ParsedHeadphoneResponse.Batch -> parsed.items.forEach { dispatchParsed(channel, it) }
         }
     }
 
@@ -650,7 +692,7 @@ class SonyHeadphoneRepository private constructor(context: Context) : SonyBleCli
         appendLog(message, writeLogcat = false)
     }
 
-    private fun applyDeviceInfo(response: ParsedTandemResponse.DeviceInfo) {
+    private fun applyDeviceInfo(response: ParsedHeadphoneResponse.SonyTandem.DeviceInfo) {
         appendLog("Device info ${response.type} text=${response.text} raw=${response.raw.hexString()}")
         _state.update { current ->
             val info = current.deviceInfo
@@ -679,7 +721,7 @@ class SonyHeadphoneRepository private constructor(context: Context) : SonyBleCli
         }
     }
 
-    private fun applyCommonStatus(response: ParsedTandemResponse.CommonStatus) {
+    private fun applyCommonStatus(response: ParsedHeadphoneResponse.SonyTandem.CommonStatus) {
         appendLog("Common status ${response.type} text=${response.text} values=${response.values} raw=${response.raw.hexString()}")
         if (response.type != dev.ignotus.openbuds.protocol.CommonInquiredType.DISPLAY_FW_VERSION) return
         _state.update { current ->
@@ -712,7 +754,7 @@ class SonyHeadphoneRepository private constructor(context: Context) : SonyBleCli
             )
         }
 
-    private fun applyBattery(response: ParsedTandemResponse.Battery) {
+    private fun applyBattery(response: ParsedHeadphoneResponse.SonyTandem.Battery) {
         _state.update { current ->
             val battery = current.batteryState
             current.copy(
@@ -736,7 +778,7 @@ class SonyHeadphoneRepository private constructor(context: Context) : SonyBleCli
         }
     }
 
-    private fun applyEqEbb(response: ParsedTandemResponse.EqEbb) {
+    private fun applyEqEbb(response: ParsedHeadphoneResponse.SonyTandem.EqEbb) {
         appendLog(
             "EQ/EBB notification type=${response.type} enabled=${response.enabled} " +
                 "preset=${response.preset} clearBass=${response.clearBass} bands=${response.bandSteps} values=${response.values}"
@@ -783,7 +825,7 @@ class SonyHeadphoneRepository private constructor(context: Context) : SonyBleCli
         }
     }
 
-    private fun applyEqEbbExtendedInfo(response: ParsedTandemResponse.EqEbbExtendedInfo) {
+    private fun applyEqEbbExtendedInfo(response: ParsedHeadphoneResponse.SonyTandem.EqEbbExtendedInfo) {
         appendLog(
             "EQ/EBB extended type=${response.type} bands=${response.bands} values=${response.values}"
         )
@@ -910,7 +952,7 @@ class SonyHeadphoneRepository private constructor(context: Context) : SonyBleCli
         }
     }
 
-    private fun applyNoise(response: ParsedTandemResponse.NoiseControl) {
+    private fun applyNoise(response: ParsedHeadphoneResponse.SonyTandem.NoiseControl) {
         _state.update { current ->
             current.copy(
                 noiseControlState = current.noiseControlState.copy(
@@ -933,7 +975,7 @@ class SonyHeadphoneRepository private constructor(context: Context) : SonyBleCli
         }
     }
 
-    private fun applyPlayback(response: ParsedTandemResponse.PlaybackAck) {
+    private fun applyPlayback(response: ParsedHeadphoneResponse.SonyTandem.PlaybackAck) {
         val sourceLabel = if (response.isUnsolicited) "NTFY" else "RET"
         appendLog("Playback notification [$sourceLabel] ${response.values} status=${response.status}")
         if (response.status != PlaybackStatus.UNKNOWN) {
@@ -943,7 +985,7 @@ class SonyHeadphoneRepository private constructor(context: Context) : SonyBleCli
         }
     }
 
-    private fun applyLeaStatus(response: ParsedTandemResponse.LeaStatus) {
+    private fun applyLeaStatus(response: ParsedHeadphoneResponse.SonyTandem.LeaStatus) {
         appendLog("LEA status ${response.type} enabled=${response.enabled} streamingL=${response.streamingStatusL} streamingR=${response.streamingStatusR}")
         _state.update { current ->
             current.copy(leaState = current.leaState.copy(
@@ -955,7 +997,7 @@ class SonyHeadphoneRepository private constructor(context: Context) : SonyBleCli
         }
     }
 
-    private fun applyLeaPairedHistory(response: ParsedTandemResponse.LeaPairedHistoryStatus) {
+    private fun applyLeaPairedHistory(response: ParsedHeadphoneResponse.SonyTandem.LeaPairedHistoryStatus) {
         appendLog("LEA paired history ${response.type} pairedHistory=${response.pairedHistory}")
         _state.update { current ->
             current.copy(leaState = current.leaState.copy(
@@ -965,7 +1007,7 @@ class SonyHeadphoneRepository private constructor(context: Context) : SonyBleCli
         }
     }
 
-    private fun applyQuickAccess(response: ParsedTandemResponse.QuickAccess) {
+    private fun applyQuickAccess(response: ParsedHeadphoneResponse.SonyTandem.QuickAccess) {
         appendLog("Quick Access key=${response.key} function=${response.function}")
         _state.update { current ->
             val functionName = response.function?.name
@@ -977,7 +1019,7 @@ class SonyHeadphoneRepository private constructor(context: Context) : SonyBleCli
         }
     }
 
-    private fun applyWearingStatus(response: ParsedTandemResponse.WearingStatus) {
+    private fun applyWearingStatus(response: ParsedHeadphoneResponse.SonyTandem.WearingStatus) {
         appendLog("Wearing status=${response.status} result=${response.result}")
         _state.update { current ->
             current.copy(wearingState = current.wearingState.copy(
@@ -988,13 +1030,13 @@ class SonyHeadphoneRepository private constructor(context: Context) : SonyBleCli
         }
     }
 
-    private fun applyTable2Diagnostic(channel: TandemChannel, response: ParsedTandemResponse) {
+    private fun applyTable2Diagnostic(channel: TandemChannel, response: ParsedHeadphoneResponse) {
         appendLog("Table2 ${response::class.simpleName} channel=$channel raw=${response.raw.hexString()}")
         val diagnostic = table2DiagnosticStateFor(channel, response) ?: return
         _state.update { it.copy(table2Diagnostic = diagnostic) }
     }
 
-    private fun applyKnownOrUnknown(response: ParsedTandemResponse.Unknown) {
+    private fun applyKnownOrUnknown(response: ParsedHeadphoneResponse.SonyTandem.Unknown) {
         when (response.command) {
             PLAY_NTFY_PARAM -> appendLog(
                 "Playback metadata notification len=${response.payload.size}",
@@ -1108,6 +1150,42 @@ class SonyHeadphoneRepository private constructor(context: Context) : SonyBleCli
         }
     }
 
+    // ── QCY device helpers ───────────────────────────────────────
+
+    private fun isQcyDevice(name: String?): Boolean =
+        name?.lowercase()?.contains("qcy") == true
+
+    /**
+     * QCY dual-mode devices have separate BLE and classic BT addresses
+     * (e.g. 84:AC:60:8F:9F:D9 for BLE vs 84:AC:60:8F:9F:8C for classic).
+     * If the given device is already from a BLE scan, use its address directly.
+     * Otherwise, look for a BLE scan entry with a matching address prefix.
+     */
+    private fun resolveQcyBleAddress(device: DiscoveredSonyDevice): String {
+        // If already a BLE scan result, use it directly
+        if (device.source.startsWith("ble-scan")) {
+            return device.address
+        }
+
+        // Try to find a BLE-scanned QCY device with a close address
+        // QCY BLE and classic addresses typically differ only in the last byte,
+        // sharing the first 5 bytes (e.g. 84:AC:60:8F:9F)
+        val addrPrefix = device.address.take(14) // first 5 bytes: "84:AC:60:8F:9F"
+        val bleDevice = _state.value.discoveredDevices.firstOrNull { d ->
+            d.source.startsWith("ble-scan") &&
+                d.address.startsWith(addrPrefix) &&
+                isQcyDevice(d.name)
+        }
+        if (bleDevice != null) {
+            appendLog("Resolved QCY BLE address: ${bleDevice.address} (from ${device.address})")
+            return bleDevice.address
+        }
+
+        // Fallback: use the original address
+        appendLog("Could not resolve QCY BLE address; using device address: ${device.address}")
+        return device.address
+    }
+
     companion object {
         @Volatile
         private var instance: SonyHeadphoneRepository? = null
@@ -1170,16 +1248,17 @@ private fun String?.toHeadphoneTransport(): HeadphoneTransport =
         "SPP" -> HeadphoneTransport.SPP
         "GATT_HPC" -> HeadphoneTransport.GATT_HPC
         "GATT_MC" -> HeadphoneTransport.GATT_MC
+        "QCY_GATT" -> HeadphoneTransport.GATT_HPC // QCY uses standard GATT, mapped to HPC for display
         "UNSUPPORTED_LE_ENDPOINT" -> HeadphoneTransport.UNSUPPORTED_LE_ENDPOINT
         else -> HeadphoneTransport.UNKNOWN
     }
 
 fun table2DiagnosticStateFor(
     channel: TandemChannel,
-    response: ParsedTandemResponse,
+    response: ParsedHeadphoneResponse,
 ): Table2DiagnosticState? =
     when (response) {
-        is ParsedTandemResponse.Table2Common -> Table2DiagnosticState(
+        is ParsedHeadphoneResponse.SonyTandem.Table2Common -> Table2DiagnosticState(
             channel = channel.name,
             family = response.family,
             command = response.command,
@@ -1187,7 +1266,7 @@ fun table2DiagnosticStateFor(
             values = response.values,
             rawHex = response.raw.hexString(),
         )
-        is ParsedTandemResponse.Table2Generic -> Table2DiagnosticState(
+        is ParsedHeadphoneResponse.SonyTandem.Table2Generic -> Table2DiagnosticState(
             channel = channel.name,
             family = response.family,
             command = response.raw.table2CommandByte(),

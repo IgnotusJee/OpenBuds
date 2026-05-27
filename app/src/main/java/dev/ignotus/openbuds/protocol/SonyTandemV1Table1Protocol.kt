@@ -150,7 +150,7 @@ object SonyTandemV1Table1Protocol {
 
     // ── Parse ──
 
-    fun parse(raw: ByteArray): ParsedTandemResponse {
+    fun parse(raw: ByteArray): ParsedHeadphoneResponse {
         val normalized = if (raw.firstOrNull() == DATA_MDR) raw else byteArrayOf(DATA_MDR) + raw
         val command = normalized.getOrNull(1)
         val payload = if (normalized.size > 2) normalized.copyOfRange(2, normalized.size) else byteArrayOf()
@@ -169,13 +169,13 @@ object SonyTandemV1Table1Protocol {
                 SonyEqEbbPayloadParser.parse(EqEbbPayloadVersion.V1, command, payload, raw)
             EQEBB_RET_EXTENDED_INFO ->
                 SonyEqEbbPayloadParser.parseExtendedInfo(EqEbbPayloadVersion.V1, payload, raw)
-            PLAY_RET_STATUS -> ParsedTandemResponse.PlaybackAck(
+            PLAY_RET_STATUS -> ParsedHeadphoneResponse.SonyTandem.PlaybackAck(
                 values = payload.unsignedList(),
                 status = parsePlaybackStatus(payload),
                 isUnsolicited = false,
                 raw = raw,
             )
-            PLAY_NTFY_STATUS -> ParsedTandemResponse.PlaybackAck(
+            PLAY_NTFY_STATUS -> ParsedHeadphoneResponse.SonyTandem.PlaybackAck(
                 values = payload.unsignedList(),
                 status = parsePlaybackStatus(payload),
                 isUnsolicited = true,
@@ -185,7 +185,7 @@ object SonyTandemV1Table1Protocol {
         }
     }
 
-    private fun parseDeviceInfo(payload: ByteArray, raw: ByteArray): ParsedTandemResponse {
+    private fun parseDeviceInfo(payload: ByteArray, raw: ByteArray): ParsedHeadphoneResponse {
         val type = payload.firstOrNull()?.let { code ->
             DeviceInfoType.entries.firstOrNull { it.code == code }
         }
@@ -196,10 +196,10 @@ object SonyTandemV1Table1Protocol {
             DeviceInfoType.SERIES_AND_COLOR_INFO -> parseSeriesAndColor(payload)
             null -> null
         }
-        return ParsedTandemResponse.DeviceInfo(type, text, raw)
+        return ParsedHeadphoneResponse.SonyTandem.DeviceInfo(type, text, raw)
     }
 
-    private fun parseBattery(payload: ByteArray, raw: ByteArray): ParsedTandemResponse.Battery {
+    private fun parseBattery(payload: ByteArray, raw: ByteArray): ParsedHeadphoneResponse.SonyTandem.Battery {
         val kind = payload.firstOrNull()?.let { code ->
             PowerInquiredType.entries.firstOrNull { it.code == code }
         }
@@ -212,15 +212,15 @@ object SonyTandemV1Table1Protocol {
             )
             else -> payload.drop(1).map { it.unsigned }
         }
-        return ParsedTandemResponse.Battery(kind, values, raw)
+        return ParsedHeadphoneResponse.SonyTandem.Battery(kind, values, raw)
     }
 
-    private fun parseNoiseControl(command: Byte, payload: ByteArray, raw: ByteArray): ParsedTandemResponse {
+    private fun parseNoiseControl(command: Byte, payload: ByteArray, raw: ByteArray): ParsedHeadphoneResponse {
         val type = payload.firstOrNull()?.let { code ->
             NcAsmInquiredType.entries.firstOrNull { it.code == code }
         }
         if (type != NcAsmInquiredType.V1_TABLE_SET1_NC_ASM) {
-            return ParsedTandemResponse.Unknown(
+            return ParsedHeadphoneResponse.SonyTandem.Unknown(
                 dataType = DATA_MDR.unsigned,
                 command = command.unsigned,
                 payload = payload,
@@ -238,7 +238,7 @@ object SonyTandemV1Table1Protocol {
         val ambientMode = payload.getOrNull(5)?.let { byte ->
             AmbientSoundMode.entries.firstOrNull { it.code == byte }
         }
-        return ParsedTandemResponse.NoiseControl(
+        return ParsedHeadphoneResponse.SonyTandem.NoiseControl(
             type = type,
             values = payload.drop(1).map { it.unsigned },
             enabled = controlMode == NoiseControlMode.NOISE_CANCELLING,
@@ -325,8 +325,8 @@ object SonyTandemV1Table1Protocol {
         }
     }
 
-    private fun unknown(command: Byte?, payload: ByteArray, raw: ByteArray): ParsedTandemResponse.Unknown =
-        ParsedTandemResponse.Unknown(
+    private fun unknown(command: Byte?, payload: ByteArray, raw: ByteArray): ParsedHeadphoneResponse.SonyTandem.Unknown =
+        ParsedHeadphoneResponse.SonyTandem.Unknown(
             dataType = DATA_MDR.unsigned,
             command = command?.unsigned,
             payload = payload,

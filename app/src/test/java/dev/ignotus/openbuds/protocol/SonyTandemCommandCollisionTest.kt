@@ -31,8 +31,8 @@ class SonyTandemCommandCollisionTest {
         val raw = byteArrayOf(0x0E, 0x13, 0x00, 88.toByte())
         val parsed = SonyTandemV1Table1Protocol.parse(raw)
 
-        assertTrue("Expected Battery but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Battery)
-        parsed as ParsedTandemResponse.Battery
+        assertTrue("Expected Battery but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.Battery)
+        parsed as ParsedHeadphoneResponse.SonyTandem.Battery
         assertEquals(PowerInquiredType.BATTERY, parsed.kind)
         assertEquals(listOf(88), parsed.values)
     }
@@ -42,8 +42,8 @@ class SonyTandemCommandCollisionTest {
         val raw = byteArrayOf(0x0E, 0x13, 0x01, 80.toByte(), 0x00, 70.toByte())
         val parsed = SonyTandemV1Table1Protocol.parse(raw)
 
-        assertTrue("Expected Battery but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Battery)
-        parsed as ParsedTandemResponse.Battery
+        assertTrue("Expected Battery but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.Battery)
+        parsed as ParsedHeadphoneResponse.SonyTandem.Battery
         assertEquals(PowerInquiredType.LEFT_RIGHT_BATTERY, parsed.kind)
         assertEquals(listOf(80, 70), parsed.values)
     }
@@ -53,8 +53,8 @@ class SonyTandemCommandCollisionTest {
         val raw = byteArrayOf(0x0E, 0x13, 0x02, 95.toByte())
         val parsed = SonyTandemV1Table1Protocol.parse(raw)
 
-        assertTrue("Expected Battery but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Battery)
-        parsed as ParsedTandemResponse.Battery
+        assertTrue("Expected Battery but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.Battery)
+        parsed as ParsedHeadphoneResponse.SonyTandem.Battery
         assertEquals(PowerInquiredType.CRADLE_BATTERY, parsed.kind)
         assertEquals(listOf(95), parsed.values)
     }
@@ -65,8 +65,8 @@ class SonyTandemCommandCollisionTest {
         val raw = byteArrayOf(0x0E, 0x11, 0x00, 60.toByte())
         val parsed = SonyTandemV1Table1Protocol.parse(raw)
 
-        assertTrue("Expected Battery but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Battery)
-        parsed as ParsedTandemResponse.Battery
+        assertTrue("Expected Battery but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.Battery)
+        parsed as ParsedHeadphoneResponse.SonyTandem.Battery
         assertEquals(PowerInquiredType.BATTERY, parsed.kind)
         assertEquals(listOf(60), parsed.values)
     }
@@ -80,8 +80,8 @@ class SonyTandemCommandCollisionTest {
         val raw = byteArrayOf(0x0E, 0x13, 0x09, version.size.toByte()) + version
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue("Expected CommonStatus but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.CommonStatus)
-        parsed as ParsedTandemResponse.CommonStatus
+        assertTrue("Expected CommonStatus but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.CommonStatus)
+        parsed as ParsedHeadphoneResponse.SonyTandem.CommonStatus
         assertEquals(CommonInquiredType.DISPLAY_FW_VERSION, parsed.type)
         assertEquals("2.5.0", parsed.text)
     }
@@ -93,8 +93,8 @@ class SonyTandemCommandCollisionTest {
         val raw = byteArrayOf(0x0E, 0x13, 0x00, 88.toByte())
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue("Expected CommonStatus but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.CommonStatus)
-        parsed as ParsedTandemResponse.CommonStatus
+        assertTrue("Expected CommonStatus but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.CommonStatus)
+        parsed as ParsedHeadphoneResponse.SonyTandem.CommonStatus
         // 0x00 = CONCIERGE in CommonInquiredType
         assertEquals(CommonInquiredType.CONCIERGE, parsed.type)
     }
@@ -104,8 +104,8 @@ class SonyTandemCommandCollisionTest {
         val raw = byteArrayOf(0x0E, 0x13, 0x01, 0x00, 0x01)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue("Expected CommonStatus but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.CommonStatus)
-        parsed as ParsedTandemResponse.CommonStatus
+        assertTrue("Expected CommonStatus but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.CommonStatus)
+        parsed as ParsedHeadphoneResponse.SonyTandem.CommonStatus
         assertEquals(CommonInquiredType.CONNECTION_STATUS, parsed.type)
     }
 
@@ -114,8 +114,8 @@ class SonyTandemCommandCollisionTest {
         val raw = byteArrayOf(0x0E, 0x13, 0x02, 0x00, 0x01)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
-        assertTrue("Expected CommonStatus but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.CommonStatus)
-        parsed as ParsedTandemResponse.CommonStatus
+        assertTrue("Expected CommonStatus but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.CommonStatus)
+        parsed as ParsedHeadphoneResponse.SonyTandem.CommonStatus
         assertEquals(CommonInquiredType.AUDIO_CODEC, parsed.type)
     }
 
@@ -129,8 +129,8 @@ class SonyTandemCommandCollisionTest {
         val raw = byteArrayOf(0x0E, 0x13, 0x00, 88.toByte())
         val parsed = SonyTandemHeadphoneAdapter.parse(profile, raw)
 
-        assertTrue("Expected Battery but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Battery)
-        parsed as ParsedTandemResponse.Battery
+        assertTrue("Expected Battery but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.Battery)
+        parsed as ParsedHeadphoneResponse.SonyTandem.Battery
         assertEquals(PowerInquiredType.BATTERY, parsed.kind)
         assertEquals(listOf(88), parsed.values)
     }
@@ -144,7 +144,7 @@ class SonyTandemCommandCollisionTest {
         val raw = byteArrayOf(0x0E, 0x13, 0x09, version.size.toByte()) + version
         val parsed = SonyTandemHeadphoneAdapter.parse(profile, raw)
 
-        assertTrue("Expected Unknown but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Unknown)
+        assertTrue("Expected Unknown but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.Unknown)
     }
 
     @Test
@@ -155,7 +155,7 @@ class SonyTandemCommandCollisionTest {
         val raw = byteArrayOf(0x0E, 0x13, 0x0E, 0x01)
         val parsed = SonyTandemHeadphoneAdapter.parse(profile, raw)
 
-        assertTrue("Expected Unknown but got ${parsed::class.simpleName}", parsed is ParsedTandemResponse.Unknown)
+        assertTrue("Expected Unknown but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.Unknown)
     }
 
     @Test
@@ -168,7 +168,7 @@ class SonyTandemCommandCollisionTest {
 
         assertTrue(
             "Expected Unknown (unsupported V2 common status route) but got ${parsed::class.simpleName}",
-            parsed is ParsedTandemResponse.Unknown,
+            parsed is ParsedHeadphoneResponse.SonyTandem.Unknown,
         )
     }
 
@@ -182,7 +182,7 @@ class SonyTandemCommandCollisionTest {
 
         assertTrue(
             "Expected Unknown (unsupported V2 common status route) but got ${parsed::class.simpleName}",
-            parsed is ParsedTandemResponse.Unknown,
+            parsed is ParsedHeadphoneResponse.SonyTandem.Unknown,
         )
     }
 
@@ -198,9 +198,9 @@ class SonyTandemCommandCollisionTest {
         val lbsParsed = SonyTandemHeadphoneAdapter.parse(linkBudsSProfile(), raw)
 
         // XM4 → Battery (V1 binding)
-        assertTrue("XM4: Expected Battery", xm4Parsed is ParsedTandemResponse.Battery)
+        assertTrue("XM4: Expected Battery", xm4Parsed is ParsedHeadphoneResponse.SonyTandem.Battery)
         // LinkBuds S → CommonStatus (V2 binding, V2 parser treats 0x13 as common)
-        assertTrue("LinkBuds S: Expected CommonStatus", lbsParsed is ParsedTandemResponse.CommonStatus)
+        assertTrue("LinkBuds S: Expected CommonStatus", lbsParsed is ParsedHeadphoneResponse.SonyTandem.CommonStatus)
 
         // The parse results are different for the same raw input — this is correct
         // and necessary for the collision resolution to work.
@@ -220,8 +220,8 @@ class SonyTandemCommandCollisionTest {
         val xm4Parsed = SonyTandemHeadphoneAdapter.parse(xm4Profile(), raw)
         val lbsParsed = SonyTandemHeadphoneAdapter.parse(linkBudsSProfile(), raw)
 
-        assertTrue("XM4: Expected Battery", xm4Parsed is ParsedTandemResponse.Battery)
-        assertTrue("LinkBuds S: Expected CommonStatus", lbsParsed is ParsedTandemResponse.CommonStatus)
+        assertTrue("XM4: Expected Battery", xm4Parsed is ParsedHeadphoneResponse.SonyTandem.Battery)
+        assertTrue("LinkBuds S: Expected CommonStatus", lbsParsed is ParsedHeadphoneResponse.SonyTandem.CommonStatus)
         assertNotEquals(xm4Parsed::class, lbsParsed::class)
     }
 

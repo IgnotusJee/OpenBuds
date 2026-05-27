@@ -26,6 +26,17 @@ data class TandemGattEndpointSpec(
 )
 
 object TandemGattRouting {
+    /**
+     * GATT channels that have Sony Tandem endpoints. Other channels (SPP, QCY_*)
+     * must never be passed to [endpointSpecFor] — callers should filter through
+     * this set first to avoid IllegalStateException.
+     */
+    val SONY_GATT_CHANNELS: Set<TandemChannel> = setOf(
+        TandemChannel.GATT_V2_HPC,
+        TandemChannel.GATT_V2_MC,
+        TandemChannel.GATT_V1_MC,
+    )
+
     private val gattNotificationOrder = mapOf(
         TandemChannel.GATT_V2_HPC to 0,
         TandemChannel.GATT_V2_MC to 1,
@@ -52,6 +63,12 @@ object TandemGattRouting {
             fromAccUuid = SonyGatt.TANDEM_MC_FROM_ACC,
         )
         TandemChannel.SPP_MDR -> error("SPP has no GATT endpoint")
+        TandemChannel.QCY_SETTING_WRITE,
+        TandemChannel.QCY_READSET,
+        TandemChannel.QCY_BATTERY,
+        TandemChannel.QCY_VERSION,
+        TandemChannel.QCY_EQ_RAW,
+        TandemChannel.QCY_FUNCTION -> error("QCY has no Sony Tandem GATT endpoint")
     }
 
     fun notificationOrder(channels: Iterable<TandemChannel>): List<TandemChannel> =
@@ -61,8 +78,7 @@ object TandemGattRouting {
 
     fun fromAccChannelFor(serviceUuid: UUID?, characteristicUuid: UUID?): TandemChannel? {
         if (serviceUuid == null || characteristicUuid == null) return null
-        return TandemChannel.entries
-            .filter { it != TandemChannel.SPP_MDR }
+        return SONY_GATT_CHANNELS
             .firstOrNull { channel ->
                 val spec = endpointSpecFor(channel)
                 spec.serviceUuid == serviceUuid && spec.fromAccUuid == characteristicUuid

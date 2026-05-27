@@ -23,6 +23,7 @@ import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
 import dev.ignotus.openbuds.headphones.TandemChannel
+import dev.ignotus.openbuds.protocol.QcyGatt
 import dev.ignotus.openbuds.protocol.SonyGatt
 import dev.ignotus.openbuds.protocol.hexString
 import java.io.IOException
@@ -118,7 +119,24 @@ interface SonyBleClientListener {
 class SonyBleClient(
     private val context: Context,
     private val listener: SonyBleClientListener,
-) {
+) : HeadphoneTransportClient {
+    override val id: String = "sony-tandem"
+
+    override fun matches(device: DiscoveredSonyDevice, reportedModelName: String?): Boolean {
+        // Reject QCY by name to avoid double-handling with QcyBleClient.
+        val name = (reportedModelName ?: device.name).lowercase()
+        if (name.contains("qcy")) return false
+        // Sony advertises one of three Tandem service UUIDs in advertised services.
+        val sonyAd = device.sonyAd != null
+        val sonyServices = device.advertisedServices.any { uuidStr ->
+            try {
+                TandemChannel.fromServiceUuid(java.util.UUID.fromString(uuidStr)) != null
+            } catch (e: Exception) {
+                false
+            }
+        }
+        return sonyAd || sonyServices || isHeadphoneCandidate(name)
+    }
     private val bluetoothManager =
         context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
     private val adapter: BluetoothAdapter?
@@ -164,7 +182,8 @@ class SonyBleClient(
                         it == "TANDEM_V2_HPC_SERVICE" ||
                             it == "TANDEM_V2_MC_SERVICE" ||
                             it == "TANDEM_V1_MC_SERVICE"
-                    },
+                    } ||
+                    serviceUuids.contains(QcyGatt.SERVICE_UUID.toString().lowercase()),
                 sonyAd = sonyAd,
             )
             log(
@@ -172,7 +191,7 @@ class SonyBleClient(
                     "rssi=${found.rssi} services=[$serviceUuids] manufacturer=[$manufacturerData] " +
                     "serviceData=[$serviceData] sonyAd=${sonyAd?.summary.orEmpty()} raw=${sonyAd?.raw.orEmpty()}"
             )
-            if (isSonyCandidate(name) || found.isLikelyControlEndpoint || sonyAd != null) {
+            if (isHeadphoneCandidate(name) || found.isLikelyControlEndpoint || sonyAd != null) {
                 listener.onDeviceFound(found)
             }
         }
@@ -349,7 +368,7 @@ class SonyBleClient(
         }
     }
 
-    fun startScan(strictSonyServiceFilter: Boolean) {
+    override fun startScan(strictSonyServiceFilter: Boolean) {
         if (!hasScanPermission()) {
             listener.onBluetoothUnavailable("Bluetooth scan permission is missing")
             return
@@ -379,7 +398,7 @@ class SonyBleClient(
         scanner.startScan(filters, settings, scanCallback)
     }
 
-    fun stopScan() {
+    override fun stopScan() {
         if (!scanning || !hasScanPermission()) return
         scanner?.stopScan(scanCallback)
         scanning = false
@@ -397,7 +416,7 @@ class SonyBleClient(
         )
     }
 
-    fun connect(device: DiscoveredSonyDevice) {
+    override fun connect(device: DiscoveredSonyDevice) {
         if (!hasConnectPermission()) {
             listener.onBluetoothUnavailable("Bluetooth connect permission is missing")
             return
@@ -439,7 +458,7 @@ class SonyBleClient(
         }
     }
 
-    fun disconnect() {
+    override fun disconnect() {
         closeGatt(notify = true)
     }
 
@@ -462,7 +481,7 @@ class SonyBleClient(
         }
     }
 
-    fun refreshUnsupportedEndpointProbe() {
+    override fun refreshUnsupportedEndpointProbe() {
         val activeGatt = gatt
         if (activeGatt == null) {
             listener.onBluetoothUnavailable("No GATT connection is available for endpoint diagnostics")
@@ -486,7 +505,7 @@ class SonyBleClient(
         writeToChannel(defaultGattWriteChannel(), bytes)
     }
 
-    fun sendToChannel(channel: TandemChannel, bytes: ByteArray) {
+    override fun sendToChannel(channel: TandemChannel, bytes: ByteArray) {
         log("TX $channel ${bytes.hexString()}")
         val transport = sppTransport
         if (transport != null) {
@@ -496,7 +515,7 @@ class SonyBleClient(
         writeToChannel(channel, bytes)
     }
 
-    fun availableChannels(): Set<TandemChannel> {
+    override fun availableChannels(): Set<TandemChannel> {
         val channels = mutableSetOf<TandemChannel>()
         if (sppTransport != null) channels.add(TandemChannel.SPP_MDR)
         channels.addAll(gattEndpoints.keys)
@@ -588,7 +607,7 @@ class SonyBleClient(
             .firstOrNull { device ->
                 val name = safeDeviceName(device).orEmpty()
                 device.type != BluetoothDevice.DEVICE_TYPE_LE &&
-                    (name.equals(targetName, ignoreCase = true) || isSonyCandidate(name))
+                    (name.equals(targetName, ignoreCase = true) || isHeadphoneCandidate(name))
             }
     }
 
@@ -1069,7 +1088,7 @@ class SonyBleClient(
             "Known device source=$source name=${name ?: "<unknown>"} address=${device.address} " +
                 "type=${device.type} bond=${device.bondState} uuids=[$uuids]"
         )
-        if (!isSonyCandidate(name)) return
+        if (!isHeadphoneCandidate(name)) return
 
         listener.onDeviceFound(
             DiscoveredSonyDevice(
@@ -1086,10 +1105,11 @@ class SonyBleClient(
         )
     }
 
-    private fun isSonyCandidate(name: String?): Boolean {
+    private fun isHeadphoneCandidate(name: String?): Boolean {
         val normalized = name?.trim()?.lowercase().orEmpty()
         return normalized.contains("sony") ||
             normalized.contains("linkbuds") ||
+            normalized.contains("qcy") ||
             normalized.startsWith("wf-") ||
             normalized.startsWith("wh-") ||
             normalized.startsWith("wi-") ||
