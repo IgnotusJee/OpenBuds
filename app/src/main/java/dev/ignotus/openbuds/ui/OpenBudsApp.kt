@@ -1209,48 +1209,40 @@ private fun NavigationTabContent(
     onLongPress: (() -> Unit)? = null,
     onSelected: (AppRoute) -> Unit,
 ) {
-    val renderCapabilities = LocalUiRenderCapabilities.current
-    Box(modifier = modifier) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    val scaleValue = scale()
-                    scaleX = scaleValue
-                    scaleY = scaleValue
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+        modifier = modifier
+            .graphicsLayer {
+                val scaleValue = scale()
+                scaleX = scaleValue
+                scaleY = scaleValue
+            }
+            .clip(ContinuousCapsule)
+            .then(
+                if (!clickEnabled) {
+                    Modifier
+                } else if (onLongPress != null) {
+                    Modifier.combinedClickable(
+                        onClick = { onSelected(tab) },
+                        onLongClick = onLongPress,
+                    )
+                } else {
+                    Modifier.clickable { onSelected(tab) }
                 }
-                .clip(ContinuousCapsule)
-                .then(
-                    if (!clickEnabled) {
-                        Modifier
-                    } else if (onLongPress != null) {
-                        Modifier.combinedClickable(
-                            onClick = { onSelected(tab) },
-                            onLongClick = onLongPress,
-                        )
-                    } else {
-                        Modifier.clickable { onSelected(tab) }
-                    }
-                )
-                .padding(vertical = 7.dp),
-        ) {
-            Icon(
-                imageVector = tab.icon,
-                contentDescription = stringResource(tab.titleResId),
-                tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Text(
-                text = stringResource(tab.titleResId),
-                style = MaterialTheme.typography.labelSmall,
-                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-            )
-        }
-        InteractiveHighlight(
-            enabled = renderCapabilities.effectsEnabled,
-            highlightColor = MaterialTheme.colorScheme.onSurface,
+            .padding(vertical = 7.dp),
+    ) {
+        Icon(
+            imageVector = tab.icon,
+            contentDescription = stringResource(tab.titleResId),
+            tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = stringResource(tab.titleResId),
+            style = MaterialTheme.typography.labelSmall,
+            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
         )
     }
 }
