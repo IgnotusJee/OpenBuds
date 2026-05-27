@@ -75,7 +75,7 @@ import dev.ignotus.openbuds.ui.rememberAboutHazeState
 import dev.ignotus.openbuds.ui.rememberAboutHazeStyle
 import dev.ignotus.openbuds.ui.rememberGlassVisualTokens
 import dev.ignotus.openbuds.ui.reareyeHorizontalTransform
-import dev.ignotus.openbuds.ui.screen.DeviceModelImage
+import dev.ignotus.openbuds.ui.device.DeviceModelImage
 import dev.ignotus.openbuds.R
 
 @Composable

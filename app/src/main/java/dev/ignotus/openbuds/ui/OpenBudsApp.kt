@@ -171,9 +171,10 @@ import dev.ignotus.openbuds.protocol.NoiseControlMode
 import dev.ignotus.openbuds.protocol.PlaybackStatus
 
 import dev.ignotus.openbuds.ui.screen.HomeScreen
-import dev.ignotus.openbuds.ui.screen.DeviceScreen
 import dev.ignotus.openbuds.ui.screen.SettingsScreen
 import dev.ignotus.openbuds.ui.screen.AboutScreen
+import dev.ignotus.openbuds.ui.device.DeviceActionCallback
+import dev.ignotus.openbuds.ui.device.DevicePage
 import dev.ignotus.openbuds.R
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
@@ -414,24 +415,36 @@ fun OpenBudsApp(
                                     onOpenDevice = { currentRoute = AppRoute.Device },
                                     onRefresh = onRefresh,
                                 )
-                                AppRoute.Device -> DeviceScreen(
-                                    state = state,
-                                    bottomInnerPadding = stableBottomInset,
-                                    onStartScan = onStartScan,
-                                    onStopScan = onStopScan,
-                                    onConnect = onConnect,
-                                    onDisconnect = onDisconnect,
-                                    onRefresh = onRefresh,
-                                    onSetNoiseControlMode = onSetNoiseControlMode,
-                                    onSetAmbientLevel = onSetAmbientLevel,
-                                    onSetAmbientVoiceMode = onSetAmbientVoiceMode,
-                                    onSetEqPreset = onSetEqPreset,
-                                    onSetClearBass = onSetClearBass,
-                                    onSetCustomEqBand = onSetCustomEqBand,
-                                    onPlaybackPrevious = onPlaybackPrevious,
-                                    onPlaybackPlayPause = onPlaybackPlayPause,
-                                    onPlaybackNext = onPlaybackNext,
-                                )
+                                AppRoute.Device -> {
+                                    val deviceActions = remember(state, stableBottomInset,
+                                        onStartScan, onStopScan, onConnect, onDisconnect, onRefresh,
+                                        onSetNoiseControlMode, onSetAmbientLevel, onSetAmbientVoiceMode,
+                                        onSetEqPreset, onSetClearBass, onSetCustomEqBand,
+                                        onPlaybackPrevious, onPlaybackPlayPause, onPlaybackNext,
+                                    ) {
+                                        DeviceActionCallback(
+                                            onStartScan = onStartScan,
+                                            onStopScan = onStopScan,
+                                            onConnect = onConnect,
+                                            onDisconnect = onDisconnect,
+                                            onRefresh = onRefresh,
+                                            onSetNoiseControlMode = onSetNoiseControlMode,
+                                            onSetAmbientLevel = onSetAmbientLevel,
+                                            onSetAmbientVoiceMode = onSetAmbientVoiceMode,
+                                            onSetEqPreset = onSetEqPreset,
+                                            onSetClearBass = onSetClearBass,
+                                            onSetCustomEqBand = onSetCustomEqBand,
+                                            onPlaybackPrevious = onPlaybackPrevious,
+                                            onPlaybackPlayPause = onPlaybackPlayPause,
+                                            onPlaybackNext = onPlaybackNext,
+                                        )
+                                    }
+                                    DevicePage(
+                                        state = state,
+                                        bottomInnerPadding = stableBottomInset,
+                                        actions = deviceActions,
+                                    )
+                                }
                                 AppRoute.Settings -> SettingsScreen(
                                     state = state,
                                     bottomInnerPadding = stableBottomInset,

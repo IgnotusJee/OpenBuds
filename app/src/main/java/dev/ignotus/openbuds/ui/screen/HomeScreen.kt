@@ -20,9 +20,9 @@ import dev.ignotus.openbuds.ui.EmptyHint
 import dev.ignotus.openbuds.ui.InfoLine
 import dev.ignotus.openbuds.ui.PageColumn
 import dev.ignotus.openbuds.ui.SectionCard
-import dev.ignotus.openbuds.ui.screen.AppIdentityHeader
-import dev.ignotus.openbuds.ui.screen.DeviceModelImage
-import dev.ignotus.openbuds.ui.screen.FeatureStatusCard
+import dev.ignotus.openbuds.ui.device.AppIdentityHeader
+import dev.ignotus.openbuds.ui.device.DeviceModelImage
+import dev.ignotus.openbuds.ui.device.FeatureStatusCard
 import dev.ignotus.openbuds.R
 
 @Composable
