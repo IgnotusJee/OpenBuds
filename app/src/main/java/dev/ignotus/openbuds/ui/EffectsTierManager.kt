@@ -1,6 +1,8 @@
 package dev.ignotus.openbuds.ui
 
+import android.app.ActivityManager
 import android.content.Context
+import android.os.Build
 import top.yukonga.miuix.kmp.blur.isRenderEffectSupported
 
 enum class EffectsTier {
@@ -15,10 +17,16 @@ object EffectsTierManager {
         if (!userEnabled) return EffectsTier.DISABLED
         if (!isRenderEffectSupported()) return EffectsTier.DISABLED
 
-        val memMb = Runtime.getRuntime().maxMemory() / 1024 / 1024
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager
+        val isLowRam = am?.isLowRamDevice ?: false
+        if (isLowRam) return EffectsTier.BLUR_ONLY
+
+        val memMb = am?.memoryClass?.toLong() ?: 0L
+        val sdk = Build.VERSION.SDK_INT
+
         return when {
-            memMb >= 512 -> EffectsTier.FULL_GLASS
-            memMb >= 256 -> EffectsTier.LIGHT_GLASS
+            memMb >= 256 && sdk >= Build.VERSION_CODES.S -> EffectsTier.FULL_GLASS
+            memMb >= 128 && sdk >= Build.VERSION_CODES.R -> EffectsTier.LIGHT_GLASS
             else -> EffectsTier.BLUR_ONLY
         }
     }
