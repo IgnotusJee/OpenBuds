@@ -287,30 +287,6 @@
     <string name="about_export_path_4">export/04-app-layer</string>
     <string name="about_export_path_5">export/05-full-protocol-documentation.md</string>
 
-    <!-- ===== Feature Map (Repository) ===== -->
-    <string name="feature_scan_connect">Scan &amp; Connect</string>
-    <string name="feature_scan_connect_desc">BLE scan, GATT/SPP discovery</string>
-    <string name="feature_device_info">Device Info</string>
-    <string name="feature_device_info_desc">Model, firmware, protocol basics</string>
-    <string name="feature_battery">Battery</string>
-    <string name="feature_battery_desc">Single/headset, left/right, and cradle-compatible reads</string>
-    <string name="feature_noise_control">Noise Control</string>
-    <string name="feature_noise_control_desc">NC/ASM gated by current device profile</string>
-    <string name="feature_ambient_level">Ambient Level</string>
-    <string name="feature_ambient_level_desc">ASM seamless level when confirmed writable</string>
-    <string name="feature_playback_control">Playback Control</string>
-    <string name="feature_playback_control_desc">Play, pause, previous, next</string>
-    <string name="feature_eq">EQ / Clear Bass</string>
-    <string name="feature_eq_desc">Preset EQ, custom EQ, and Clear Bass</string>
-    <string name="feature_lea">LE Audio Status</string>
-    <string name="feature_lea_desc">Connection type, streaming status, paired history</string>
-    <string name="feature_quick_access">Quick Access</string>
-    <string name="feature_quick_access_desc">Customizable button actions L/R and NC/AMB keys</string>
-    <string name="feature_wearing">Wearing Detection</string>
-    <string name="feature_wearing_desc">Earpiece fitting and wearing detection status</string>
-    <string name="feature_advanced">Sense / AutoPlay / Multipoint / FOTA</string>
-    <string name="feature_advanced_desc">Advanced modules reserved</string>
-
     <!-- ===== Connection/Scan states ===== -->
     <string name="scan_state_idle">Idle</string>
     <string name="scan_state_connected">Connected</string>

@@ -287,30 +287,6 @@
     <string name="about_export_path_4">export/04-app-layer</string>
     <string name="about_export_path_5">export/05-full-protocol-documentation.md</string>
 
-    <!-- Feature Map -->
-    <string name="feature_scan_connect">扫描与连接</string>
-    <string name="feature_scan_connect_desc">BLE 扫描，GATT/SPP 发现</string>
-    <string name="feature_device_info">设备信息</string>
-    <string name="feature_device_info_desc">型号、固件、协议基础信息</string>
-    <string name="feature_battery">电量</string>
-    <string name="feature_battery_desc">单值/耳机、左右耳和充电盒兼容读取</string>
-    <string name="feature_noise_control">降噪控制</string>
-    <string name="feature_noise_control_desc">根据当前设备配置门控 NC/ASM</string>
-    <string name="feature_ambient_level">环境声等级</string>
-    <string name="feature_ambient_level_desc">确认可写时的 ASM 无缝等级</string>
-    <string name="feature_playback_control">播放控制</string>
-    <string name="feature_playback_control_desc">播放、暂停、上一曲、下一曲</string>
-    <string name="feature_eq">EQ / Clear Bass</string>
-    <string name="feature_eq_desc">预设 EQ、自定义 EQ 和 Clear Bass</string>
-    <string name="feature_lea">LE Audio 状态</string>
-    <string name="feature_lea_desc">连接类型、流状态、配对历史</string>
-    <string name="feature_quick_access">快捷操作</string>
-    <string name="feature_quick_access_desc">可自定义的 L/R 和 NC/AMB 按键操作</string>
-    <string name="feature_wearing">佩戴检测</string>
-    <string name="feature_wearing_desc">耳塞贴合和佩戴检测状态</string>
-    <string name="feature_advanced">Sense / AutoPlay / 多点连接 / FOTA</string>
-    <string name="feature_advanced_desc">高级模块保留</string>
-
     <!-- Scan states -->
     <string name="scan_state_idle">空闲</string>
     <string name="scan_state_connected">已连接</string>

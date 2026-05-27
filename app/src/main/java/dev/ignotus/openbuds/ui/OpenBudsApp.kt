@@ -2,11 +2,7 @@ package dev.ignotus.openbuds.ui
 
 import android.app.Activity
 import android.content.Intent
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.content.Context
 import android.os.Build
-import android.util.LruCache
 import androidx.core.content.ContextCompat
 import dev.ignotus.openbuds.service.SonyControlService
 import androidx.activity.compose.BackHandler
@@ -27,7 +23,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -97,6 +92,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -118,7 +115,6 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
@@ -178,9 +174,6 @@ import dev.ignotus.openbuds.ui.device.DevicePage
 import dev.ignotus.openbuds.R
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import java.net.HttpURLConnection
-import java.net.URL
 import kotlin.math.abs
 import kotlin.math.sign
 
@@ -347,7 +340,9 @@ fun OpenBudsApp(
         }
     }
     val appContent: @Composable () -> Unit = {
-        val backdrop = if (renderCapabilities.navigationBackdropEnabled && renderEffectsSupported) {
+        val lifecycleOwner = LocalLifecycleOwner.current
+        val backdropInLifecycle = lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)
+        val backdrop = if (renderCapabilities.navigationBackdropEnabled && renderEffectsSupported && backdropInLifecycle) {
             rememberLayerBackdrop {
                 drawRect(appColorScheme.background)
                 drawContent()

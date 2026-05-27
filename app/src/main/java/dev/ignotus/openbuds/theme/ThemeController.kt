@@ -28,7 +28,7 @@ fun OpenBudsTheme(
                 keyColor = config.seedColor ?: seedColorOrNull(config.seedColorIndex),
             ),
         ) {
-            MaterialTheme(colorScheme = colorScheme, typography = OpenBudsTypography) {
+            MaterialTheme(colorScheme = colorScheme, typography = MiuixTypography) {
                 content()
             }
         }
@@ -40,6 +40,8 @@ fun OpenBudsTheme(
 }
 
 fun resolveOpenBudsColorScheme(config: OpenBudsThemeConfig): ColorScheme {
-    val seeded = seedColorScheme(config.seedColorIndex, config.darkTheme)
-    return if (config.isMiuix) miuixLikeColorScheme(seeded, config.darkTheme) else seeded
+    if (config.isMiuix) {
+        return if (config.darkTheme) MiuixDarkColors else MiuixLightColors
+    }
+    return seedColorScheme(config.seedColorIndex, config.darkTheme)
 }
