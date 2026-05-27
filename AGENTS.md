@@ -18,6 +18,16 @@ The project root is the git repository root (formerly `App/`). Subdirectories:
   - `app/src/main/java/dev/ignotus/openbuds/data/` — Repository, UI state, model image catalog. QCY mapper: `qcy/QcyResponseMapper.kt`.
   - `app/src/main/java/dev/ignotus/openbuds/headphones/` — Adapters: `SonyTandemHeadphoneAdapter.kt`, `QcyHeadphoneAdapter.kt`. QCY profile: `qcydevices/QcyC30SProfile.kt`.
   - `app/src/main/java/dev/ignotus/openbuds/ui/` — Compose UI.
+    - `app/src/main/java/dev/ignotus/openbuds/ui/screen/` — Screen composables (Home, Settings, About).
+    - `app/src/main/java/dev/ignotus/openbuds/ui/device/` — Device page package: `DevicePage.kt` (orchestrator), `DeviceCards.kt` (read-only cards), `DeviceControls.kt` (NC/EQ/playback), `DeviceComponentProviders.kt` (interface + registry), `DeviceImageLoader.kt`, `DeviceSelectorSheet.kt`.
+    - `app/src/main/java/dev/ignotus/openbuds/ui/animation/` — Animation utilities (`StaggeredReveal.kt`).
+    - `app/src/main/java/dev/ignotus/openbuds/ui/theme/` — Theme system: `Theme.kt`, `ThemeController.kt`, `ThemeStyle.kt`, `OpenBudsColorScheme.kt`, `MiuixColorSchemes.kt`, `SeedColors.kt`, `Typography.kt`.
+    - `app/src/main/java/dev/ignotus/openbuds/ui/EffectsTierManager.kt` — GPU/memory-based effect degradation.
+    - `app/src/main/java/dev/ignotus/openbuds/ui/InteractiveHighlight.kt` — Compose radial-glow finger-follow highlight.
+    - `app/src/main/java/dev/ignotus/openbuds/ui/UiBlurEffects.kt` — Haze + MIUIX blur utilities.
+    - `app/src/main/java/dev/ignotus/openbuds/ui/UiEffectsPolicy.kt` — UiRenderCapabilities data class.
+    - `app/src/main/java/dev/ignotus/openbuds/ui/LiquidNavigationDrag.kt` — Custom damped drag animation engine.
+    - `app/src/main/java/dev/ignotus/openbuds/ui/AppUiSettingsStore.kt` — DataStore preferences.
 - **`docs/`** — Development documentation.
   - `DEVELOPMENT.md` — Dev guide: environment, code structure, feature workflow, UI conventions, testing.
   - `PROTOCOL_GUIDE.md` — Protocol implementation: transport layer, Tandem message format, command families, parser design.
@@ -31,6 +41,7 @@ The project root is the git repository root (formerly `App/`). Subdirectories:
   - `QCY/` — Decompiled QCY earphone setup APK (jadx output).
     - `QCY_C30S_PROTOCOL.md` — Full protocol reference (BLE GATT UUIDs, TLV frame format, CMDID table).
   - `REAREye/` — Backscreen Xposed module (Compose UI reference).
+  - `FolkLite/` — APatch UI (Compose, MIUIX + Material3 theme switching, Backdrop liquid glass, AGSL RuntimeShader highlight).
 - **`tools/`** — Agent and development helper tools (e.g., `analyze_btsnoop.py` for BLE HCI log analysis).
 - Root Gradle files — `build.gradle.kts`, `settings.gradle.kts` (rootProject.name = "OpenBuds").
 
