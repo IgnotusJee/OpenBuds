@@ -5,30 +5,42 @@ import androidx.compose.runtime.remember
 
 internal data class UiRenderCapabilities(
     val mode: ReareyeNavigationBarMode,
-    val userEffectsEnabled: Boolean,
+    val tier: EffectsTier,
 ) {
-    val effectsEnabled: Boolean = userEffectsEnabled
+    val effectsEnabled: Boolean = tier != EffectsTier.DISABLED
+
     val floatingBottomBarEnabled: Boolean = mode == ReareyeNavigationBarMode.Floating ||
         mode == ReareyeNavigationBarMode.FloatingGlass
+
     val semiTransparentBottomBar: Boolean = mode == ReareyeNavigationBarMode.SemiTransparent
+
     val rootBackdropEnabled: Boolean = effectsEnabled &&
-        mode == ReareyeNavigationBarMode.FloatingGlass
+        mode == ReareyeNavigationBarMode.FloatingGlass &&
+        tier >= EffectsTier.LIGHT_GLASS
+
     val navigationBackdropEnabled: Boolean = effectsEnabled &&
+        mode == ReareyeNavigationBarMode.FloatingGlass &&
+        tier >= EffectsTier.BLUR_ONLY
+
+    val liquidGlassEnabled: Boolean = tier == EffectsTier.FULL_GLASS &&
         mode == ReareyeNavigationBarMode.FloatingGlass
-    val liquidGlassEnabled: Boolean = navigationBackdropEnabled
+
+    val vibrancyEnabled: Boolean = tier == EffectsTier.FULL_GLASS
+
     val glassCardsEnabled: Boolean = rootBackdropEnabled
+
     val backgroundGradientEnabled: Boolean = effectsEnabled
 }
 
 @Composable
 internal fun rememberUiRenderCapabilities(
     mode: ReareyeNavigationBarMode,
-    userEffectsEnabled: Boolean,
+    tier: EffectsTier,
 ): UiRenderCapabilities {
-    return remember(mode, userEffectsEnabled) {
+    return remember(mode, tier) {
         UiRenderCapabilities(
             mode = mode,
-            userEffectsEnabled = userEffectsEnabled,
+            tier = tier,
         )
     }
 }

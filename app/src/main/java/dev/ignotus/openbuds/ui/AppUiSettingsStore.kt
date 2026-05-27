@@ -7,13 +7,14 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import dev.ignotus.openbuds.R
 
 private val Context.openbudsUiSettingsDataStore by preferencesDataStore("openbuds_ui_settings_v2")
 
-enum class AppColorMode(val title: String) {
-    Light("浅色"),
-    Dark("深色"),
-    System("跟随系统"),
+enum class AppColorMode(val titleResId: Int) {
+    Light(R.string.color_mode_light),
+    Dark(R.string.color_mode_dark),
+    System(R.string.color_mode_system),
 }
 
 data class AppUiSettings(

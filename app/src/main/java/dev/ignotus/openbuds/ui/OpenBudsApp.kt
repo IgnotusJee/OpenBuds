@@ -106,6 +106,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
@@ -172,6 +173,7 @@ import dev.ignotus.openbuds.ui.screen.HomeScreen
 import dev.ignotus.openbuds.ui.screen.DeviceScreen
 import dev.ignotus.openbuds.ui.screen.SettingsScreen
 import dev.ignotus.openbuds.ui.screen.AboutScreen
+import dev.ignotus.openbuds.R
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -182,38 +184,38 @@ import kotlin.math.abs
 import kotlin.math.sign
 
 private enum class AppRoute(
-    val title: String,
+    val titleResId: Int,
     val icon: ImageVector,
-    val quickTitle: String = title,
+    val quickTitleResId: Int = titleResId,
 ) {
-    Home("Home", Icons.Rounded.Home),
-    Device("Device", Icons.Rounded.Bluetooth),
-    Settings("Settings", Icons.Rounded.Settings, "Config"),
-    About("About", Icons.Rounded.Info),
+    Home(R.string.nav_home, Icons.Rounded.Home),
+    Device(R.string.nav_device, Icons.Rounded.Bluetooth),
+    Settings(R.string.nav_settings, Icons.Rounded.Settings, R.string.nav_quick_config),
+    About(R.string.nav_about, Icons.Rounded.Info),
 }
 
-enum class ReareyeNavigationBarMode(val title: String) {
-    Normal("Normal"),
-    SemiTransparent("Semi transparent"),
-    Floating("Floating"),
-    FloatingGlass("Liquid glass"),
+enum class ReareyeNavigationBarMode(val titleResId: Int) {
+    Normal(R.string.nav_bar_mode_normal),
+    SemiTransparent(R.string.nav_bar_mode_semi_transparent),
+    Floating(R.string.nav_bar_mode_floating),
+    FloatingGlass(R.string.nav_bar_mode_liquid_glass),
 }
 
-enum class ThemeStyle(val title: String) {
-    Material("Material"),
-    Miuix("MIUIX"),
+enum class ThemeStyle(val titleResId: Int) {
+    Material(R.string.theme_style_material),
+    Miuix(R.string.theme_style_miuix),
 }
 
 internal enum class SettingsRoute(
-    val title: String,
-    val subtitle: String,
+    val titleResId: Int,
+    val subtitleResId: Int,
     val icon: ImageVector,
 ) {
-    Root("Settings", "Global app behavior and diagnostics", Icons.Rounded.Settings),
-    Appearance("Appearance", "Navigation, glass, motion, and theme", Icons.Rounded.Settings),
-    Protocol("Protocol", "Connection defaults and Sony endpoint behavior", Icons.Rounded.Bluetooth),
-    Diagnostics("Diagnostics", "Debug logs and current protocol activity", Icons.Rounded.Code),
-    Modules("Reserved modules", "Future Sony feature surfaces kept visible", Icons.Rounded.Info),
+    Root(R.string.settings_root_title, R.string.settings_root_subtitle, Icons.Rounded.Settings),
+    Appearance(R.string.settings_appearance_title, R.string.settings_appearance_subtitle, Icons.Rounded.Settings),
+    Protocol(R.string.settings_protocol_title, R.string.settings_protocol_subtitle, Icons.Rounded.Bluetooth),
+    Diagnostics(R.string.settings_diagnostics_title, R.string.settings_diagnostics_subtitle, Icons.Rounded.Code),
+    Modules(R.string.settings_modules_title, R.string.settings_modules_subtitle, Icons.Rounded.Info),
 }
 
 internal data class SettingsAnimatedRoute(
@@ -222,11 +224,11 @@ internal data class SettingsAnimatedRoute(
 )
 
 internal enum class AboutRoute(
-    val title: String,
-    val subtitle: String,
+    val titleResId: Int,
+    val subtitleResId: Int,
 ) {
-    Root("OpenBuds", "Clean-room Sony headphone controller"),
-    Protocol("Protocol references", "Local notes and extracted protocol layers"),
+    Root(R.string.about_root_title, R.string.about_root_subtitle),
+    Protocol(R.string.about_protocol_title, R.string.about_protocol_subtitle),
 }
 
 internal data class AboutAnimatedRoute(
@@ -235,20 +237,20 @@ internal data class AboutAnimatedRoute(
 )
 
 private enum class NavigationQuickAction(
-    val title: String,
+    val titleResId: Int,
     val target: SettingsRoute,
     val icon: ImageVector,
 ) {
-    Appearance("Appearance", SettingsRoute.Appearance, Icons.Rounded.Settings),
-    Diagnostics("Diagnostics", SettingsRoute.Diagnostics, Icons.Rounded.Code),
-    Modules("Modules", SettingsRoute.Modules, Icons.Rounded.Info),
+    Appearance(R.string.settings_quick_appearance_label, SettingsRoute.Appearance, Icons.Rounded.Settings),
+    Diagnostics(R.string.settings_quick_diagnostics_label, SettingsRoute.Diagnostics, Icons.Rounded.Code),
+    Modules(R.string.settings_quick_modules_label, SettingsRoute.Modules, Icons.Rounded.Info),
 }
 
 internal val LocalTextureBackdrop = staticCompositionLocalOf<TextureLayerBackdrop?> { null }
 internal val LocalUiRenderCapabilities = staticCompositionLocalOf {
     UiRenderCapabilities(
         mode = ReareyeNavigationBarMode.Floating,
-        userEffectsEnabled = false,
+        tier = EffectsTier.DISABLED,
     )
 }
 
@@ -306,9 +308,12 @@ fun OpenBudsApp(
     val navigationBarMode = remember(loadedAppUiSettings.navigationBarMode) {
         enumValueOrDefault(loadedAppUiSettings.navigationBarMode, ReareyeNavigationBarMode.Floating)
     }
+    val effectsTier = remember(context, loadedAppUiSettings.effectsEnabled) {
+        EffectsTierManager.determineTier(context, loadedAppUiSettings.effectsEnabled)
+    }
     val renderCapabilities = rememberUiRenderCapabilities(
         mode = navigationBarMode,
-        userEffectsEnabled = loadedAppUiSettings.effectsEnabled,
+        tier = effectsTier,
     )
     val renderEffectsSupported = remember { isRenderEffectSupported() }
     val themeStyle = remember(loadedAppUiSettings.themeStyle) {
@@ -574,8 +579,8 @@ private fun AppNavigationBar(
                         selected = selectedRoute == tab,
                         onClick = { onSelected(tab) },
                         enabled = visible,
-                        icon = { Icon(tab.icon, contentDescription = tab.title) },
-                        label = { Text(tab.title) },
+                        icon = { Icon(tab.icon, contentDescription = stringResource(tab.titleResId)) },
+                        label = { Text(stringResource(tab.titleResId)) },
                     )
                 }
             }
@@ -677,8 +682,8 @@ private fun NavigationQuickActionPopup(
                 actions.forEachIndexed { index, action ->
                     val delayProgress = (progressValue - index * 0.05f).coerceIn(0f, 1f)
                     QuickActionButton(
-                        label = action.title,
-                        subtitle = action.target.subtitle,
+                        label = stringResource(action.titleResId),
+                        subtitle = stringResource(action.target.subtitleResId),
                         icon = action.icon,
                         style = style,
                         menuBackdrop = menuBackdrop,
@@ -1212,11 +1217,11 @@ private fun NavigationTabContent(
     ) {
         Icon(
             imageVector = tab.icon,
-            contentDescription = tab.title,
+            contentDescription = stringResource(tab.titleResId),
             tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
-            text = tab.title,
+            text = stringResource(tab.titleResId),
             style = MaterialTheme.typography.labelSmall,
             color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,

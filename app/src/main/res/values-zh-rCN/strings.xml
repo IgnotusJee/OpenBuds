@@ -1,0 +1,299 @@
+<resources>
+    <string name="app_name">OpenBuds</string>
+
+    <!-- Navigation -->
+    <string name="nav_home">首页</string>
+    <string name="nav_device">设备</string>
+    <string name="nav_settings">设置</string>
+    <string name="nav_about">关于</string>
+    <string name="nav_quick_config">快捷</string>
+    <string name="nav_back">返回</string>
+
+    <!-- Theme & Appearance -->
+    <string name="theme_style_material">Material</string>
+    <string name="theme_style_miuix">MIUIX</string>
+    <string name="color_mode_light">浅色</string>
+    <string name="color_mode_dark">深色</string>
+    <string name="color_mode_system">跟随系统</string>
+    <string name="nav_bar_mode_normal">标准</string>
+    <string name="nav_bar_mode_semi_transparent">半透明</string>
+    <string name="nav_bar_mode_floating">浮动</string>
+    <string name="nav_bar_mode_liquid_glass">液态玻璃</string>
+
+    <!-- Settings: Root -->
+    <string name="settings_root_title">设置</string>
+    <string name="settings_root_subtitle">全局应用行为和诊断</string>
+    <string name="settings_appearance_title">外观</string>
+    <string name="settings_appearance_subtitle">导航栏、玻璃效果、动画和主题</string>
+    <string name="settings_protocol_title">协议</string>
+    <string name="settings_protocol_subtitle">连接默认值和 Sony 端点行为</string>
+    <string name="settings_diagnostics_title">诊断</string>
+    <string name="settings_diagnostics_subtitle">调试日志和当前协议活动</string>
+    <string name="settings_modules_title">保留模块</string>
+    <string name="settings_modules_subtitle">未来的 Sony 功能展示区</string>
+    <string name="settings_quick_appearance_label">外观</string>
+    <string name="settings_quick_diagnostics_label">诊断</string>
+    <string name="settings_quick_modules_label">模块</string>
+
+    <!-- Settings: Appearance -->
+    <string name="settings_nav_surface">导航栏外观</string>
+    <string name="settings_bottom_bar_mode">底部栏模式</string>
+    <string name="settings_bottom_bar_mode_desc">标准、半透明、浮动或液态玻璃</string>
+    <string name="settings_ui_effects">UI 特效</string>
+    <string name="settings_ui_effects_desc">背景模糊、透镜效果、玻璃卡片、入场动画和关于页渐变</string>
+    <string name="settings_active_glass_path">当前玻璃路径</string>
+    <string name="settings_glass_disabled">特效已关闭，恢复为普通卡片</string>
+    <string name="settings_glass_liquid">浮动液态玻璃：模糊、透镜、色彩增强和拖拽</string>
+    <string name="settings_glass_semi">半透明模糊背景栏</string>
+    <string name="settings_glass_floating">浮动胶囊无模糊</string>
+    <string name="settings_glass_opaque">不透明 Material 导航</string>
+    <string name="settings_effects_live">已激活</string>
+    <string name="settings_effects_off">已关闭</string>
+    <string name="settings_theme_section">主题</string>
+    <string name="settings_color_mode">颜色模式</string>
+    <string name="settings_color_mode_desc">选择浅色、深色，或跟随系统外观</string>
+    <string name="settings_theme_style">主题风格</string>
+    <string name="settings_theme_style_desc">MIUIX 风格保留 Material 控件，但淡化表面色彩</string>
+
+    <!-- Settings: Protocol -->
+    <string name="settings_protocol_section">协议</string>
+    <string name="settings_preferred_protocol">首选协议</string>
+    <string name="settings_strict_sony_filter">严格 Sony 扫描过滤</string>
+    <string name="settings_strict_sony_filter_desc">仅接受含有 Tandem V2 HPC 服务 UUID 的广播</string>
+    <string name="settings_auto_reconnect">自动重连</string>
+    <string name="settings_auto_reconnect_desc">为下一次连接管理器迭代保留</string>
+
+    <!-- Settings: Diagnostics -->
+    <string name="settings_diagnostics_section">诊断</string>
+    <string name="settings_debug_logging">调试日志</string>
+    <string name="settings_debug_logging_desc">显示 BLE 发送/接收字节和 GATT 状态变更</string>
+    <string name="settings_last_table2">最后一条 Table2 响应</string>
+    <string name="settings_diag_channel">通道</string>
+    <string name="settings_diag_family">家族</string>
+    <string name="settings_diag_command">命令</string>
+    <string name="settings_diag_inquired_type">查询类型</string>
+    <string name="settings_diag_values">值</string>
+    <string name="settings_diag_raw">原始数据</string>
+    <string name="settings_no_traffic">暂无协议流量。</string>
+    <string name="settings_loading">加载中…</string>
+
+    <!-- Settings: Modules -->
+    <string name="settings_bg_service">后台服务</string>
+    <string name="settings_bg_service_title">后台服务</string>
+    <string name="settings_bg_service_desc">保持连接存活并显示持久通知</string>
+    <string name="settings_persistent_notif">持久通知</string>
+    <string name="settings_persistent_notif_desc">在通知栏显示耳机状态</string>
+    <string name="settings_connection_popup">连接弹窗</string>
+    <string name="settings_connection_popup_desc">耳机连接时显示快速控制弹窗</string>
+    <string name="settings_hyperos_notif">HyperOS 风格通知</string>
+    <string name="settings_hyperos_notif_desc">使用小米蓝牙系统通知显示电量（需 LSPosed）</string>
+    <string name="settings_control_center_intercept">控制中心设备卡片拦截</string>
+    <string name="settings_control_center_intercept_desc">点击 HyperOS 控制中心耳机卡片时打开 OpenBuds 弹窗（需 LSPosed）</string>
+    <string name="settings_lsposed_integration">LSPosed 系统集成</string>
+    <string name="settings_rom_compat">ROM 兼容性</string>
+    <string name="settings_last_probe">上次探测</string>
+    <string name="settings_experimental_feature">实验性功能</string>
+    <string name="settings_experimental_feature_desc">HyperOS/MIUI 兼容性因版本而异。如果系统不稳定请禁用模块。</string>
+    <string name="settings_status_profile">配置</string>
+    <string name="settings_status_wired">已接入</string>
+    <string name="settings_status_reserved">保留</string>
+    <string name="settings_status_caution">注意</string>
+    <string name="settings_status_probed">已探测</string>
+    <string name="settings_status_compatible">兼容</string>
+    <string name="settings_effects_on">特效开</string>
+    <string name="settings_effects_off_label">特效关</string>
+    <string name="settings_enabled">启用</string>
+    <string name="settings_disabled">禁用</string>
+    <string name="settings_modules_summary">EQ、环境声、佩戴检测、Quick Access、Sense、多点连接、LE Audio、FOTA</string>
+
+    <!-- Device Screen -->
+    <string name="device_page_title">设备</string>
+    <string name="device_page_subtitle_disconnected">连接 Sony 控制端点或查看已发现的设备</string>
+    <string name="device_page_subtitle_connected">根据当前能力配置文件显示耳机控制</string>
+    <string name="device_connection">连接</string>
+    <string name="device_endpoint_diag">端点诊断</string>
+    <string name="device_device_info">设备信息</string>
+    <string name="device_battery">电量</string>
+    <string name="device_le_audio">LE Audio</string>
+    <string name="device_quick_access">快捷操作</string>
+    <string name="device_wearing">佩戴检测</string>
+    <string name="device_quick_controls">快速控制</string>
+    <string name="device_feature_map">功能地图</string>
+    <string name="device_scan">扫描</string>
+    <string name="device_stop">停止</string>
+    <string name="device_refresh">刷新</string>
+    <string name="device_disconnect">断开</string>
+    <string name="device_connect">连接</string>
+    <string name="device_open_controls">打开控制</string>
+    <string name="device_open_devices">打开设备</string>
+    <string name="device_known_devices">已知设备</string>
+    <string name="device_scan_results">扫描结果</string>
+    <string name="device_no_devices_found">暂未发现 Sony Tandem V2 设备。</string>
+    <string name="device_status_connected">状态：已连接</string>
+    <string name="device_ble_candidate">BLE 控制候选</string>
+    <string name="device_sony_ad_found">发现 Sony AD；官方应用使用 SPP（除非设置了 LE 控制标志）</string>
+    <string name="device_classic_audio_endpoint">经典音频端点；Connect 使用官方 Sony SPP UUID</string>
+    <string name="device_diag_lea_mode">LE Audio / 辅助 GATT 端点</string>
+    <string name="device_diag_lea_compat">LEA 兼容性</string>
+    <string name="device_diag_friendly_name">友好名称</string>
+    <string name="device_diag_public_address">公共地址</string>
+    <string name="device_diag_services">服务</string>
+    <string name="device_info_protocol_channel">协议通道</string>
+    <string name="device_info_adapter">适配器</string>
+    <string name="device_info_transport">传输层</string>
+    <string name="device_info_model">型号</string>
+    <string name="device_info_firmware">固件</string>
+    <string name="device_info_series">系列 / 颜色</string>
+    <string name="device_info_brand_model">品牌 / 型号</string>
+    <string name="device_info_image_match">图片匹配</string>
+    <string name="device_info_gatt_ready">GATT 就绪</string>
+    <string name="device_info_not_ready">未就绪</string>
+    <string name="device_battery_headset">耳机</string>
+    <string name="device_battery_left">左</string>
+    <string name="device_battery_right">右</string>
+    <string name="device_battery_case">充电盒</string>
+    <string name="device_battery_raw">原始电量数据：%1$s</string>
+    <string name="device_lea_enabled">已启用</string>
+    <string name="device_lea_streaming_l">左耳流</string>
+    <string name="device_lea_streaming_r">右耳流</string>
+    <string name="device_lea_paired">配对历史</string>
+    <string name="device_qa_lr_key">L/R 按键</string>
+    <string name="device_qa_nc_amb_key">降噪/环境声按键</string>
+    <string name="device_wearing_status">状态</string>
+    <string name="device_wearing_result">贴合结果</string>
+
+    <!-- Device: Noise Control -->
+    <string name="device_noise_title">降噪 / 环境声</string>
+    <string name="device_nc_noise_cancelling">降噪</string>
+    <string name="device_nc_ambient_sound">环境声</string>
+    <string name="device_nc_off">关闭</string>
+    <string name="device_ambient_level">环境声强度</string>
+    <string name="device_ambient_level_label">等级 %1$d / 20</string>
+    <string name="device_voice_focus">关注语音</string>
+    <string name="device_voice_focus_on">语音聚焦已启用</string>
+    <string name="device_voice_focus_off">普通环境声</string>
+    <string name="device_nc_not_reported">此耳机未报告当前降噪/环境声模式，但控制仍然可用。</string>
+
+    <!-- Device: EQ -->
+    <string name="device_eq_title">EQ / Clear Bass</string>
+    <string name="device_eq_preset_label">预设：%1$s  频段：%2$d  中心值：%3$d</string>
+    <string name="device_eq_equalizer">均衡器</string>
+    <string name="device_eq_clear_bass">Clear Bass %1$d</string>
+    <string name="device_eq_clear_bass_title">Clear Bass</string>
+    <string name="device_eq_clear_bass_level">等级 %1$d</string>
+    <string name="device_eq_no_bands">此耳机未报告可编辑的 EQ 频段数据。</string>
+    <string name="device_eq_custom_active">自定义 EQ 数据生效</string>
+    <string name="device_eq_preset_active">预设 EQ 数据生效</string>
+    <string name="device_eq_band_label">频段 %1$d</string>
+    <string name="device_eq_band_level">等级 %1$d</string>
+    <string name="device_eq_collapse">收起均衡器</string>
+    <string name="device_eq_expand">展开均衡器</string>
+
+    <!-- Device: Playback -->
+    <string name="device_playback_previous">上一曲</string>
+    <string name="device_playback_play_pause">播放或暂停</string>
+    <string name="device_playback_next">下一曲</string>
+    <string name="device_playback_status">播放状态：%1$s</string>
+
+    <!-- Device: Info -->
+    <string name="device_info_connected">已连接</string>
+    <string name="device_info_profile">配置文件</string>
+    <string name="device_no_headset">未连接耳机。设备页面显示已知设备和扫描结果。</string>
+    <string name="device_image_desc">Sony 设备</string>
+
+    <!-- Quick Popup -->
+    <string name="quick_not_connected">未连接</string>
+    <string name="quick_connected">已连接</string>
+    <string name="quick_connecting">连接中…</string>
+    <string name="quick_waiting">等待连接…</string>
+    <string name="quick_more_settings">更多设置</string>
+    <string name="quick_anc">降噪</string>
+    <string name="quick_ambient">环境声</string>
+    <string name="quick_off">关闭</string>
+    <string name="quick_ambient_level">环境声强度：%1$d</string>
+    <string name="quick_play_pause">播放/暂停</string>
+
+    <!-- Home Screen -->
+    <string name="home_work_status">工作状态</string>
+    <string name="home_current_device">当前设备</string>
+    <string name="home_info_connection">连接</string>
+    <string name="home_info_protocol">协议</string>
+    <string name="home_info_profile">配置文件</string>
+    <string name="home_info_features">功能数</string>
+    <string name="home_info_name">名称</string>
+    <string name="home_info_address">地址</string>
+    <string name="home_info_transport">传输层</string>
+    <string name="home_info_battery">电量</string>
+    <string name="home_status_connected">已连接</string>
+    <string name="home_status_ready">就绪</string>
+    <string name="home_status_waiting">等待中</string>
+    <string name="home_no_profile">无活跃配置文件</string>
+    <string name="home_unknown">未知</string>
+    <string name="home_open_controls">打开控制</string>
+    <string name="home_open_devices">打开设备</string>
+    <string name="home_refresh">刷新</string>
+    <string name="home_sony_control">Sony 耳机控制</string>
+
+    <!-- About Screen -->
+    <string name="about_root_title">OpenBuds</string>
+    <string name="about_root_subtitle">纯净版 Sony 耳机控制器</string>
+    <string name="about_protocol_title">协议参考</string>
+    <string name="about_protocol_subtitle">本地笔记和提取的协议层</string>
+    <string name="about_app_info">应用信息</string>
+    <string name="about_app_name">名称</string>
+    <string name="about_app_package">包名</string>
+    <string name="about_app_version">版本</string>
+    <string name="about_app_build_target">构建目标</string>
+    <string name="about_app_build_target_value">本地蓝牙控制器</string>
+    <string name="about_app_description">一个纯净版 Sony 蓝牙耳机 Android 控制器。云服务、账户、固件分发和官方包标识均不在本应用范围内。</string>
+    <string name="about_connected_device">已连接设备</string>
+    <string name="about_model">型号</string>
+    <string name="about_firmware">固件</string>
+    <string name="about_series">系列 / 颜色</string>
+    <string name="about_profile">配置文件</string>
+    <string name="about_transport">传输层</string>
+    <string name="about_not_connected">未连接</string>
+    <string name="about_no_profile">无活跃配置文件</string>
+    <string name="about_protocol_section">协议参考</string>
+    <string name="about_safety_note">安全说明</string>
+    <string name="about_safety_text">此版本仅接入了简单的本地 BLE 控制。固件更新、校准和不可逆的设备操作仍需保留，待仔细测试后才能实现。</string>
+    <string name="about_version_label">版本 %1$s</string>
+    <string name="about_gatt_services">GATT 服务</string>
+    <string name="about_tandem_v2">Tandem V2 命令</string>
+    <string name="about_tandem_v1">Tandem V1 命令</string>
+    <string name="about_feature_bridge">功能桥接笔记</string>
+    <string name="about_protocol_docs">协议文档</string>
+    <string name="about_export_path_1">export/01-ble-gatt-layer</string>
+    <string name="about_export_path_2">export/02-tandem-protocol-v2</string>
+    <string name="about_export_path_3">export/03-tandem-protocol-v1</string>
+    <string name="about_export_path_4">export/04-app-layer</string>
+    <string name="about_export_path_5">export/05-full-protocol-documentation.md</string>
+
+    <!-- Feature Map -->
+    <string name="feature_scan_connect">扫描与连接</string>
+    <string name="feature_scan_connect_desc">BLE 扫描，GATT/SPP 发现</string>
+    <string name="feature_device_info">设备信息</string>
+    <string name="feature_device_info_desc">型号、固件、协议基础信息</string>
+    <string name="feature_battery">电量</string>
+    <string name="feature_battery_desc">单值/耳机、左右耳和充电盒兼容读取</string>
+    <string name="feature_noise_control">降噪控制</string>
+    <string name="feature_noise_control_desc">根据当前设备配置门控 NC/ASM</string>
+    <string name="feature_ambient_level">环境声等级</string>
+    <string name="feature_ambient_level_desc">确认可写时的 ASM 无缝等级</string>
+    <string name="feature_playback_control">播放控制</string>
+    <string name="feature_playback_control_desc">播放、暂停、上一曲、下一曲</string>
+    <string name="feature_eq">EQ / Clear Bass</string>
+    <string name="feature_eq_desc">预设 EQ、自定义 EQ 和 Clear Bass</string>
+    <string name="feature_lea">LE Audio 状态</string>
+    <string name="feature_lea_desc">连接类型、流状态、配对历史</string>
+    <string name="feature_quick_access">快捷操作</string>
+    <string name="feature_quick_access_desc">可自定义的 L/R 和 NC/AMB 按键操作</string>
+    <string name="feature_wearing">佩戴检测</string>
+    <string name="feature_wearing_desc">耳塞贴合和佩戴检测状态</string>
+    <string name="feature_advanced">Sense / AutoPlay / 多点连接 / FOTA</string>
+    <string name="feature_advanced_desc">高级模块保留</string>
+
+    <!-- Scan states -->
+    <string name="scan_state_idle">空闲</string>
+    <string name="scan_state_connected">已连接</string>
+</resources>

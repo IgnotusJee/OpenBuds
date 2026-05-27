@@ -33,15 +33,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import dev.ignotus.openbuds.protocol.NoiseControlMode
 import dev.ignotus.openbuds.protocol.PlaybackStatus
 import dev.ignotus.openbuds.service.ControlCommand
 import dev.ignotus.openbuds.service.DeviceStateSnapshot
 import dev.ignotus.openbuds.ui.ModeButton
 import dev.ignotus.openbuds.ui.StatusPill
+import dev.ignotus.openbuds.R
 
 @Composable
 fun QuickPopupScreen(
@@ -79,7 +82,7 @@ fun QuickPopupScreen(
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    text = state.deviceName ?: "Not connected",
+                    text = state.deviceName ?: stringResource(R.string.quick_not_connected),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
@@ -91,7 +94,7 @@ fun QuickPopupScreen(
 
                     // Connection status
                     StatusPill(
-                        if (state.isProtocolReady) "Connected" else "Connecting...",
+                        if (state.isProtocolReady) stringResource(R.string.quick_connected) else stringResource(R.string.quick_connecting),
                         active = state.isProtocolReady,
                     )
 
@@ -130,7 +133,7 @@ fun QuickPopupScreen(
                     )
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        text = "Waiting for connection...",
+                        text = stringResource(R.string.quick_waiting),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -140,7 +143,7 @@ fun QuickPopupScreen(
 
                 // More button
                 TextButton(onClick = onOpenFullApp) {
-                    Text("More settings")
+                    Text(stringResource(R.string.quick_more_settings))
                 }
             }
         }
@@ -160,19 +163,19 @@ private fun BatteryRow(state: DeviceStateSnapshot) {
             modifier = Modifier.size(18.dp),
         )
         state.batteryLeft?.let {
-            Text("L: $it%", style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(R.string.device_battery_left) + ": $it%", style = MaterialTheme.typography.bodyMedium)
         }
         state.batteryRight?.let {
-            Text("R: $it%", style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(R.string.device_battery_right) + ": $it%", style = MaterialTheme.typography.bodyMedium)
         }
         state.batteryCradle?.let {
-            Text("Case: $it%", style = MaterialTheme.typography.bodyMedium)
+            Text(stringResource(R.string.device_battery_case) + ": $it%", style = MaterialTheme.typography.bodyMedium)
         }
         state.batterySingle?.let {
             Text("$it%", style = MaterialTheme.typography.bodyMedium)
         }
         if (state.batteryLeft == null && state.batteryRight == null && state.batteryCradle == null && state.batterySingle == null) {
-            Text("---", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(stringResource(R.string.quick_off), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -184,21 +187,21 @@ private fun NoiseControlRow(state: DeviceStateSnapshot, onExecute: (ControlComma
         modifier = Modifier.fillMaxWidth(),
     ) {
         ModeButton(
-            text = "ANC",
+            text = stringResource(R.string.quick_anc),
             selected = state.noiseControlMode == NoiseControlMode.NOISE_CANCELLING,
             enabled = state.isProtocolReady,
             modifier = Modifier.weight(1f),
             onClick = { onExecute(ControlCommand.SetNoiseControl(NoiseControlMode.NOISE_CANCELLING)) },
         )
         ModeButton(
-            text = "Ambient",
+            text = stringResource(R.string.quick_ambient),
             selected = state.noiseControlMode == NoiseControlMode.AMBIENT_SOUND,
             enabled = state.isProtocolReady,
             modifier = Modifier.weight(1f),
             onClick = { onExecute(ControlCommand.SetNoiseControl(NoiseControlMode.AMBIENT_SOUND)) },
         )
         ModeButton(
-            text = "Off",
+            text = stringResource(R.string.quick_off),
             selected = state.noiseControlMode == NoiseControlMode.OFF,
             enabled = state.isProtocolReady,
             modifier = Modifier.weight(1f),
@@ -215,7 +218,7 @@ private fun AmbientLevelSlider(
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
-            text = "Ambient Level: ${value.toInt()}",
+            text = stringResource(R.string.quick_ambient_level, value.toInt()),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -240,14 +243,14 @@ private fun PlaybackControlRow(state: DeviceStateSnapshot, onExecute: (ControlCo
         IconButton(onClick = { onExecute(ControlCommand.Playback(ControlCommand.PlaybackAction.PREVIOUS)) }) {
             Icon(
                 imageVector = Icons.Rounded.SkipPrevious,
-                contentDescription = "Previous",
+                contentDescription = stringResource(R.string.device_playback_previous),
                 modifier = Modifier.size(32.dp),
             )
         }
         IconButton(onClick = { onExecute(ControlCommand.Playback(ControlCommand.PlaybackAction.PLAY_PAUSE)) }) {
             Icon(
                 imageVector = if (state.playbackStatus == PlaybackStatus.PLAYING) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                contentDescription = "Play/Pause",
+                contentDescription = stringResource(R.string.quick_play_pause),
                 modifier = Modifier.size(36.dp),
                 tint = MaterialTheme.colorScheme.primary,
             )
@@ -255,7 +258,7 @@ private fun PlaybackControlRow(state: DeviceStateSnapshot, onExecute: (ControlCo
         IconButton(onClick = { onExecute(ControlCommand.Playback(ControlCommand.PlaybackAction.NEXT)) }) {
             Icon(
                 imageVector = Icons.Rounded.SkipNext,
-                contentDescription = "Next",
+                contentDescription = stringResource(R.string.device_playback_next),
                 modifier = Modifier.size(32.dp),
             )
         }

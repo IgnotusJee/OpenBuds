@@ -1,3 +1,299 @@
 <resources>
     <string name="app_name">OpenBuds</string>
+
+    <!-- ===== Navigation ===== -->
+    <string name="nav_home">Home</string>
+    <string name="nav_device">Device</string>
+    <string name="nav_settings">Settings</string>
+    <string name="nav_about">About</string>
+    <string name="nav_quick_config">Config</string>
+    <string name="nav_back">Back</string>
+
+    <!-- ===== Theme & Appearance ===== -->
+    <string name="theme_style_material">Material</string>
+    <string name="theme_style_miuix">MIUIX</string>
+    <string name="color_mode_light">Light</string>
+    <string name="color_mode_dark">Dark</string>
+    <string name="color_mode_system">Follow system</string>
+    <string name="nav_bar_mode_normal">Normal</string>
+    <string name="nav_bar_mode_semi_transparent">Semi transparent</string>
+    <string name="nav_bar_mode_floating">Floating</string>
+    <string name="nav_bar_mode_liquid_glass">Liquid glass</string>
+
+    <!-- ===== Settings: Root ===== -->
+    <string name="settings_root_title">Settings</string>
+    <string name="settings_root_subtitle">Global app behavior and diagnostics</string>
+    <string name="settings_appearance_title">Appearance</string>
+    <string name="settings_appearance_subtitle">Navigation, glass, motion, and theme</string>
+    <string name="settings_protocol_title">Protocol</string>
+    <string name="settings_protocol_subtitle">Connection defaults and Sony endpoint behavior</string>
+    <string name="settings_diagnostics_title">Diagnostics</string>
+    <string name="settings_diagnostics_subtitle">Debug logs and current protocol activity</string>
+    <string name="settings_modules_title">Reserved modules</string>
+    <string name="settings_modules_subtitle">Future Sony feature surfaces kept visible</string>
+    <string name="settings_quick_appearance_label">Appearance</string>
+    <string name="settings_quick_diagnostics_label">Diagnostics</string>
+    <string name="settings_quick_modules_label">Modules</string>
+
+    <!-- ===== Settings: Appearance ===== -->
+    <string name="settings_nav_surface">Navigation surface</string>
+    <string name="settings_bottom_bar_mode">Bottom bar mode</string>
+    <string name="settings_bottom_bar_mode_desc">Normal, translucent, floating, or liquid glass</string>
+    <string name="settings_ui_effects">UI effects</string>
+    <string name="settings_ui_effects_desc">Backdrop blur, lens, glass cards, reveal motion, and About gradient</string>
+    <string name="settings_active_glass_path">Active glass path</string>
+    <string name="settings_glass_disabled">Effects disabled; surfaces fall back to plain cards</string>
+    <string name="settings_glass_liquid">Floating liquid glass with blur, lens, vibrancy, and drag</string>
+    <string name="settings_glass_semi">Semi-transparent blur-backed bar</string>
+    <string name="settings_glass_floating">Floating capsule without blur</string>
+    <string name="settings_glass_opaque">Opaque Material navigation</string>
+    <string name="settings_effects_live">live</string>
+    <string name="settings_effects_off">off</string>
+    <string name="settings_theme_section">Theme</string>
+    <string name="settings_color_mode">Color mode</string>
+    <string name="settings_color_mode_desc">Choose light, dark, or follow system appearance</string>
+    <string name="settings_theme_style">Theme style</string>
+    <string name="settings_theme_style_desc">MIUIX-like keeps Material controls but softens surfaces</string>
+
+    <!-- ===== Settings: Protocol ===== -->
+    <string name="settings_protocol_section">Protocol</string>
+    <string name="settings_preferred_protocol">Preferred protocol</string>
+    <string name="settings_strict_sony_filter">Strict Sony scan filter</string>
+    <string name="settings_strict_sony_filter_desc">Only accept advertisements with Tandem V2 HPC service UUID</string>
+    <string name="settings_auto_reconnect">Auto reconnect</string>
+    <string name="settings_auto_reconnect_desc">Reserved for the next connection manager pass</string>
+
+    <!-- ===== Settings: Diagnostics ===== -->
+    <string name="settings_diagnostics_section">Diagnostics</string>
+    <string name="settings_debug_logging">Debug logging</string>
+    <string name="settings_debug_logging_desc">Show BLE TX/RX bytes and GATT state changes</string>
+    <string name="settings_last_table2">Last Table2 response</string>
+    <string name="settings_diag_channel">Channel</string>
+    <string name="settings_diag_family">Family</string>
+    <string name="settings_diag_command">Command</string>
+    <string name="settings_diag_inquired_type">Inquired type</string>
+    <string name="settings_diag_values">Values</string>
+    <string name="settings_diag_raw">Raw</string>
+    <string name="settings_no_traffic">No protocol traffic yet.</string>
+    <string name="settings_loading">Loading…</string>
+
+    <!-- ===== Settings: Modules ===== -->
+    <string name="settings_bg_service">Background service</string>
+    <string name="settings_bg_service_title">Background service</string>
+    <string name="settings_bg_service_desc">Keep connection alive and show persistent notification</string>
+    <string name="settings_persistent_notif">Persistent notification</string>
+    <string name="settings_persistent_notif_desc">Show headphone status in notification drawer</string>
+    <string name="settings_connection_popup">Connection popup</string>
+    <string name="settings_connection_popup_desc">Show quick control popup when headphone connects</string>
+    <string name="settings_hyperos_notif">HyperOS-style notification</string>
+    <string name="settings_hyperos_notif_desc">Use Xiaomi Bluetooth system notification for battery display (requires LSPosed)</string>
+    <string name="settings_control_center_intercept">Control center device card interception</string>
+    <string name="settings_control_center_intercept_desc">Open OpenBuds popup when tapping the headphone card in HyperOS control center (requires LSPosed)</string>
+    <string name="settings_lsposed_integration">LSPosed System Integration</string>
+    <string name="settings_rom_compat">ROM compatibility</string>
+    <string name="settings_last_probe">Last probe</string>
+    <string name="settings_experimental_feature">Experimental feature</string>
+    <string name="settings_experimental_feature_desc">HyperOS/MIUI compatibility varies by version. Disable module if system becomes unstable.</string>
+    <string name="settings_status_profile">profile</string>
+    <string name="settings_status_wired">wired</string>
+    <string name="settings_status_reserved">reserved</string>
+    <string name="settings_status_caution">caution</string>
+    <string name="settings_status_probed">probed</string>
+    <string name="settings_status_compatible">Compatible</string>
+    <string name="settings_effects_on">effects on</string>
+    <string name="settings_effects_off_label">effects off</string>
+    <string name="settings_enabled">enabled</string>
+    <string name="settings_disabled">disabled</string>
+    <string name="settings_modules_summary">EQ, ambient, wearing detection, Quick Access, Sense, Multipoint, LE Audio, FOTA</string>
+
+    <!-- ===== Device Screen ===== -->
+    <string name="device_page_title">Device</string>
+    <string name="device_page_subtitle_disconnected">Connect a Sony control endpoint or inspect discovered devices</string>
+    <string name="device_page_subtitle_connected">Headphone controls are shown from the active capability profile</string>
+    <string name="device_connection">Connection</string>
+    <string name="device_endpoint_diag">Endpoint diagnostics</string>
+    <string name="device_device_info">Device info</string>
+    <string name="device_battery">Battery</string>
+    <string name="device_le_audio">LE Audio</string>
+    <string name="device_quick_access">Quick Access</string>
+    <string name="device_wearing">Wearing detection</string>
+    <string name="device_quick_controls">Quick controls</string>
+    <string name="device_feature_map">Feature map</string>
+    <string name="device_scan">Scan</string>
+    <string name="device_stop">Stop</string>
+    <string name="device_refresh">Refresh</string>
+    <string name="device_disconnect">Disconnect</string>
+    <string name="device_connect">Connect</string>
+    <string name="device_open_controls">Open controls</string>
+    <string name="device_open_devices">Open devices</string>
+    <string name="device_known_devices">Known devices</string>
+    <string name="device_scan_results">Scan results</string>
+    <string name="device_no_devices_found">No Sony Tandem V2 devices found yet.</string>
+    <string name="device_status_connected">Status: connected</string>
+    <string name="device_ble_candidate">BLE control candidate</string>
+    <string name="device_sony_ad_found">Sony AD found; official app uses SPP unless LE control flag is set</string>
+    <string name="device_classic_audio_endpoint">Classic audio endpoint; Connect uses official Sony SPP UUID</string>
+    <string name="device_diag_lea_mode">LE Audio / auxiliary GATT endpoint</string>
+    <string name="device_diag_lea_compat">LEA compatibility</string>
+    <string name="device_diag_friendly_name">Friendly name</string>
+    <string name="device_diag_public_address">Public address</string>
+    <string name="device_diag_services">Services</string>
+    <string name="device_info_protocol_channel">Protocol channel</string>
+    <string name="device_info_adapter">Adapter</string>
+    <string name="device_info_transport">Transport</string>
+    <string name="device_info_model">Model</string>
+    <string name="device_info_firmware">Firmware</string>
+    <string name="device_info_series">Series / color</string>
+    <string name="device_info_brand_model">Brand / Model</string>
+    <string name="device_info_image_match">Image match</string>
+    <string name="device_info_gatt_ready">GATT ready</string>
+    <string name="device_info_not_ready">Not ready</string>
+    <string name="device_battery_headset">Headset</string>
+    <string name="device_battery_left">Left</string>
+    <string name="device_battery_right">Right</string>
+    <string name="device_battery_case">Case</string>
+    <string name="device_battery_raw">Raw battery payload: %1$s</string>
+    <string name="device_lea_enabled">Enabled</string>
+    <string name="device_lea_streaming_l">Streaming L</string>
+    <string name="device_lea_streaming_r">Streaming R</string>
+    <string name="device_lea_paired">Paired history</string>
+    <string name="device_qa_lr_key">L/R Key</string>
+    <string name="device_qa_nc_amb_key">NC/AMB Key</string>
+    <string name="device_wearing_status">Status</string>
+    <string name="device_wearing_result">Fit result</string>
+
+    <!-- ===== Device: Noise Control ===== -->
+    <string name="device_noise_title">Noise / Ambient</string>
+    <string name="device_nc_noise_cancelling">Noise cancelling</string>
+    <string name="device_nc_ambient_sound">Ambient sound</string>
+    <string name="device_nc_off">Off</string>
+    <string name="device_ambient_level">Ambient level</string>
+    <string name="device_ambient_level_label">Level %1$d / 20</string>
+    <string name="device_voice_focus">Voice focus</string>
+    <string name="device_voice_focus_on">Voice focus enabled</string>
+    <string name="device_voice_focus_off">Normal ambient sound</string>
+    <string name="device_nc_not_reported">Current NC/ASM mode is not reported by this headset; controls are still available.</string>
+
+    <!-- ===== Device: EQ ===== -->
+    <string name="device_eq_title">EQ / Clear Bass</string>
+    <string name="device_eq_preset_label">Preset: %1$s  Bands: %2$d  Center: %3$d</string>
+    <string name="device_eq_equalizer">Equalizer</string>
+    <string name="device_eq_clear_bass">Clear Bass %1$d</string>
+    <string name="device_eq_clear_bass_title">Clear Bass</string>
+    <string name="device_eq_clear_bass_level">Level %1$d</string>
+    <string name="device_eq_no_bands">No editable EQ band payload reported by this headset.</string>
+    <string name="device_eq_custom_active">CUSTOM EQ payload active</string>
+    <string name="device_eq_preset_active">Preset EQ band payload active</string>
+    <string name="device_eq_band_label">Band %1$d</string>
+    <string name="device_eq_band_level">Level %1$d</string>
+    <string name="device_eq_collapse">Collapse equalizer</string>
+    <string name="device_eq_expand">Expand equalizer</string>
+
+    <!-- ===== Device: Playback ===== -->
+    <string name="device_playback_previous">Previous</string>
+    <string name="device_playback_play_pause">Play or pause</string>
+    <string name="device_playback_next">Next</string>
+    <string name="device_playback_status">Playback: %1$s</string>
+
+    <!-- ===== Device: Info ===== -->
+    <string name="device_info_connected">Connected</string>
+    <string name="device_info_profile">Profile</string>
+    <string name="device_no_headset">No headset connected. Device page shows known devices and scan results.</string>
+    <string name="device_image_desc">Sony device</string>
+
+    <!-- ===== Quick Popup ===== -->
+    <string name="quick_not_connected">Not connected</string>
+    <string name="quick_connected">Connected</string>
+    <string name="quick_connecting">Connecting…</string>
+    <string name="quick_waiting">Waiting for connection…</string>
+    <string name="quick_more_settings">More settings</string>
+    <string name="quick_anc">ANC</string>
+    <string name="quick_ambient">Ambient</string>
+    <string name="quick_off">Off</string>
+    <string name="quick_ambient_level">Ambient Level: %1$d</string>
+    <string name="quick_play_pause">Play/Pause</string>
+
+    <!-- ===== Home Screen ===== -->
+    <string name="home_work_status">Work status</string>
+    <string name="home_current_device">Current device</string>
+    <string name="home_info_connection">Connection</string>
+    <string name="home_info_protocol">Protocol</string>
+    <string name="home_info_profile">Profile</string>
+    <string name="home_info_features">Features</string>
+    <string name="home_info_name">Name</string>
+    <string name="home_info_address">Address</string>
+    <string name="home_info_transport">Transport</string>
+    <string name="home_info_battery">Battery</string>
+    <string name="home_status_connected">Connected</string>
+    <string name="home_status_ready">Ready</string>
+    <string name="home_status_waiting">Waiting</string>
+    <string name="home_no_profile">No active profile</string>
+    <string name="home_unknown">Unknown</string>
+    <string name="home_open_controls">Open controls</string>
+    <string name="home_open_devices">Open devices</string>
+    <string name="home_refresh">Refresh</string>
+    <string name="home_sony_control">Sony headphone control</string>
+
+    <!-- ===== About Screen ===== -->
+    <string name="about_root_title">OpenBuds</string>
+    <string name="about_root_subtitle">Clean-room Sony headphone controller</string>
+    <string name="about_protocol_title">Protocol references</string>
+    <string name="about_protocol_subtitle">Local notes and extracted protocol layers</string>
+    <string name="about_app_info">App information</string>
+    <string name="about_app_name">Name</string>
+    <string name="about_app_package">Package</string>
+    <string name="about_app_version">Version</string>
+    <string name="about_app_build_target">Build target</string>
+    <string name="about_app_build_target_value">Local Bluetooth controller</string>
+    <string name="about_app_description">A clean-room Android controller for Sony Bluetooth headphones. It keeps cloud, account, firmware distribution, and official package identity outside this app.</string>
+    <string name="about_connected_device">Connected device</string>
+    <string name="about_model">Model</string>
+    <string name="about_firmware">Firmware</string>
+    <string name="about_series">Series / color</string>
+    <string name="about_profile">Profile</string>
+    <string name="about_transport">Transport</string>
+    <string name="about_not_connected">Not connected</string>
+    <string name="about_no_profile">No active profile</string>
+    <string name="about_protocol_section">Protocol references</string>
+    <string name="about_safety_note">Safety note</string>
+    <string name="about_safety_text">Only simple local BLE controls are wired in this version. Firmware update, calibration, and irreversible device operations remain placeholders until they can be tested carefully.</string>
+    <string name="about_version_label">Version %1$s</string>
+    <string name="about_gatt_services">GATT services</string>
+    <string name="about_tandem_v2">Tandem V2 commands</string>
+    <string name="about_tandem_v1">Tandem V1 commands</string>
+    <string name="about_feature_bridge">Feature bridge notes</string>
+    <string name="about_protocol_docs">Protocol documentation</string>
+    <string name="about_export_path_1">export/01-ble-gatt-layer</string>
+    <string name="about_export_path_2">export/02-tandem-protocol-v2</string>
+    <string name="about_export_path_3">export/03-tandem-protocol-v1</string>
+    <string name="about_export_path_4">export/04-app-layer</string>
+    <string name="about_export_path_5">export/05-full-protocol-documentation.md</string>
+
+    <!-- ===== Feature Map (Repository) ===== -->
+    <string name="feature_scan_connect">Scan &amp; Connect</string>
+    <string name="feature_scan_connect_desc">BLE scan, GATT/SPP discovery</string>
+    <string name="feature_device_info">Device Info</string>
+    <string name="feature_device_info_desc">Model, firmware, protocol basics</string>
+    <string name="feature_battery">Battery</string>
+    <string name="feature_battery_desc">Single/headset, left/right, and cradle-compatible reads</string>
+    <string name="feature_noise_control">Noise Control</string>
+    <string name="feature_noise_control_desc">NC/ASM gated by current device profile</string>
+    <string name="feature_ambient_level">Ambient Level</string>
+    <string name="feature_ambient_level_desc">ASM seamless level when confirmed writable</string>
+    <string name="feature_playback_control">Playback Control</string>
+    <string name="feature_playback_control_desc">Play, pause, previous, next</string>
+    <string name="feature_eq">EQ / Clear Bass</string>
+    <string name="feature_eq_desc">Preset EQ, custom EQ, and Clear Bass</string>
+    <string name="feature_lea">LE Audio Status</string>
+    <string name="feature_lea_desc">Connection type, streaming status, paired history</string>
+    <string name="feature_quick_access">Quick Access</string>
+    <string name="feature_quick_access_desc">Customizable button actions L/R and NC/AMB keys</string>
+    <string name="feature_wearing">Wearing Detection</string>
+    <string name="feature_wearing_desc">Earpiece fitting and wearing detection status</string>
+    <string name="feature_advanced">Sense / AutoPlay / Multipoint / FOTA</string>
+    <string name="feature_advanced_desc">Advanced modules reserved</string>
+
+    <!-- ===== Connection/Scan states ===== -->
+    <string name="scan_state_idle">Idle</string>
+    <string name="scan_state_connected">Connected</string>
 </resources>

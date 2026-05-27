@@ -57,6 +57,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -83,6 +84,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.HttpURLConnection
 import java.net.URL
+import dev.ignotus.openbuds.R
 
 // ---------------------------------------------------------------------------
 // Helpers (not Composable)
@@ -123,7 +125,7 @@ internal fun ConnectedHeadphoneProfile?.supports(feature: HeadphoneFeature): Boo
 
 @Composable
 internal fun AppIdentityHeader(state: SonyHeadphoneUiState) {
-    SectionCard(title = "OpenBuds", icon = Icons.Rounded.Headphones) {
+    SectionCard(title = stringResource(R.string.app_name), icon = Icons.Rounded.Headphones) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -144,14 +146,18 @@ internal fun AppIdentityHeader(state: SonyHeadphoneUiState) {
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = state.connectedProfile?.modelName ?: "Sony headphone control",
+                    text = state.connectedProfile?.modelName ?: stringResource(R.string.home_sony_control),
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = "Status: ${if (state.connectedDevice != null) "connected" else state.scanState.lowercase()}",
+                    text = if (state.connectedDevice != null) {
+                        stringResource(R.string.device_status_connected)
+                    } else {
+                        "Status: ${state.scanState.lowercase()}"
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -181,11 +187,11 @@ internal fun DeviceScreen(
 ) {
     PageColumn(bottomInnerPadding = bottomInnerPadding) {
         PageHeader(
-            title = "Device",
+            title = stringResource(R.string.device_page_title),
             subtitle = if (state.connectedDevice == null) {
-                "Connect a Sony control endpoint or inspect discovered devices"
+                stringResource(R.string.device_page_subtitle_disconnected)
             } else {
-                "Headphone controls are shown from the active capability profile"
+                stringResource(R.string.device_page_subtitle_connected)
             },
         )
         ConnectionCard(
@@ -228,7 +234,7 @@ internal fun ConnectionCard(
     onDisconnect: () -> Unit,
     onRefresh: () -> Unit,
 ) {
-    SectionCard(title = "Connection", icon = Icons.Rounded.Bluetooth) {
+    SectionCard(title = stringResource(R.string.device_connection), icon = Icons.Rounded.Bluetooth) {
         val connected = state.connectedDevice
         Row(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -237,7 +243,7 @@ internal fun ConnectionCard(
         ) {
             StatusPill(state.scanState, connected != null || state.isScanning)
             state.connectionInfo?.let {
-                StatusPill("MTU ${it.mtu}", true)
+                StatusPill(stringResource(R.string.device_info_gatt_ready) + " ${it.mtu}", true)
             }
             state.permissionIssue?.let {
                 Text(
@@ -254,15 +260,15 @@ internal fun ConnectionCard(
         if (connected == null) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Button(onClick = onStartScan, enabled = !state.isScanning) {
-                    Text("Scan")
+                    Text(stringResource(R.string.device_scan))
                 }
                 OutlinedButton(onClick = onStopScan, enabled = state.isScanning) {
-                    Text("Stop")
+                    Text(stringResource(R.string.device_stop))
                 }
             }
             if (state.knownDevices.isNotEmpty()) {
                 Text(
-                    text = "Known devices",
+                    text = stringResource(R.string.device_known_devices),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                 )
@@ -271,29 +277,29 @@ internal fun ConnectionCard(
                 }
             }
             Text(
-                text = "Scan results",
+                text = stringResource(R.string.device_scan_results),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
             )
             if (state.discoveredDevices.isEmpty()) {
-                EmptyHint("No Sony Tandem V2 devices found yet.")
+                EmptyHint(stringResource(R.string.device_no_devices_found))
             } else {
                 state.discoveredDevices.forEach { device ->
                     DeviceRow(device = device, onConnect = { onConnect(device) })
                 }
             }
         } else {
-            InfoLine("Connected", "${connected.name} (${connected.address})")
+            InfoLine(stringResource(R.string.device_info_connected), "${connected.name} (${connected.address})")
             state.connectedProfile?.let { profile ->
-                InfoLine("Profile", "${profile.brand} ${profile.modelName}")
-                InfoLine("Transport", profile.transport.name)
+                InfoLine(stringResource(R.string.device_info_profile), "${profile.brand} ${profile.modelName}")
+                InfoLine(stringResource(R.string.device_info_transport), profile.transport.name)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Button(onClick = onRefresh) {
-                    Text("Refresh")
+                    Text(stringResource(R.string.device_refresh))
                 }
                 OutlinedButton(onClick = onDisconnect) {
-                    Text("Disconnect")
+                    Text(stringResource(R.string.device_disconnect))
                 }
             }
         }
@@ -303,20 +309,20 @@ internal fun ConnectionCard(
 @Composable
 internal fun EndpointDiagnosticsCard(state: SonyHeadphoneUiState) {
     val diagnostic = state.endpointDiagnostic ?: return
-    SectionCard(title = "Endpoint diagnostics", icon = Icons.Rounded.Info) {
+    SectionCard(title = stringResource(R.string.device_endpoint_diag), icon = Icons.Rounded.Info) {
         Text(
             text = diagnostic.reason,
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.error,
         )
-        InfoLine("Mode", "LE Audio / auxiliary GATT endpoint")
+        InfoLine(stringResource(R.string.device_diag_lea_mode), "LE Audio / auxiliary GATT endpoint")
         InfoLine(
-            "LEA compatibility",
-            diagnostic.leAudioSwitchCompatibility?.toString() ?: "Unknown",
+            stringResource(R.string.device_diag_lea_compat),
+            diagnostic.leAudioSwitchCompatibility?.toString() ?: stringResource(R.string.home_unknown),
         )
-        diagnostic.friendlyName?.let { InfoLine("Friendly name", it) }
-        diagnostic.publicAddress?.let { InfoLine("Public address", it) }
-        InfoLine("Services", diagnostic.serviceLabels.joinToString())
+        diagnostic.friendlyName?.let { InfoLine(stringResource(R.string.device_diag_friendly_name), it) }
+        diagnostic.publicAddress?.let { InfoLine(stringResource(R.string.device_diag_public_address), it) }
+        InfoLine(stringResource(R.string.device_diag_services), diagnostic.serviceLabels.joinToString())
         diagnostic.rawReads.entries.take(5).forEach { (name, value) ->
             InfoLine(name, value)
         }
@@ -325,29 +331,29 @@ internal fun EndpointDiagnosticsCard(state: SonyHeadphoneUiState) {
 
 @Composable
 internal fun DeviceInfoCard(state: SonyHeadphoneUiState) {
-    SectionCard(title = "Device info") {
+    SectionCard(title = stringResource(R.string.device_device_info)) {
         val info = state.deviceInfo
         DeviceModelImage(
             imageUrl = info.modelImageUrl,
             modelName = info.modelName ?: state.connectedDevice?.name,
         )
-        InfoLine("Protocol channel", if (info.protocolReady) {
-            state.connectedProfile?.protocolName?.let { "$it ready" } ?: "GATT ready"
+        InfoLine(stringResource(R.string.device_info_protocol_channel), if (info.protocolReady) {
+            state.connectedProfile?.protocolName?.let { "$it ready" } ?: stringResource(R.string.device_info_gatt_ready)
         } else {
-            "Not ready"
+            stringResource(R.string.device_info_not_ready)
         })
         state.connectedProfile?.let { profile ->
-            InfoLine("Adapter", "${profile.adapterId} / ${profile.protocolName}")
-            InfoLine("Transport", profile.transport.name)
+            InfoLine(stringResource(R.string.device_info_adapter), "${profile.adapterId} / ${profile.protocolName}")
+            InfoLine(stringResource(R.string.device_info_transport), profile.transport.name)
         }
-        InfoLine("Model", info.modelName ?: state.connectedDevice?.name ?: "Unknown")
-        InfoLine("Firmware", info.firmwareVersion ?: "Unknown")
+        InfoLine(stringResource(R.string.device_info_model), info.modelName ?: state.connectedDevice?.name ?: stringResource(R.string.home_unknown))
+        InfoLine(stringResource(R.string.device_info_firmware), info.firmwareVersion ?: stringResource(R.string.home_unknown))
         if (state.connectedProfile?.infoLayoutHint == InfoLayoutHint.SONY_SERIES) {
-            InfoLine("Series / color", info.seriesAndColor ?: "Unknown")
+            InfoLine(stringResource(R.string.device_info_series), info.seriesAndColor ?: stringResource(R.string.home_unknown))
         } else {
-            InfoLine("Brand / Model", "${state.connectedProfile?.brand ?: "Unknown"} ${state.connectedProfile?.displayName ?: ""}".trim())
+            InfoLine(stringResource(R.string.device_info_brand_model), "${state.connectedProfile?.brand ?: stringResource(R.string.home_unknown)} ${state.connectedProfile?.displayName ?: ""}".trim())
         }
-        InfoLine("Image match", info.modelImageUrl?.let { info.modelColor ?: "Default" } ?: "Default placeholder")
+        InfoLine(stringResource(R.string.device_info_image_match), info.modelImageUrl?.let { info.modelColor ?: "Default" } ?: "Default placeholder")
     }
 }
 
@@ -370,7 +376,7 @@ internal fun DeviceModelImage(
         if (bitmap != null) {
             Image(
                 bitmap = bitmap!!.asImageBitmap(),
-                contentDescription = modelName ?: "Sony device",
+                contentDescription = modelName ?: stringResource(R.string.device_image_desc),
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -380,7 +386,7 @@ internal fun DeviceModelImage(
         } else {
             Icon(
                 imageVector = Icons.Rounded.Bluetooth,
-                contentDescription = modelName ?: "Sony device",
+                contentDescription = modelName ?: stringResource(R.string.device_image_desc),
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(48.dp),
             )
@@ -390,7 +396,7 @@ internal fun DeviceModelImage(
 
 @Composable
 internal fun BatteryCard(state: SonyHeadphoneUiState) {
-    SectionCard(title = "Battery", icon = Icons.Rounded.BatteryChargingFull) {
+    SectionCard(title = stringResource(R.string.device_battery), icon = Icons.Rounded.BatteryChargingFull) {
         val battery = state.batteryState
         val headsetBatteryOnly = state.connectedProfile?.capabilities?.formFactor == HeadphoneFormFactor.HEADSET
         if (headsetBatteryOnly) {
@@ -398,21 +404,21 @@ internal fun BatteryCard(state: SonyHeadphoneUiState) {
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                BatteryTile("Headset", battery.single ?: battery.left ?: battery.right)
+                BatteryTile(stringResource(R.string.device_battery_headset), battery.single ?: battery.left ?: battery.right)
             }
         } else {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                BatteryTile("Left", battery.left)
-                BatteryTile("Right", battery.right)
-                BatteryTile("Case", battery.cradle)
+                BatteryTile(stringResource(R.string.device_battery_left), battery.left)
+                BatteryTile(stringResource(R.string.device_battery_right), battery.right)
+                BatteryTile(stringResource(R.string.device_battery_case), battery.cradle)
             }
         }
         if (battery.raw.isNotEmpty()) {
             Text(
-                text = "Raw battery payload: ${battery.raw}",
+                text = stringResource(R.string.device_battery_raw, battery.raw),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 10.dp),
@@ -425,11 +431,11 @@ internal fun BatteryCard(state: SonyHeadphoneUiState) {
 internal fun LeaStatusCard(state: SonyHeadphoneUiState) {
     val lea = state.leaState
     if (lea.enabled == null && lea.streamingStatusL == null && lea.streamingStatusR == null && lea.pairedHistory == null) return
-    SectionCard(title = "LE Audio", icon = Icons.Rounded.Bluetooth) {
-        lea.enabled?.let { InfoLine("Enabled", it) }
-        lea.streamingStatusL?.let { InfoLine("Streaming L", it) }
-        lea.streamingStatusR?.let { InfoLine("Streaming R", it) }
-        lea.pairedHistory?.let { InfoLine("Paired history", it) }
+    SectionCard(title = stringResource(R.string.device_le_audio), icon = Icons.Rounded.Bluetooth) {
+        lea.enabled?.let { InfoLine(stringResource(R.string.device_lea_enabled), it) }
+        lea.streamingStatusL?.let { InfoLine(stringResource(R.string.device_lea_streaming_l), it) }
+        lea.streamingStatusR?.let { InfoLine(stringResource(R.string.device_lea_streaming_r), it) }
+        lea.pairedHistory?.let { InfoLine(stringResource(R.string.device_lea_paired), it) }
         if (lea.raw.isNotEmpty()) {
             InfoLine("Raw", lea.raw.joinToString(" "))
         }
@@ -440,9 +446,9 @@ internal fun LeaStatusCard(state: SonyHeadphoneUiState) {
 internal fun QuickAccessStatusCard(state: SonyHeadphoneUiState) {
     val qa = state.quickAccessState
     if (qa.lrKeyFunction == null && qa.ncAmbKeyFunction == null) return
-    SectionCard(title = "Quick Access", icon = Icons.Rounded.Settings) {
-        qa.lrKeyFunction?.let { InfoLine("L/R Key", it) }
-        qa.ncAmbKeyFunction?.let { InfoLine("NC/AMB Key", it) }
+    SectionCard(title = stringResource(R.string.device_quick_access), icon = Icons.Rounded.Settings) {
+        qa.lrKeyFunction?.let { InfoLine(stringResource(R.string.device_qa_lr_key), it) }
+        qa.ncAmbKeyFunction?.let { InfoLine(stringResource(R.string.device_qa_nc_amb_key), it) }
         if (qa.raw.isNotEmpty()) {
             InfoLine("Raw", qa.raw.joinToString(" "))
         }
@@ -453,9 +459,9 @@ internal fun QuickAccessStatusCard(state: SonyHeadphoneUiState) {
 internal fun WearingStatusCard(state: SonyHeadphoneUiState) {
     val w = state.wearingState
     if (w.status == null && w.result == null) return
-    SectionCard(title = "Wearing detection", icon = Icons.Rounded.Headphones) {
-        w.status?.let { InfoLine("Status", it) }
-        w.result?.let { InfoLine("Fit result", it) }
+    SectionCard(title = stringResource(R.string.device_wearing), icon = Icons.Rounded.Headphones) {
+        w.status?.let { InfoLine(stringResource(R.string.device_wearing_status), it) }
+        w.result?.let { InfoLine(stringResource(R.string.device_wearing_result), it) }
         if (w.raw.isNotEmpty()) {
             InfoLine("Raw", w.raw.joinToString(" "))
         }
@@ -475,7 +481,7 @@ internal fun QuickControlCard(
     onPlaybackPlayPause: () -> Unit,
     onPlaybackNext: () -> Unit,
 ) {
-    SectionCard(title = "Quick controls", icon = Icons.Rounded.MusicNote) {
+    SectionCard(title = stringResource(R.string.device_quick_controls), icon = Icons.Rounded.MusicNote) {
         var showEqDetails by remember { mutableStateOf(false) }
         val connected = state.connectedDevice != null && state.deviceInfo.protocolReady
         val noiseEnabled = connected && state.connectedProfile.supports(HeadphoneFeature.NOISE_CONTROL)
@@ -526,12 +532,12 @@ internal fun QuickControlCard(
             } else {
                 Icons.Rounded.PlayArrow
             }
-            PlaybackButton(Icons.Rounded.SkipPrevious, "Previous", playbackEnabled, onPlaybackPrevious)
-            PlaybackButton(playPauseIcon, "Play or pause", playbackEnabled, onPlaybackPlayPause)
-            PlaybackButton(Icons.Rounded.SkipNext, "Next", playbackEnabled, onPlaybackNext)
+            PlaybackButton(Icons.Rounded.SkipPrevious, stringResource(R.string.device_playback_previous), playbackEnabled, onPlaybackPrevious)
+            PlaybackButton(playPauseIcon, stringResource(R.string.device_playback_play_pause), playbackEnabled, onPlaybackPlayPause)
+            PlaybackButton(Icons.Rounded.SkipNext, stringResource(R.string.device_playback_next), playbackEnabled, onPlaybackNext)
         }
         Text(
-            text = "Playback: ${state.playbackStatus.name.lowercase()}",
+            text = stringResource(R.string.device_playback_status, state.playbackStatus.name.lowercase()),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -566,18 +572,18 @@ internal fun EqControlCard(
             modifier = Modifier.padding(12.dp),
         ) {
             Text(
-                text = "EQ / Clear Bass",
+                text = stringResource(R.string.device_eq_title),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
             )
             Text(
-                text = "Preset: ${selectedPreset?.displayName ?: "Unknown"}  Bands: ${bandSteps.size}  Center: $bandStepCenter",
+                text = stringResource(R.string.device_eq_preset_label, selectedPreset?.displayName ?: stringResource(R.string.home_unknown), bandSteps.size, bandStepCenter),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             SettingRow(
-                title = "Equalizer",
-                subtitle = "Clear Bass ${clearBass.coerceIn(-10, 10)}",
+                title = stringResource(R.string.device_eq_equalizer),
+                subtitle = stringResource(R.string.device_eq_clear_bass, clearBass.coerceIn(-10, 10)),
                 trailing = {
                     IconButton(onClick = onToggleExpanded, enabled = enabled) {
                         Icon(
@@ -586,7 +592,7 @@ internal fun EqControlCard(
                             } else {
                                 Icons.Rounded.KeyboardArrowDown
                             },
-                            contentDescription = if (expanded) "Collapse equalizer" else "Expand equalizer",
+                            contentDescription = if (expanded) stringResource(R.string.device_eq_collapse) else stringResource(R.string.device_eq_expand),
                         )
                     }
                 },
@@ -614,8 +620,8 @@ internal fun EqControlCard(
                 }
             }
             SettingRow(
-                title = "Clear Bass",
-                subtitle = "Level ${clearBass.coerceIn(-10, 10)}",
+                title = stringResource(R.string.device_eq_clear_bass_title),
+                subtitle = stringResource(R.string.device_eq_clear_bass_level, clearBass.coerceIn(-10, 10)),
                 trailing = {
                     StepperControl(
                         value = clearBass.coerceIn(-10, 10),
@@ -638,21 +644,21 @@ internal fun EqControlCard(
             )
             if (bandSteps.isEmpty()) {
                 Text(
-                    text = "No editable EQ band payload reported by this headset.",
+                    text = stringResource(R.string.device_eq_no_bands),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             } else {
                 Text(
-                    text = if (usesCustomEqPayload) "CUSTOM EQ payload active" else "Preset EQ band payload active",
+                    text = if (usesCustomEqPayload) stringResource(R.string.device_eq_custom_active) else stringResource(R.string.device_eq_preset_active),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 bandSteps.forEachIndexed { index, step ->
-                    val bandLabel = bandLabels.getOrNull(index) ?: "Band ${index + 1}"
+                    val bandLabel = bandLabels.getOrNull(index) ?: stringResource(R.string.device_eq_band_label, index + 1)
                     SettingRow(
                         title = bandLabel,
-                        subtitle = "Level ${step.coerceIn(-10, 10)}",
+                        subtitle = stringResource(R.string.device_eq_band_level, step.coerceIn(-10, 10)),
                         trailing = {
                             StepperControl(
                                 value = step.coerceIn(-10, 10),
@@ -704,7 +710,7 @@ internal fun NoiseControlModeCard(
             modifier = Modifier.padding(12.dp),
         ) {
             Text(
-                text = "Noise / Ambient",
+                text = stringResource(R.string.device_noise_title),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -713,21 +719,21 @@ internal fun NoiseControlModeCard(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 ModeButton(
-                    text = "降噪",
+                    text = stringResource(R.string.device_nc_noise_cancelling),
                     selected = selectedMode == NoiseControlMode.NOISE_CANCELLING,
                     enabled = enabled,
                     modifier = Modifier.weight(1f),
                     onClick = { onSetMode(NoiseControlMode.NOISE_CANCELLING) },
                 )
                 ModeButton(
-                    text = "环境声",
+                    text = stringResource(R.string.device_nc_ambient_sound),
                     selected = selectedMode == NoiseControlMode.AMBIENT_SOUND,
                     enabled = enabled,
                     modifier = Modifier.weight(1f),
                     onClick = { onSetMode(NoiseControlMode.AMBIENT_SOUND) },
                 )
                 ModeButton(
-                    text = "关闭",
+                    text = stringResource(R.string.device_nc_off),
                     selected = selectedMode == NoiseControlMode.OFF,
                     enabled = enabled,
                     modifier = Modifier.weight(1f),
@@ -736,8 +742,8 @@ internal fun NoiseControlModeCard(
             }
             if (selectedMode == NoiseControlMode.AMBIENT_SOUND) {
                 SettingRow(
-                    title = "环境声强度",
-                    subtitle = "Level $ambientLevel / 20",
+                    title = stringResource(R.string.device_ambient_level),
+                    subtitle = stringResource(R.string.device_ambient_level_label, ambientLevel),
                     trailing = {
                         StepperControl(
                             value = ambientLevel,
@@ -757,8 +763,8 @@ internal fun NoiseControlModeCard(
                     steps = 18,
                 )
                 SettingRow(
-                    title = "关注语音",
-                    subtitle = if (voiceFocus) "Voice focus enabled" else "Normal ambient sound",
+                    title = stringResource(R.string.device_voice_focus),
+                    subtitle = if (voiceFocus) stringResource(R.string.device_voice_focus_on) else stringResource(R.string.device_voice_focus_off),
                     trailing = {
                         Switch(
                             checked = voiceFocus,
@@ -770,7 +776,7 @@ internal fun NoiseControlModeCard(
             }
             if (selectedMode == null) {
                 Text(
-                    text = "Current NC/ASM mode is not reported by this headset; controls are still available.",
+                    text = stringResource(R.string.device_nc_not_reported),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -783,12 +789,12 @@ internal fun NoiseControlModeCard(
 
 @Composable
 internal fun FeatureStatusCard(features: List<FeatureStatus>) {
-    SectionCard(title = "Feature map", icon = Icons.Rounded.Code) {
+    SectionCard(title = stringResource(R.string.device_feature_map), icon = Icons.Rounded.Code) {
         features.forEach { feature ->
             SettingRow(
                 title = feature.title,
                 subtitle = feature.description,
-                trailing = { StatusPill(if (feature.implemented) "wired" else "reserved", feature.implemented) },
+                trailing = { StatusPill(if (feature.implemented) stringResource(R.string.settings_status_wired) else stringResource(R.string.settings_status_reserved), feature.implemented) },
             )
         }
     }
@@ -816,11 +822,11 @@ internal fun DeviceRow(device: DiscoveredSonyDevice, onConnect: () -> Unit) {
                 )
                 Text(
                     text = if (device.isLikelyControlEndpoint) {
-                        "BLE control candidate"
+                        stringResource(R.string.device_ble_candidate)
                     } else if (device.sonyAd != null) {
-                        "Sony AD found; official app uses SPP unless LE control flag is set"
+                        stringResource(R.string.device_sony_ad_found)
                     } else {
-                        "Classic audio endpoint; Connect uses official Sony SPP UUID"
+                        stringResource(R.string.device_classic_audio_endpoint)
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -842,7 +848,7 @@ internal fun DeviceRow(device: DiscoveredSonyDevice, onConnect: () -> Unit) {
                 }
             }
             TextButton(onClick = onConnect) {
-                Text("Connect")
+                Text(stringResource(R.string.device_connect))
             }
         }
     }

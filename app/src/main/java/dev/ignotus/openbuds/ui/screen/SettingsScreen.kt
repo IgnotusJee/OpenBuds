@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import dev.ignotus.openbuds.data.SonyHeadphoneUiState
 import dev.ignotus.openbuds.ui.AppColorMode
 import dev.ignotus.openbuds.ui.InfoLine
@@ -56,6 +57,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import dev.ignotus.openbuds.R
 
 @Composable
 internal fun SettingsScreen(
@@ -188,35 +190,35 @@ internal fun SettingsRootScreen(
 ) {
     PageColumn(bottomInnerPadding = bottomInnerPadding) {
         PageHeader(
-            title = SettingsRoute.Root.title,
-            subtitle = SettingsRoute.Root.subtitle,
+            title = stringResource(SettingsRoute.Root.titleResId),
+            subtitle = stringResource(SettingsRoute.Root.subtitleResId),
         )
         ManagerCard(
-            title = SettingsRoute.Appearance.title,
-            summary = "${renderCapabilities.mode.title} / ${
+            title = stringResource(SettingsRoute.Appearance.titleResId),
+            summary = "${stringResource(renderCapabilities.mode.titleResId)} / ${
                 when {
                     renderCapabilities.effectsEnabled -> "effects on"
                     else -> "effects off"
                 }
-            } / ${colorMode.title} / ${themeStyle.title}",
+                } / ${stringResource(colorMode.titleResId)} / ${stringResource(themeStyle.titleResId)}",
             icon = SettingsRoute.Appearance.icon,
             onClick = { onOpenRoute(SettingsRoute.Appearance) },
         )
         ManagerCard(
-            title = SettingsRoute.Protocol.title,
-            summary = "${state.preferredProtocol}; strict filter ${if (state.strictSonyScanFilter) "enabled" else "disabled"}",
+            title = stringResource(SettingsRoute.Protocol.titleResId),
+            summary = "${state.preferredProtocol}; strict filter ${if (state.strictSonyScanFilter) stringResource(R.string.settings_enabled) else stringResource(R.string.settings_disabled)}",
             icon = SettingsRoute.Protocol.icon,
             onClick = { onOpenRoute(SettingsRoute.Protocol) },
         )
         ManagerCard(
-            title = SettingsRoute.Diagnostics.title,
-            summary = "${state.debugLogs.size} recent logs; debug ${if (state.debugLogging) "enabled" else "disabled"}",
+            title = stringResource(SettingsRoute.Diagnostics.titleResId),
+            summary = "${state.debugLogs.size} recent logs; debug ${if (state.debugLogging) stringResource(R.string.settings_enabled) else stringResource(R.string.settings_disabled)}",
             icon = SettingsRoute.Diagnostics.icon,
             onClick = { onOpenRoute(SettingsRoute.Diagnostics) },
         )
         ManagerCard(
-            title = SettingsRoute.Modules.title,
-            summary = "EQ, ambient, wearing detection, Quick Access, Sense, Multipoint, LE Audio, FOTA",
+            title = stringResource(SettingsRoute.Modules.titleResId),
+            summary = stringResource(R.string.settings_modules_summary),
             icon = SettingsRoute.Modules.icon,
             onClick = { onOpenRoute(SettingsRoute.Modules) },
         )
@@ -237,70 +239,71 @@ internal fun SettingsAppearanceScreen(
 ) {
     PageColumn(bottomInnerPadding = bottomInnerPadding) {
         RouteHeader(route = SettingsRoute.Appearance, onBack = onBack)
-        SectionCard(title = "Navigation surface", icon = Icons.Rounded.Settings) {
+        val ctx = LocalContext.current
+        val navBarLabels = remember(ctx) { ReareyeNavigationBarMode.entries.associateWith { ctx.getString(it.titleResId) } }
+        val colorModeLabels = remember(ctx) { AppColorMode.entries.associateWith { ctx.getString(it.titleResId) } }
+        val themeStyleLabels = remember(ctx) { ThemeStyle.entries.associateWith { ctx.getString(it.titleResId) } }
+        SectionCard(title = stringResource(R.string.settings_nav_surface), icon = Icons.Rounded.Settings) {
             SettingRow(
-                title = "Bottom bar mode",
-                subtitle = "Normal, translucent, floating, or liquid glass",
+                title = stringResource(R.string.settings_bottom_bar_mode),
+                subtitle = stringResource(R.string.settings_bottom_bar_mode_desc),
                 trailing = {
                     SegmentedChoice(
                         selected = renderCapabilities.mode,
                         values = ReareyeNavigationBarMode.entries,
-                        label = { it.title },
+                        label = { navBarLabels[it] ?: it.name },
                         onSelected = onNavigationBarModeChanged,
                     )
                 },
             )
             SettingRow(
-                title = "UI effects",
-                subtitle = "Backdrop blur, lens, glass cards, reveal motion, and About gradient",
+                title = stringResource(R.string.settings_ui_effects),
+                subtitle = stringResource(R.string.settings_ui_effects_desc),
                 trailing = {
                     Switch(
-                        checked = renderCapabilities.userEffectsEnabled,
+                        checked = renderCapabilities.effectsEnabled,
                         onCheckedChange = onEffectsEnabledChanged,
                     )
                 },
             )
             SettingRow(
-                title = "Active glass path",
+                title = stringResource(R.string.settings_active_glass_path),
                 subtitle = when {
-                    !renderCapabilities.userEffectsEnabled -> "Effects disabled; surfaces fall back to plain cards"
-                    renderCapabilities.liquidGlassEnabled -> "Floating liquid glass with blur, lens, vibrancy, and drag"
-                    renderCapabilities.semiTransparentBottomBar -> "Semi-transparent blur-backed bar"
-                    renderCapabilities.floatingBottomBarEnabled -> "Floating capsule without blur"
-                    else -> "Opaque Material navigation"
+                    !renderCapabilities.effectsEnabled -> stringResource(R.string.settings_glass_disabled)
+                    renderCapabilities.liquidGlassEnabled -> stringResource(R.string.settings_glass_liquid)
+                    renderCapabilities.semiTransparentBottomBar -> stringResource(R.string.settings_glass_semi)
+                    renderCapabilities.floatingBottomBarEnabled -> stringResource(R.string.settings_glass_floating)
+                    else -> stringResource(R.string.settings_glass_opaque)
                 },
                 trailing = {
                     StatusPill(
-                        text = when {
-                            renderCapabilities.effectsEnabled -> "live"
-                            else -> "off"
-                        },
+                        text = if (renderCapabilities.effectsEnabled) stringResource(R.string.settings_effects_live) else stringResource(R.string.settings_effects_off),
                         active = renderCapabilities.effectsEnabled,
                     )
                 },
             )
         }
-        SectionCard(title = "Theme") {
+        SectionCard(title = stringResource(R.string.settings_theme_section)) {
             SettingRow(
-                title = "颜色模式",
-                subtitle = "选择浅色、深色，或跟随系统外观",
+                title = stringResource(R.string.settings_color_mode),
+                subtitle = stringResource(R.string.settings_color_mode_desc),
                 trailing = {
                     SegmentedChoice(
                         selected = colorMode,
                         values = AppColorMode.entries,
-                        label = { it.title },
+                        label = { colorModeLabels[it] ?: it.name },
                         onSelected = onColorModeChanged,
                     )
                 },
             )
             SettingRow(
-                title = "Theme style",
-                subtitle = "MIUIX-like keeps Material controls but softens surfaces",
+                title = stringResource(R.string.settings_theme_style),
+                subtitle = stringResource(R.string.settings_theme_style_desc),
                 trailing = {
                     SegmentedChoice(
                         selected = themeStyle,
                         values = ThemeStyle.entries,
-                        label = { it.title },
+                        label = { themeStyleLabels[it] ?: it.name },
                         onSelected = onThemeStyleChanged,
                     )
                 },
@@ -319,15 +322,15 @@ internal fun SettingsProtocolScreen(
 ) {
     PageColumn(bottomInnerPadding = bottomInnerPadding) {
         RouteHeader(route = SettingsRoute.Protocol, onBack = onBack)
-        SectionCard(title = "Protocol") {
+        SectionCard(title = stringResource(R.string.settings_protocol_section)) {
             SettingRow(
-                title = "Preferred protocol",
+                title = stringResource(R.string.settings_preferred_protocol),
                 subtitle = state.preferredProtocol,
-                trailing = { StatusPill("profile", true) },
+                trailing = { StatusPill(stringResource(R.string.settings_status_profile), true) },
             )
             SettingRow(
-                title = "Strict Sony scan filter",
-                subtitle = "Only accept advertisements with Tandem V2 HPC service UUID",
+                title = stringResource(R.string.settings_strict_sony_filter),
+                subtitle = stringResource(R.string.settings_strict_sony_filter_desc),
                 trailing = {
                     Switch(
                         checked = state.strictSonyScanFilter,
@@ -336,8 +339,8 @@ internal fun SettingsProtocolScreen(
                 },
             )
             SettingRow(
-                title = "Auto reconnect",
-                subtitle = "Reserved for the next connection manager pass",
+                title = stringResource(R.string.settings_auto_reconnect),
+                subtitle = stringResource(R.string.settings_auto_reconnect_desc),
                 trailing = {
                     Switch(
                         checked = state.autoReconnect,
@@ -358,10 +361,10 @@ internal fun SettingsDiagnosticsScreen(
 ) {
     PageColumn(bottomInnerPadding = bottomInnerPadding) {
         RouteHeader(route = SettingsRoute.Diagnostics, onBack = onBack)
-        SectionCard(title = "Diagnostics", icon = Icons.Rounded.Code) {
+        SectionCard(title = stringResource(R.string.settings_diagnostics_section), icon = Icons.Rounded.Code) {
             SettingRow(
-                title = "Debug logging",
-                subtitle = "Show BLE TX/RX bytes and GATT state changes",
+                title = stringResource(R.string.settings_debug_logging),
+                subtitle = stringResource(R.string.settings_debug_logging_desc),
                 trailing = {
                     Switch(
                         checked = state.debugLogging,
@@ -371,21 +374,21 @@ internal fun SettingsDiagnosticsScreen(
             )
             state.table2Diagnostic?.let { diagnostic ->
                 Text(
-                    text = "Last Table2 response",
+                    text = stringResource(R.string.settings_last_table2),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(top = 12.dp),
                 )
-                InfoLine("Channel", diagnostic.channel)
-                InfoLine("Family", diagnostic.family)
-                InfoLine("Command", diagnostic.command.hexByteOrUnknown())
-                InfoLine("Inquired type", diagnostic.inquiredType?.hexByteOrUnknown() ?: "Unknown")
-                InfoLine("Values", diagnostic.values.joinToString(prefix = "[", postfix = "]"))
-                InfoLine("Raw", diagnostic.rawHex)
+                InfoLine(stringResource(R.string.settings_diag_channel), diagnostic.channel)
+                InfoLine(stringResource(R.string.settings_diag_family), diagnostic.family)
+                InfoLine(stringResource(R.string.settings_diag_command), diagnostic.command.hexByteOrUnknown())
+                InfoLine(stringResource(R.string.settings_diag_inquired_type), diagnostic.inquiredType?.hexByteOrUnknown() ?: stringResource(R.string.home_unknown))
+                InfoLine(stringResource(R.string.settings_diag_values), diagnostic.values.joinToString(prefix = "[", postfix = "]"))
+                InfoLine(stringResource(R.string.settings_diag_raw), diagnostic.rawHex)
             }
             if (state.debugLogs.isEmpty()) {
                 Text(
-                    text = "No protocol traffic yet.",
+                    text = stringResource(R.string.settings_no_traffic),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 10.dp),
@@ -425,7 +428,7 @@ internal fun SettingsModulesScreen(
     onControlCenterInterceptChanged: (Boolean) -> Unit,
 ) {
     val context = LocalContext.current
-    var probeStatus by remember { mutableStateOf("Loading...") }
+    var probeStatus by remember { mutableStateOf(context.getString(R.string.settings_loading)) }
     var lastProbe by remember { mutableStateOf(0L) }
 
     LaunchedEffect(Unit) {
@@ -437,10 +440,10 @@ internal fun SettingsModulesScreen(
     PageColumn(bottomInnerPadding = bottomInnerPadding) {
         RouteHeader(route = SettingsRoute.Modules, onBack = onBack)
 
-        SectionCard(title = "Background service") {
+        SectionCard(title = stringResource(R.string.settings_bg_service)) {
             SettingRow(
-                title = "Background service",
-                subtitle = "Keep connection alive and show persistent notification",
+                title = stringResource(R.string.settings_bg_service_title),
+                subtitle = stringResource(R.string.settings_bg_service_desc),
                 trailing = {
                     Switch(
                         checked = serviceBackgroundRun,
@@ -449,8 +452,8 @@ internal fun SettingsModulesScreen(
                 },
             )
             SettingRow(
-                title = "Persistent notification",
-                subtitle = "Show headphone status in notification drawer",
+                title = stringResource(R.string.settings_persistent_notif),
+                subtitle = stringResource(R.string.settings_persistent_notif_desc),
                 trailing = {
                     Switch(
                         checked = notificationPersistent,
@@ -459,8 +462,8 @@ internal fun SettingsModulesScreen(
                 },
             )
             SettingRow(
-                title = "Connection popup",
-                subtitle = "Show quick control popup when headphone connects",
+                title = stringResource(R.string.settings_connection_popup),
+                subtitle = stringResource(R.string.settings_connection_popup_desc),
                 trailing = {
                     Switch(
                         checked = connectionPopup,
@@ -472,8 +475,8 @@ internal fun SettingsModulesScreen(
                 .any { it.className == "com.android.bluetooth.ble.app.MiuiBluetoothNotification" && it.found }
             if (miuiNotifFound) {
                 SettingRow(
-                    title = "HyperOS-style notification",
-                    subtitle = "Use Xiaomi Bluetooth system notification for battery display (requires LSPosed)",
+                    title = stringResource(R.string.settings_hyperos_notif),
+                    subtitle = stringResource(R.string.settings_hyperos_notif_desc),
                     trailing = {
                         Switch(
                             checked = hyperOsNotification,
@@ -486,8 +489,8 @@ internal fun SettingsModulesScreen(
                 .any { it.className == "com.android.systemui.shared.plugins.PluginInstance" && it.found }
             if (ccCompat) {
                 SettingRow(
-                    title = "Control center device card interception",
-                    subtitle = "Open OpenBuds popup when tapping the headphone card in HyperOS control center (requires LSPosed)",
+                    title = stringResource(R.string.settings_control_center_intercept),
+                    subtitle = stringResource(R.string.settings_control_center_intercept_desc),
                     trailing = {
                         Switch(
                             checked = controlCenterIntercept,
@@ -498,24 +501,24 @@ internal fun SettingsModulesScreen(
             }
         }
 
-        SectionCard(title = "LSPosed System Integration") {
+        SectionCard(title = stringResource(R.string.settings_lsposed_integration)) {
             SettingRow(
-                title = "ROM compatibility",
+                title = stringResource(R.string.settings_rom_compat),
                 subtitle = probeStatus,
-                trailing = { StatusPill(probeStatus, probeStatus == "Compatible") },
+                trailing = { StatusPill(probeStatus, probeStatus == stringResource(R.string.settings_status_compatible)) },
             )
             if (lastProbe > 0) {
                 SettingRow(
-                    title = "Last probe",
+                    title = stringResource(R.string.settings_last_probe),
                     subtitle = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault())
                         .format(java.util.Date(lastProbe)),
-                    trailing = { StatusPill("probed", true) },
+                    trailing = { StatusPill(stringResource(R.string.settings_status_probed), true) },
                 )
             }
             SettingRow(
-                title = "Experimental feature",
-                subtitle = "HyperOS/MIUI compatibility varies by version. Disable module if system becomes unstable.",
-                trailing = { StatusPill("caution", false) },
+                title = stringResource(R.string.settings_experimental_feature),
+                subtitle = stringResource(R.string.settings_experimental_feature_desc),
+                trailing = { StatusPill(stringResource(R.string.settings_status_caution), false) },
             )
         }
     }
@@ -537,19 +540,19 @@ internal fun RouteHeader(route: SettingsRoute, onBack: () -> Unit) {
         ) {
             Icon(
                 Icons.AutoMirrored.Rounded.ArrowBack,
-                contentDescription = "Back",
+                contentDescription = stringResource(R.string.nav_back),
                 tint = MaterialTheme.colorScheme.onSurface,
             )
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = route.title,
+                text = stringResource(route.titleResId),
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
-                text = route.subtitle,
+                text = stringResource(route.subtitleResId),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

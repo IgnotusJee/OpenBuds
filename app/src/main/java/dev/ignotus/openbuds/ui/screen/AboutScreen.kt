@@ -44,9 +44,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import top.yukonga.miuix.kmp.blur.BlurColors
@@ -74,6 +76,7 @@ import dev.ignotus.openbuds.ui.rememberAboutHazeStyle
 import dev.ignotus.openbuds.ui.rememberGlassVisualTokens
 import dev.ignotus.openbuds.ui.reareyeHorizontalTransform
 import dev.ignotus.openbuds.ui.screen.DeviceModelImage
+import dev.ignotus.openbuds.R
 
 @Composable
 internal fun AboutScreen(
@@ -108,16 +111,16 @@ internal fun AboutScreen(
                 bottomInnerPadding = bottomInnerPadding,
                 onBack = { route = AboutRoute.Root },
             ) {
-                SectionCard(title = "Protocol references") {
-                    InfoLine("GATT services", "export/01-ble-gatt-layer")
-                    InfoLine("Tandem V2 commands", "export/02-tandem-protocol-v2")
-                    InfoLine("Tandem V1 commands", "export/03-tandem-protocol-v1")
-                    InfoLine("Feature bridge notes", "export/04-app-layer")
-                    InfoLine("Protocol documentation", "export/05-full-protocol-documentation.md")
+                SectionCard(title = stringResource(R.string.about_protocol_section)) {
+                    InfoLine(stringResource(R.string.about_gatt_services), stringResource(R.string.about_export_path_1))
+                    InfoLine(stringResource(R.string.about_tandem_v2), stringResource(R.string.about_export_path_2))
+                    InfoLine(stringResource(R.string.about_tandem_v1), stringResource(R.string.about_export_path_3))
+                    InfoLine(stringResource(R.string.about_feature_bridge), stringResource(R.string.about_export_path_4))
+                    InfoLine(stringResource(R.string.about_protocol_docs), stringResource(R.string.about_export_path_5))
                 }
-                SectionCard(title = "Safety note") {
+                SectionCard(title = stringResource(R.string.about_safety_note)) {
                     Text(
-                        text = "Only simple local BLE controls are wired in this version. Firmware update, calibration, and irreversible device operations remain placeholders until they can be tested carefully.",
+                        text = stringResource(R.string.about_safety_text),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -178,35 +181,35 @@ internal fun AboutRootScreen(
                 )
             }
             item {
-                SectionCard(title = "App information") {
-                    InfoLine("Name", "OpenBuds")
-                    InfoLine("Package", context.packageName)
-                    InfoLine("Version", appVersionName(context))
-                    InfoLine("Build target", "Local Bluetooth controller")
+                SectionCard(title = stringResource(R.string.about_app_info)) {
+                    InfoLine(stringResource(R.string.about_app_name), stringResource(R.string.app_name))
+                    InfoLine(stringResource(R.string.about_app_package), context.packageName)
+                    InfoLine(stringResource(R.string.about_app_version), appVersionName(context))
+                    InfoLine(stringResource(R.string.about_app_build_target), stringResource(R.string.about_app_build_target_value))
                     Text(
-                        text = "A clean-room Android controller for Sony Bluetooth headphones. It keeps cloud, account, firmware distribution, and official package identity outside this app.",
+                        text = stringResource(R.string.about_app_description),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
             item {
-                SectionCard(title = "Connected device") {
+                SectionCard(title = stringResource(R.string.about_connected_device)) {
                     DeviceModelImage(
                         imageUrl = state.deviceInfo.modelImageUrl,
                         modelName = state.deviceInfo.modelName ?: state.connectedDevice?.name,
                     )
-                    InfoLine("Model", state.deviceInfo.modelName ?: state.connectedDevice?.name ?: "Not connected")
-                    InfoLine("Firmware", state.deviceInfo.firmwareVersion ?: "Unknown")
-                    InfoLine("Series / color", state.deviceInfo.seriesAndColor ?: "Unknown")
-                    InfoLine("Profile", state.connectedProfile?.let { "${it.adapterId} / ${it.protocolName}" } ?: "No active profile")
-                    InfoLine("Transport", state.connectedProfile?.transport?.name ?: "Unknown")
+                    InfoLine(stringResource(R.string.about_model), state.deviceInfo.modelName ?: state.connectedDevice?.name ?: stringResource(R.string.about_not_connected))
+                    InfoLine(stringResource(R.string.about_firmware), state.deviceInfo.firmwareVersion ?: stringResource(R.string.home_unknown))
+                    InfoLine(stringResource(R.string.about_series), state.deviceInfo.seriesAndColor ?: stringResource(R.string.home_unknown))
+                    InfoLine(stringResource(R.string.about_profile), state.connectedProfile?.let { "${it.adapterId} / ${it.protocolName}" } ?: stringResource(R.string.about_no_profile))
+                    InfoLine(stringResource(R.string.about_transport), state.connectedProfile?.transport?.name ?: stringResource(R.string.home_unknown))
                 }
             }
             item {
                 ManagerCard(
-                    title = AboutRoute.Protocol.title,
-                    summary = AboutRoute.Protocol.subtitle,
+                    title = stringResource(AboutRoute.Protocol.titleResId),
+                    summary = stringResource(AboutRoute.Protocol.subtitleResId),
                     icon = Icons.Rounded.Code,
                     onClick = onOpenProtocol,
                 )
@@ -243,19 +246,19 @@ internal fun AboutDetailScreen(
             ) {
                 Icon(
                     Icons.AutoMirrored.Rounded.ArrowBack,
-                    contentDescription = "Back",
+                    contentDescription = stringResource(R.string.nav_back),
                     tint = MaterialTheme.colorScheme.onSurface,
                 )
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = route.title,
+                    text = stringResource(route.titleResId),
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
-                    text = route.subtitle,
+                    text = stringResource(route.subtitleResId),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -291,7 +294,7 @@ internal fun BoxScope.AboutTopTitle(
             tint = MaterialTheme.colorScheme.primary,
         )
         Text(
-            text = "OpenBuds",
+            text = stringResource(R.string.app_name),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = progress),
@@ -353,7 +356,7 @@ internal fun AboutHero(
             )
         }
         Text(
-            text = state.connectedProfile?.modelName ?: "OpenBuds",
+            text = state.connectedProfile?.modelName ?: stringResource(R.string.app_name),
             style = MaterialTheme.typography.headlineMedium,
             fontWeight = FontWeight.SemiBold,
             modifier = Modifier.graphicsLayer {
@@ -363,7 +366,7 @@ internal fun AboutHero(
             },
         )
         Text(
-            text = "Version $versionName",
+            text = stringResource(R.string.about_version_label, versionName),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.graphicsLayer {
