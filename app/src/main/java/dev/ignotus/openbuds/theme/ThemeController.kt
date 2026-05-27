@@ -1,6 +1,7 @@
 package dev.ignotus.openbuds.theme
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -12,19 +13,20 @@ fun OpenBudsTheme(
     config: OpenBudsThemeConfig,
     content: @Composable () -> Unit,
 ) {
-    val colorScheme: androidx.compose.material3.ColorScheme = remember(config) {
-        if (config.darkTheme) OpenBudsDarkColors else OpenBudsLightColors
-    }
+    val colorScheme: ColorScheme = remember(config) { resolveOpenBudsColorScheme(config) }
 
     if (config.isMiuix) {
         val schemeMode = when (config.colorMode) {
-            0 -> ColorSchemeMode.System
-            1 -> ColorSchemeMode.Light
-            2 -> ColorSchemeMode.Dark
-            else -> ColorSchemeMode.System
+            0 -> ColorSchemeMode.MonetSystem
+            1 -> ColorSchemeMode.MonetLight
+            2 -> ColorSchemeMode.MonetDark
+            else -> ColorSchemeMode.MonetSystem
         }
         MiuixTheme(
-            controller = MiuixThemeController(schemeMode, keyColor = config.seedColor),
+            controller = MiuixThemeController(
+                schemeMode,
+                keyColor = config.seedColor ?: seedColorOrNull(config.seedColorIndex),
+            ),
         ) {
             MaterialTheme(colorScheme = colorScheme, typography = OpenBudsTypography) {
                 content()
@@ -35,4 +37,9 @@ fun OpenBudsTheme(
             content()
         }
     }
+}
+
+fun resolveOpenBudsColorScheme(config: OpenBudsThemeConfig): ColorScheme {
+    val seeded = seedColorScheme(config.seedColorIndex, config.darkTheme)
+    return if (config.isMiuix) miuixLikeColorScheme(seeded, config.darkTheme) else seeded
 }

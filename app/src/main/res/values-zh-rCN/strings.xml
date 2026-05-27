@@ -54,6 +54,24 @@
     <string name="settings_color_mode_desc">选择浅色、深色，或跟随系统外观</string>
     <string name="settings_theme_style">主题风格</string>
     <string name="settings_theme_style_desc">MIUIX 风格保留 Material 控件，但淡化表面色彩</string>
+    <string name="settings_seed_color">主题颜色</string>
+    <string name="settings_seed_color_desc">选择 Material 与 MIUIX 主题使用的强调色</string>
+    <string name="seed_color_system">系统</string>
+    <string name="seed_color_blue">蓝色</string>
+    <string name="seed_color_miuix_blue">MIUI 蓝</string>
+    <string name="seed_color_red">红色</string>
+    <string name="seed_color_pink">粉色</string>
+    <string name="seed_color_purple">紫色</string>
+    <string name="seed_color_indigo">靛蓝</string>
+    <string name="seed_color_cyan">青色</string>
+    <string name="seed_color_teal">蓝绿</string>
+    <string name="seed_color_green">绿色</string>
+    <string name="seed_color_lime">酸橙</string>
+    <string name="seed_color_amber">琥珀</string>
+    <string name="seed_color_orange">橙色</string>
+    <string name="seed_color_brown">棕色</string>
+    <string name="seed_color_blue_grey">蓝灰</string>
+    <string name="seed_color_sakura">樱花</string>
 
     <!-- Settings: Protocol -->
     <string name="settings_protocol_section">协议</string>

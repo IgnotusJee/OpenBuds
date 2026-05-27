@@ -3,14 +3,21 @@ package dev.ignotus.openbuds.ui.screen
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Bluetooth
@@ -49,6 +56,7 @@ import dev.ignotus.openbuds.ui.StatusPill
 import dev.ignotus.openbuds.ui.ThemeStyle
 import dev.ignotus.openbuds.ui.UiRenderCapabilities
 import dev.ignotus.openbuds.ui.reareyeHorizontalTransform
+import dev.ignotus.openbuds.theme.OpenBudsSeedColors
 import dev.ignotus.openbuds.lsposed.ProbeResultCache
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.remember
@@ -66,6 +74,7 @@ internal fun SettingsScreen(
     renderCapabilities: UiRenderCapabilities,
     themeStyle: ThemeStyle,
     colorMode: AppColorMode,
+    seedColorIndex: Int,
     routeStack: List<SettingsRoute>,
     quickTarget: SettingsRoute?,
     onQuickTargetConsumed: () -> Unit,
@@ -74,6 +83,7 @@ internal fun SettingsScreen(
     onNavigationBarModeChanged: (ReareyeNavigationBarMode) -> Unit,
     onEffectsEnabledChanged: (Boolean) -> Unit,
     onColorModeChanged: (AppColorMode) -> Unit,
+    onSeedColorIndexChanged: (Int) -> Unit,
     onThemeStyleChanged: (ThemeStyle) -> Unit,
     onDebugLoggingChanged: (Boolean) -> Unit,
     onAutoReconnectChanged: (Boolean) -> Unit,
@@ -142,10 +152,12 @@ internal fun SettingsScreen(
                 renderCapabilities = renderCapabilities,
                 themeStyle = themeStyle,
                 colorMode = colorMode,
+                seedColorIndex = seedColorIndex,
                 onBack = ::closeRoute,
                 onNavigationBarModeChanged = onNavigationBarModeChanged,
                 onEffectsEnabledChanged = onEffectsEnabledChanged,
                 onColorModeChanged = onColorModeChanged,
+                onSeedColorIndexChanged = onSeedColorIndexChanged,
                 onThemeStyleChanged = onThemeStyleChanged,
             )
             SettingsRoute.Protocol -> SettingsProtocolScreen(
@@ -231,10 +243,12 @@ internal fun SettingsAppearanceScreen(
     renderCapabilities: UiRenderCapabilities,
     themeStyle: ThemeStyle,
     colorMode: AppColorMode,
+    seedColorIndex: Int,
     onBack: () -> Unit,
     onNavigationBarModeChanged: (ReareyeNavigationBarMode) -> Unit,
     onEffectsEnabledChanged: (Boolean) -> Unit,
     onColorModeChanged: (AppColorMode) -> Unit,
+    onSeedColorIndexChanged: (Int) -> Unit,
     onThemeStyleChanged: (ThemeStyle) -> Unit,
 ) {
     PageColumn(bottomInnerPadding = bottomInnerPadding) {
@@ -307,6 +321,42 @@ internal fun SettingsAppearanceScreen(
                         onSelected = onThemeStyleChanged,
                     )
                 },
+            )
+            SettingRow(
+                title = stringResource(R.string.settings_seed_color),
+                subtitle = stringResource(R.string.settings_seed_color_desc),
+                trailing = {
+                    SeedColorChoice(
+                        selectedIndex = seedColorIndex,
+                        onSelected = onSeedColorIndexChanged,
+                    )
+                },
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SeedColorChoice(
+    selectedIndex: Int,
+    onSelected: (Int) -> Unit,
+) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        maxItemsInEachRow = 4,
+    ) {
+        OpenBudsSeedColors.forEachIndexed { index, seed ->
+            val selected = selectedIndex == index
+            val borderColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(CircleShape)
+                    .background(seed.color)
+                    .border(if (selected) 3.dp else 1.dp, borderColor, CircleShape)
+                    .clickable { onSelected(index) },
             )
         }
     }

@@ -153,12 +153,13 @@ import com.kyant.backdrop.highlight.Highlight
 import com.kyant.backdrop.shadow.InnerShadow
 import com.kyant.backdrop.shadow.Shadow
 import com.kyant.capsule.ContinuousCapsule
-import dev.ignotus.openbuds.theme.openbudsColorScheme
+import dev.ignotus.openbuds.theme.OpenBudsTheme
+import dev.ignotus.openbuds.theme.OpenBudsThemeConfig
+import dev.ignotus.openbuds.theme.resolveOpenBudsColorScheme
 import top.yukonga.miuix.kmp.blur.BlurColors
 import top.yukonga.miuix.kmp.blur.LayerBackdrop as TextureLayerBackdrop
 import top.yukonga.miuix.kmp.blur.isRenderEffectSupported
 import top.yukonga.miuix.kmp.blur.textureBlur
-import top.yukonga.miuix.kmp.theme.MiuixTheme
 import dev.ignotus.openbuds.ble.DiscoveredSonyDevice
 import dev.ignotus.openbuds.data.FeatureStatus
 import dev.ignotus.openbuds.data.SonyHeadphoneUiState
@@ -177,7 +178,6 @@ import dev.ignotus.openbuds.R
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import top.yukonga.miuix.kmp.theme.ColorSchemeMode
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlin.math.abs
@@ -324,14 +324,19 @@ fun OpenBudsApp(
     }
     val systemDarkTheme = isSystemInDarkTheme()
     val darkTheme = resolveDarkTheme(colorMode, systemDarkTheme)
-    val baseColorScheme = openbudsColorScheme(darkTheme)
-    val appColorScheme = remember(themeStyle, baseColorScheme, darkTheme) {
-        if (themeStyle == ThemeStyle.Miuix) {
-            miuixLikeColorScheme(baseColorScheme, darkTheme)
-        } else {
-            baseColorScheme
-        }
+    val themeConfig = remember(themeStyle, colorMode, loadedAppUiSettings.seedColorIndex, darkTheme) {
+        OpenBudsThemeConfig(
+            style = if (themeStyle == ThemeStyle.Miuix) 1 else 0,
+            colorMode = when (colorMode) {
+                AppColorMode.System -> 0
+                AppColorMode.Light -> 1
+                AppColorMode.Dark -> 2
+            },
+            seedColorIndex = loadedAppUiSettings.seedColorIndex,
+            darkTheme = darkTheme,
+        )
     }
+    val appColorScheme = remember(themeConfig) { resolveOpenBudsColorScheme(themeConfig) }
 
     LaunchedEffect(currentRoute) {
         if (currentRoute != AppRoute.Settings) {
@@ -447,6 +452,10 @@ fun OpenBudsApp(
                                     onColorModeChanged = {
                                         scope.launch { settingsStore.setColorMode(it) }
                                     },
+                                    seedColorIndex = loadedAppUiSettings.seedColorIndex,
+                                    onSeedColorIndexChanged = {
+                                        scope.launch { settingsStore.setSeedColorIndex(it) }
+                                    },
                                     onThemeStyleChanged = {
                                         scope.launch { settingsStore.setThemeStyle(it) }
                                     },
@@ -517,15 +526,9 @@ fun OpenBudsApp(
             }
         }
     }
-    MaterialTheme(colorScheme = appColorScheme) {
+    OpenBudsTheme(config = themeConfig) {
         ApplyAppSystemBars(appColorScheme, darkTheme)
-        if (themeStyle == ThemeStyle.Miuix) {
-            MiuixTheme(top.yukonga.miuix.kmp.theme.ThemeController(if (darkTheme) ColorSchemeMode.Dark else ColorSchemeMode.Light)) {
-                appContent()
-            }
-        } else {
-            appContent()
-        }
+        appContent()
     }
 }
 
@@ -1228,37 +1231,6 @@ private fun NavigationTabContent(
         )
     }
 }
-
-private fun miuixLikeColorScheme(base: ColorScheme, darkTheme: Boolean): ColorScheme =
-    if (darkTheme) {
-        base.copy(
-            primary = Color(0xFF8AB4FF),
-            onPrimary = Color(0xFF062D5F),
-            secondary = Color(0xFFC2CAD6),
-            tertiary = Color(0xFF77D0BE),
-            background = Color(0xFF101114),
-            onBackground = Color(0xFFE7E8EC),
-            surface = Color(0xFF18191D),
-            onSurface = Color(0xFFE7E8EC),
-            surfaceVariant = Color(0xFF25272D),
-            onSurfaceVariant = Color(0xFFC5C8D0),
-            outline = Color(0xFF676B75),
-        )
-    } else {
-        base.copy(
-            primary = Color(0xFF1F6FEB),
-            onPrimary = Color.White,
-            secondary = Color(0xFF5E6B7A),
-            tertiary = Color(0xFF0F8F7A),
-            background = Color(0xFFF7F8FA),
-            onBackground = Color(0xFF181A20),
-            surface = Color(0xFFFFFFFF),
-            onSurface = Color(0xFF181A20),
-            surfaceVariant = Color(0xFFECEFF4),
-            onSurfaceVariant = Color(0xFF59616E),
-            outline = Color(0xFFC7CCD4),
-        )
-    }
 
 @Composable
 private fun ApplyAppSystemBars(colorScheme: ColorScheme, darkTheme: Boolean) {

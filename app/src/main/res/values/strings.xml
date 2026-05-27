@@ -54,6 +54,24 @@
     <string name="settings_color_mode_desc">Choose light, dark, or follow system appearance</string>
     <string name="settings_theme_style">Theme style</string>
     <string name="settings_theme_style_desc">MIUIX-like keeps Material controls but softens surfaces</string>
+    <string name="settings_seed_color">Theme color</string>
+    <string name="settings_seed_color_desc">Choose the accent color used by Material and MIUIX themes</string>
+    <string name="seed_color_system">System</string>
+    <string name="seed_color_blue">Blue</string>
+    <string name="seed_color_miuix_blue">MIUI Blue</string>
+    <string name="seed_color_red">Red</string>
+    <string name="seed_color_pink">Pink</string>
+    <string name="seed_color_purple">Purple</string>
+    <string name="seed_color_indigo">Indigo</string>
+    <string name="seed_color_cyan">Cyan</string>
+    <string name="seed_color_teal">Teal</string>
+    <string name="seed_color_green">Green</string>
+    <string name="seed_color_lime">Lime</string>
+    <string name="seed_color_amber">Amber</string>
+    <string name="seed_color_orange">Orange</string>
+    <string name="seed_color_brown">Brown</string>
+    <string name="seed_color_blue_grey">Blue Grey</string>
+    <string name="seed_color_sakura">Sakura</string>
 
     <!-- ===== Settings: Protocol ===== -->
     <string name="settings_protocol_section">Protocol</string>

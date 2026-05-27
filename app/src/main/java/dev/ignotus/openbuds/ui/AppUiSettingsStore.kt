@@ -3,6 +3,7 @@ package dev.ignotus.openbuds.ui
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -21,6 +22,7 @@ data class AppUiSettings(
     val navigationBarMode: String = ReareyeNavigationBarMode.Floating.name,
     val themeStyle: String = ThemeStyle.Material.name,
     val colorMode: String = AppColorMode.System.name,
+    val seedColorIndex: Int = 0,
     val effectsEnabled: Boolean = false,
     val serviceBackgroundRun: Boolean = false,
     val notificationPersistent: Boolean = true,
@@ -36,6 +38,7 @@ class AppUiSettingsStore(private val context: Context) {
             navigationBarMode = prefs[NavigationBarModeKey] ?: ReareyeNavigationBarMode.Floating.name,
             themeStyle = prefs[ThemeStyleKey] ?: ThemeStyle.Material.name,
             colorMode = prefs[ColorModeKey] ?: AppColorMode.System.name,
+            seedColorIndex = prefs[SeedColorIndexKey] ?: 0,
             effectsEnabled = prefs[EffectsEnabledKey] ?: false,
             serviceBackgroundRun = prefs[ServiceBackgroundRunKey] ?: false,
             notificationPersistent = prefs[NotificationPersistentKey] ?: true,
@@ -61,6 +64,12 @@ class AppUiSettingsStore(private val context: Context) {
     suspend fun setColorMode(mode: AppColorMode) {
         context.openbudsUiSettingsDataStore.edit { prefs ->
             prefs[ColorModeKey] = mode.name
+        }
+    }
+
+    suspend fun setSeedColorIndex(index: Int) {
+        context.openbudsUiSettingsDataStore.edit { prefs ->
+            prefs[SeedColorIndexKey] = index
         }
     }
 
@@ -110,6 +119,7 @@ class AppUiSettingsStore(private val context: Context) {
         val NavigationBarModeKey = stringPreferencesKey("navigation_bar_mode")
         val ThemeStyleKey = stringPreferencesKey("theme_style")
         val ColorModeKey = stringPreferencesKey("color_mode")
+        val SeedColorIndexKey = intPreferencesKey("seed_color_index")
         val EffectsEnabledKey = booleanPreferencesKey("effects_enabled")
         val ServiceBackgroundRunKey = booleanPreferencesKey("service_background_run")
         val NotificationPersistentKey = booleanPreferencesKey("notification_persistent")
