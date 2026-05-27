@@ -871,6 +871,7 @@ private fun FloatingLiquidNavigationBar(
     val isLtr = LocalLayoutDirection.current == LayoutDirection.Ltr
     val animationScope = rememberCoroutineScope()
     val isLight = MaterialTheme.colorScheme.background.luminance() >= 0.5f
+    val navRenderCapabilities = LocalUiRenderCapabilities.current
     val containerColor = if (blurEnabled) {
         MaterialTheme.colorScheme.surface.copy(alpha = if (isLight) 0.40f else 0.34f)
     } else {
@@ -1120,6 +1121,12 @@ private fun FloatingLiquidNavigationBar(
                                     shape = { ContinuousCapsule },
                                     effects = {
                                         val progress = dampedDragAnimation.pressProgress
+                                        if (navRenderCapabilities.vibrancyEnabled) {
+                                            vibrancy()
+                                        }
+                                        if (navRenderCapabilities.navigationBackdropEnabled) {
+                                            blur(8f.dp.toPx())
+                                        }
                                         lens(10f.dp.toPx() * progress, 14f.dp.toPx() * progress, true)
                                     },
                                     highlight = {
@@ -1194,40 +1201,48 @@ private fun NavigationTabContent(
     onLongPress: (() -> Unit)? = null,
     onSelected: (AppRoute) -> Unit,
 ) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
-        modifier = modifier
-            .graphicsLayer {
-                val scaleValue = scale()
-                scaleX = scaleValue
-                scaleY = scaleValue
-            }
-            .clip(ContinuousCapsule)
-            .then(
-                if (!clickEnabled) {
-                    Modifier
-                } else if (onLongPress != null) {
-                    Modifier.combinedClickable(
-                        onClick = { onSelected(tab) },
-                        onLongClick = onLongPress,
-                    )
-                } else {
-                    Modifier.clickable { onSelected(tab) }
+    val renderCapabilities = LocalUiRenderCapabilities.current
+    Box(modifier = modifier) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    val scaleValue = scale()
+                    scaleX = scaleValue
+                    scaleY = scaleValue
                 }
+                .clip(ContinuousCapsule)
+                .then(
+                    if (!clickEnabled) {
+                        Modifier
+                    } else if (onLongPress != null) {
+                        Modifier.combinedClickable(
+                            onClick = { onSelected(tab) },
+                            onLongClick = onLongPress,
+                        )
+                    } else {
+                        Modifier.clickable { onSelected(tab) }
+                    }
+                )
+                .padding(vertical = 7.dp),
+        ) {
+            Icon(
+                imageVector = tab.icon,
+                contentDescription = stringResource(tab.titleResId),
+                tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            .padding(vertical = 7.dp),
-    ) {
-        Icon(
-            imageVector = tab.icon,
-            contentDescription = stringResource(tab.titleResId),
-            tint = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Text(
-            text = stringResource(tab.titleResId),
-            style = MaterialTheme.typography.labelSmall,
-            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
+            Text(
+                text = stringResource(tab.titleResId),
+                style = MaterialTheme.typography.labelSmall,
+                color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+            )
+        }
+        InteractiveHighlight(
+            enabled = renderCapabilities.effectsEnabled,
+            highlightColor = MaterialTheme.colorScheme.onSurface,
         )
     }
 }

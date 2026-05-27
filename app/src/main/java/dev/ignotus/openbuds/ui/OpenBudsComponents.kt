@@ -174,6 +174,8 @@ internal fun GlassCard(
     val blurColors = BlurColors(
         blendColors = rememberGlassVisualTokens().cardBlendColors,
     )
+    val tier = renderCapabilities.tier
+    val blurRadius = EffectsTierManager.glassBlurRadius(tier)
     Card(
         shape = shape,
         border = if (glassEnabled) null else BorderStroke(1.dp, borderColor),
@@ -182,12 +184,12 @@ internal fun GlassCard(
             contentColor = MaterialTheme.colorScheme.onSurface,
         ),
         modifier = modifier.then(
-            if (glassEnabled) {
+            if (glassEnabled && blurRadius > 0f) {
                 Modifier.textureBlur(
                     backdrop = backdrop,
                     shape = shape,
-                    blurRadius = 60f,
-                    noiseCoefficient = 0.001f,
+                    blurRadius = blurRadius,
+                    noiseCoefficient = EffectsTierManager.glassNoiseCoefficient(tier),
                     colors = blurColors,
                     enabled = true,
                 )
