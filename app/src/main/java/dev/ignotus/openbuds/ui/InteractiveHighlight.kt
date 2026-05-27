@@ -1,25 +1,21 @@
 package dev.ignotus.openbuds.ui
 
-import android.annotation.SuppressLint
-import android.graphics.RuntimeShader
 import android.os.Build
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.Canvas
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ShaderBrush
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.util.fastCoerceIn
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlin.math.min
 
-@SuppressLint("NewApi")
 class InteractiveHighlight(
     val animationScope: CoroutineScope,
     val position: (size: Size, offset: Offset) -> Offset = { _, offset -> offset }
@@ -33,49 +29,26 @@ class InteractiveHighlight(
     private var startPosition = Offset.Zero
     val offset: Offset get() = positionAnimation.value - startPosition
 
-    private val shader: RuntimeShader? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        RuntimeShader(
-            """
-    uniform float2 size;
-    layout(color) uniform half4 color;
-    uniform float radius;
-    uniform float2 position;
-
-    half4 main(float2 coord) {
-        float dist = distance(coord, position);
-        float intensity = smoothstep(radius, radius * 0.5, dist);
-        return color * intensity;
-    }"""
-        )
-    } else {
-        null
-    }
-
     val modifier: Modifier =
         Modifier.drawWithContent {
             val progress = pressProgressAnimation.value
             if (progress > 0f) {
                 drawRect(
                     Color.White.copy(0.06f * progress),
-                    blendMode = BlendMode.Plus
                 )
-                shader?.let { s ->
-                    s.apply {
-                        val shaderPosition = position(size, positionAnimation.value)
-                        setFloatUniform("size", size.width, size.height)
-                        setColorUniform("color", Color.White.copy(0.12f * progress).toArgb())
-                        setFloatUniform("radius", size.minDimension * 1.2f)
-                        setFloatUniform(
-                            "position",
-                            shaderPosition.x.fastCoerceIn(0f, size.width),
-                            shaderPosition.y.fastCoerceIn(0f, size.height)
-                        )
-                    }
-                    drawRect(
-                        ShaderBrush(s),
-                        blendMode = BlendMode.Plus
-                    )
-                }
+                val shaderPosition = position(size, positionAnimation.value)
+                val radius = min(size.width, size.height) * 1.2f
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            Color.White.copy(0.12f * progress),
+                            Color.White.copy(0f),
+                        ),
+                        center = shaderPosition,
+                        radius = radius,
+                    ),
+                    radius = radius,
+                )
             }
             drawContent()
         }

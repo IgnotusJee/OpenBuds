@@ -360,6 +360,12 @@ fun OpenBudsApp(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background),
         ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .textureBackdropSource(textureBackdrop)
+                    .background(appColorScheme.background),
+            )
             CompositionLocalProvider(
                 LocalTextureBackdrop provides if (renderCapabilities.glassCardsEnabled) textureBackdrop else null,
                 LocalUiRenderCapabilities provides renderCapabilities,
@@ -367,7 +373,6 @@ fun OpenBudsApp(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .textureBackdropSource(textureBackdrop)
                         .then(
                             if (renderCapabilities.navigationBackdropEnabled && backdrop != null) {
                                 Modifier.layerBackdrop(backdrop)
