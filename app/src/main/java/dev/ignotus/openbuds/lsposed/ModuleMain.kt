@@ -33,9 +33,14 @@ class ModuleMain : XposedModule() {
 
         when (param.packageName) {
             "com.milink.service" -> {
-                val hook = MiLinkIdentityHook(cl)
-                val found = hook.probe()
-                if (found) hook.hook()
+                // Phase 1: Identity spoofing (satellite sticker)
+                val identityHook = MiLinkIdentityHook(cl)
+                if (identityHook.probe()) identityHook.hook()
+
+                // Phase 2: Card content injection
+                val cardHook = CardContentHook(cl)
+                cardHook.probe()
+                cardHook.hook()
             }
         }
         ProbeResultCache.persistShared()

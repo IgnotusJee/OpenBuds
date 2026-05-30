@@ -88,6 +88,7 @@ class MiLinkIdentityHook(private val classLoader: ClassLoader) {
                         val device = chain.args[0] as? BluetoothDevice
                         if (device != null && isSonyHeadphone(device)) {
                             log("isMiHeadset → TRUE for \"${device.name}\" (${device.address})")
+                            cacheSonyDevice(device.address, device.name)
                             return true  // skip original MxBluetoothManager.checkIsMiTWS()
                         }
                         return chain.proceed()
@@ -148,6 +149,20 @@ class MiLinkIdentityHook(private val classLoader: ClassLoader) {
     }
 
     companion object {
+        /** Cached MAC of last Sony headphone seen by isMiHeadset hook. */
+        @Volatile
+        var lastSonyMac: String? = null
+            private set
+
+        @Volatile
+        var lastSonyName: String? = null
+            private set
+
+        fun cacheSonyDevice(mac: String, name: String?) {
+            lastSonyMac = mac
+            lastSonyName = name
+        }
+
         /**
          * Match Sony headphone name patterns.
          * Covers: WF-1000XM*, WH-1000XM*, LinkBuds*, WI-*, MDR-*, XBA-*
