@@ -42,10 +42,10 @@ class ModuleMain : XposedModule() {
                 cardHook.probe()
                 cardHook.hook()
 
-                // Diagnostic: trace name source for control center
-                val nameTrace = NameTraceHook(cl)
-                nameTrace.probe()
-                nameTrace.hook()
+                // Phase 3: trace HeadsetServiceClient + fix name at framework level
+                val hsTrace = HeadsetClientTraceHook(cl)
+                if (hsTrace.probe()) hsTrace.hook()
+                TextViewNameFixHook(cl).hook()
             }
         }
         ProbeResultCache.persistShared()

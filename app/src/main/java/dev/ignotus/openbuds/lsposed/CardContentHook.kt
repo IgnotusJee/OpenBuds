@@ -167,7 +167,7 @@ class CardContentHook(private val classLoader: ClassLoader) {
         injectTarget.addView(container)
 
         // Fix display name if wrong (from control center)
-        fixDeviceNameDisplay(root, deviceName)
+        // Note: device name is now fixed at source via HeadsetClientTraceHook
 
         val repo = SonyHeadphoneRepository.getInstance(context)
         activeRepository = repo
