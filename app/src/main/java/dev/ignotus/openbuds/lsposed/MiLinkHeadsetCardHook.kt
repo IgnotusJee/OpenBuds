@@ -31,6 +31,11 @@ class MiLinkHeadsetCardHook(private val classLoader: ClassLoader) {
     private var queryInterface: Class<*>? = null
     private var multipointClass: Class<*>? = null
 
+    // Cached hostListener from headset factory proxy — used to push HeadsetHost updates
+    // proactively when controller data is requested (before initialize() fires)
+    @Volatile
+    private var cachedHostListener: Any? = null
+
     fun probe(): Boolean {
         if (probed) return mlCardServiceClass != null || controllerClass != null || factoryClass != null
         probed = true
@@ -82,6 +87,8 @@ class MiLinkHeadsetCardHook(private val classLoader: ClassLoader) {
                     val service = chain.thisObject ?: return chain.proceed()
                     if (installNativeHeadsetStrategy(service, deviceInfo, cardId)) {
                         log("third_headset MLCard redirected to native headset strategy")
+                        // Push HeadsetHost update when hostListener is available (may be delayed)
+                        scheduleHostUpdateWhenReady(300)
                         return null
                     }
                     return chain.proceed()
@@ -89,6 +96,21 @@ class MiLinkHeadsetCardHook(private val classLoader: ClassLoader) {
             })
         ProbeResultCache.markMethodFound(clazz.name, method.name)
         log("hooked: MLCardViewHostService.${method.name}")
+    }
+
+    private fun scheduleHostUpdateWhenReady(delayMs: Long) {
+        if (delayMs > 5000) {
+            log("scheduleHostUpdateWhenReady: giving up after 5s")
+            return
+        }
+        val listener = cachedHostListener
+        if (listener != null) {
+            sendSyntheticHostUpdate(listener, "v().retry")
+            return
+        }
+        mainHandler.postDelayed({
+            scheduleHostUpdateWhenReady(delayMs + 500)
+        }, delayMs)
     }
 
     private fun hookControllerData() {
@@ -161,8 +183,11 @@ class MiLinkHeadsetCardHook(private val classLoader: ClassLoader) {
                 override fun intercept(chain: XposedInterface.Chain): Any? {
                     val realClient = chain.proceed() ?: return null
                     val hostListener = chain.args.getOrNull(2)
+                    cachedHostListener = hostListener  // store for proactive updates
                     val proxy = createClientProxy(clientInterface, realClient, hostListener)
                     log("wrapped headset client")
+                    // Immediately push HeadsetHost — card may request data before initialize()
+                    hostListener?.let { sendSyntheticHostUpdate(it, "factory.create") }
                     return proxy
                 }
             })
@@ -172,19 +197,24 @@ class MiLinkHeadsetCardHook(private val classLoader: ClassLoader) {
 
     private fun installNativeHeadsetStrategy(service: Any, deviceInfo: Any, cardId: Int): Boolean {
         return runCatching {
+            log("installNative: setting cardId=$cardId")
             setField(service, listOf("mCardId", "I"), cardId)
             setField(service, listOf("mDeviceInfo", "J"), deviceInfo)
-            val plugin = invokeNoArg(service, "m21480Z", "Z") ?: return false
-            val strategy = invokeMethod(plugin, arrayOf("mo25186n", "n"), arrayOf(service)) ?: return false
+            log("installNative: getting plugin via Z()")
+            val plugin = invokeNoArg(service, "m21480Z", "Z") ?: run { log("plugin Z() returned null"); return false }
+            log("installNative: calling plugin.n(service)")
+            val strategy = invokeMethod(plugin, arrayOf("mo25186n", "n"), arrayOf(service))
+                ?: run { log("plugin.n() returned null"); return false }
+            log("installNative: setting mDeviceStrategy")
             setField(service, listOf("mDeviceStrategy", "R"), strategy)
-            val manager = invokeNoArg(service, "m21475b0", "b0") ?: return false
-            if (!invokeVoidMethod(manager, arrayOf("m21636g", "g"), arrayOf(strategy))) return false
-            val handler = invokeNoArg(service, "m16371q", "q")
-            val timeout = invokeNoArg(service, "m21477f0", "f0")
-            if (handler is Handler && timeout is Runnable) {
-                handler.removeCallbacks(timeout)
-                handler.postDelayed(timeout, 3000L)
+            log("installNative: getting manager via b0()")
+            val manager = invokeNoArg(service, "m21475b0", "b0") ?: run { log("manager b0() returned null"); return false }
+            log("installNative: calling manager.g(strategy)")
+            if (!invokeVoidMethod(manager, arrayOf("m21636g", "g"), arrayOf(strategy))) {
+                log("manager.g() failed")
+                return false
             }
+            log("installNative: success")
             true
         }.onFailure {
             log("native strategy install failed: ${it.message}")
@@ -289,8 +319,13 @@ class MiLinkHeadsetCardHook(private val classLoader: ClassLoader) {
             .intercept(object : XposedInterface.Hooker {
                 override fun intercept(chain: XposedInterface.Chain): Any? {
                     val service = chain.args.getOrNull(0) ?: return chain.proceed()
-                    if (!isTargetService(service)) return chain.proceed()
-                    return resultForService(service) ?: chain.proceed()
+                    val state = syntheticStateForService(service)
+                    if (state == null) return chain.proceed()
+                    val result = resultForService(service) ?: chain.proceed()
+                    if (method.name in listOf("A", "B", "C", "D", "F", "G")) {
+                        log("controller ${method.name} → ${result?.toString()?.take(80)}")
+                    }
+                    return result
                 }
             })
         ProbeResultCache.markMethodFound(clazz.name, method.name)
@@ -326,6 +361,7 @@ class MiLinkHeadsetCardHook(private val classLoader: ClassLoader) {
                 override fun intercept(chain: XposedInterface.Chain): Any? {
                     val service = chain.args.lastOrNull() ?: return chain.proceed()
                     val value = valueForService(service) ?: return chain.proceed()
+                    log("controller future ${method.name} → CompletableFuture(${value?.toString()?.take(60)})")
                     return CompletableFuture.completedFuture(value)
                 }
             })
@@ -354,6 +390,7 @@ class MiLinkHeadsetCardHook(private val classLoader: ClassLoader) {
                     if (!isTargetService(service)) return chain.proceed()
                     val state = syntheticStateForService(service) ?: return chain.proceed()
                     state.serviceRef = service
+                    log("controller set ${methodName}($value)")
                     update(state, value)
                     notifyForSet(chain.thisObject, methodName, service, state)
                     return CompletableFuture.completedFuture(SUCCESS)
@@ -394,9 +431,10 @@ class MiLinkHeadsetCardHook(private val classLoader: ClassLoader) {
 
     private fun scheduleSyntheticHostUpdate(hostListener: Any?, reason: String) {
         if (hostListener == null) return
-        mainHandler.postDelayed({
+        // Send immediately on main thread — no delay needed since hooks provide data
+        mainHandler.post {
             sendSyntheticHostUpdate(hostListener, reason)
-        }, 300L)
+        }
     }
 
     private fun sendSyntheticHostUpdate(hostListener: Any?, reason: String) {
@@ -500,14 +538,22 @@ class MiLinkHeadsetCardHook(private val classLoader: ClassLoader) {
     }
 
     private fun syntheticStateForService(service: Any): SyntheticHeadsetState? {
-        val address = getStringField(service, "deviceId") ?: return null
+        val address = getStringField(service, "deviceId")
+        if (address == null) {
+            log("syntheticStateForService: no deviceId on ${service.javaClass.simpleName}")
+            return null
+        }
         val target = isTargetAddress(address)
         // Fallback: match by device name if MAC not cached yet
         val nameField = if (!target) getStringField(service, "devicesName") else null
         val nameMatch = nameField != null && MiLinkIdentityHook.matchesSonyPattern(nameField)
-        if (!target && !nameMatch) return null
+        if (!target && !nameMatch) {
+            log("syntheticStateForService: not target addr=$address name=$nameField")
+            return null
+        }
         if (nameMatch && MiLinkIdentityHook.lastSonyMac == null) {
-            MiLinkIdentityHook.cacheSonyDevice(address, nameField)
+            MiLinkIdentityHook.cacheSonyDevice(address, nameField!!)
+            DeviceWhitelist.add(address)
         }
         return stateFor(address).also {
             it.serviceRef = service
@@ -537,9 +583,10 @@ class MiLinkHeadsetCardHook(private val classLoader: ClassLoader) {
         val name = runCatching { invokeString(deviceInfo, "getName") }.getOrNull()
             ?: runCatching { invokeString(deviceInfo, "getDeviceName") }.getOrNull()
         if (name != null && MiLinkIdentityHook.matchesSonyPattern(name)) {
-            // Cache this MAC for future calls
+            // Cache this MAC for future calls (cross-process via whitelist)
             val addr = id ?: mac ?: return false
             MiLinkIdentityHook.cacheSonyDevice(addr, name)
+            DeviceWhitelist.add(addr)
             return true
         }
         log("third_headset skipped: id=$id mac=$mac name=$name (no match)")

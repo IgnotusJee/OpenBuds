@@ -91,6 +91,7 @@ class MiLinkIdentityHook(private val classLoader: ClassLoader) {
                         if (device != null && isSonyHeadphone(device)) {
                             log("isMiHeadset → TRUE for \"${device.name}\" (${device.address})")
                             cacheSonyDevice(device.address, device.name)
+                            DeviceWhitelist.add(device.address)  // cross-process: share MAC via file
                             preconnectBle(device.address, device.name ?: "Sony")
                             return true  // skip original MxBluetoothManager.checkIsMiTWS()
                         }
@@ -133,7 +134,8 @@ class MiLinkIdentityHook(private val classLoader: ClassLoader) {
                     override fun intercept(chain: io.github.libxposed.api.XposedInterface.Chain): Any? {
                         val device = chain.args[0] as? BluetoothDevice
                         if (device != null && isSonyHeadphone(device)) {
-                            return true
+                            // Only keep sticker for connected devices
+                            return isDeviceConnected(device)
                         }
                         return chain.proceed()
                     }
@@ -212,6 +214,20 @@ class MiLinkIdentityHook(private val classLoader: ClassLoader) {
             if (n.contains("sony") && (n.startsWith("wf-") || n.startsWith("wh-") ||
                 n.contains("linkbuds") || n.contains("1000x") || n.contains("h.ear"))) return true
             return false
+        }
+
+        /**
+         * Check if a BluetoothDevice is currently connected via reflection.
+         * Uses hidden API BluetoothDevice.isConnected().
+         */
+        private fun isDeviceConnected(device: BluetoothDevice): Boolean {
+            return try {
+                val method = device.javaClass.getMethod("isConnected")
+                method.invoke(device) as? Boolean ?: false
+            } catch (_: Exception) {
+                // Fallback: check bond state — bonded implies was connected recently
+                device.bondState == BluetoothDevice.BOND_BONDED
+            }
         }
 
         private fun log(msg: String) {
