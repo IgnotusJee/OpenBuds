@@ -16,6 +16,12 @@ class ModuleMain : XposedModule() {
         }
         log("ModuleMain loaded in process: $processName")
         instance = this
+        // Write startup marker file so user can verify module loaded
+        try {
+            val marker = java.io.File("/sdcard/openbuds_lsposed_startup.txt")
+            marker.writeText("process=$processName\ntime=${System.currentTimeMillis()}\n")
+            marker.setReadable(true, false)
+        } catch (_: Exception) {}
     }
 
     override fun onPackageLoaded(param: PackageLoadedParam) {
