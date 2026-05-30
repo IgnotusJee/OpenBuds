@@ -37,12 +37,9 @@ class ModuleMain : XposedModule() {
                 val identityHook = MiLinkIdentityHook(cl)
                 if (identityHook.probe()) identityHook.hook()
 
-                // Phase 2A: Protocol-level — redirect third_headset → native headset (AUDIOGLASSES path)
+                // Phase 2: Protocol-level redirect — third_headset → native headset (AUDIOGLASSES path)
                 val headsetCardHook = MiLinkHeadsetCardHook(cl)
                 if (headsetCardHook.probe()) headsetCardHook.hook()
-
-                // Phase 2B (DISABLED): View-level overlay injection replaced by protocol hooks above.
-                // Keeping source for reference; not registered to avoid interfering with native controls.
 
                 // Phase 3: trace HeadsetServiceClient + fix name at framework level
                 val hsTrace = HeadsetClientTraceHook(cl)
