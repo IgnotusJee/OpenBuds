@@ -37,7 +37,11 @@ class ModuleMain : XposedModule() {
                 val identityHook = MiLinkIdentityHook(cl)
                 if (identityHook.probe()) identityHook.hook()
 
-                // Phase 2: Card content injection
+                // Phase 2A: Protocol-level — redirect third_headset → native headset
+                val headsetCardHook = MiLinkHeadsetCardHook(cl)
+                if (headsetCardHook.probe()) headsetCardHook.hook()
+
+                // Phase 2B: View-level — WindowManager.addView detection + native view population
                 val cardHook = CardContentHook(cl)
                 cardHook.probe()
                 cardHook.hook()

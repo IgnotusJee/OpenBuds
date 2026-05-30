@@ -27,6 +27,9 @@ class CardContentHook(private val classLoader: ClassLoader) {
     private val handler = Handler(Looper.getMainLooper())
     private var hookAttempted = false
 
+    // Phase 4: native MLCard view population
+    val mlCardHook = MLCardNativeControlsHook()
+
     // Dedup: track already-processed views (identityHashCode)
     private val processedCards = Collections.newSetFromMap(java.util.WeakHashMap<View, Boolean>())
 
@@ -124,7 +127,7 @@ class CardContentHook(private val classLoader: ClassLoader) {
         if (!processedCards.add(view)) return  // dedup
 
         log("checking card from $source: ${root.javaClass.simpleName}[${root.childCount}]")
-        dumpViewTree(root, 0, 2)
+        dumpViewTree(root, 0, 5)
 
         val deviceName = findDeviceNameInCard(root) ?: run {
             log("no device name found in card")
@@ -144,11 +147,22 @@ class CardContentHook(private val classLoader: ClassLoader) {
             return
         }
 
+        val context = root.context.applicationContext
+        val repo = SonyHeadphoneRepository.getInstance(context)
+        activeRepository = repo
+        repo.connect(mac, deviceName)
+        log("repo.connect($mac)")
+
+        // Phase 4: try to populate native MLCard views first
+        if (mlCardHook.populateCard(root, repo, deviceName)) {
+            log("Native MLCard views populated — skipping custom injection")
+            return
+        }
+        log("Native views not found — falling back to custom LinearLayout injection")
+
         // Inject into the card's content area — find MainCardView or RelativeLayout
         val injectTarget = findCardContentArea(root) ?: root
         log("injecting into ${injectTarget.javaClass.simpleName}")
-
-        val context = root.context.applicationContext
         val container = LinearLayout(context).apply {
             id = View.generateViewId()
             tag = "openbuds_card_content"
@@ -168,11 +182,7 @@ class CardContentHook(private val classLoader: ClassLoader) {
 
         // Fix display name if wrong (from control center)
         // Note: device name is now fixed at source via HeadsetClientTraceHook
-
-        val repo = SonyHeadphoneRepository.getInstance(context)
-        activeRepository = repo
-        repo.connect(mac, deviceName)
-        log("repo.connect($mac)")
+        fixDeviceNameDisplay(root, deviceName)
 
         GlobalScope.launch(Dispatchers.Main) {
             repo.state.collectLatest { state ->
@@ -274,10 +284,11 @@ class CardContentHook(private val classLoader: ClassLoader) {
     private fun dumpViewTree(view: View, depth: Int, maxDepth: Int) {
         if (depth > maxDepth) return
         val indent = "  ".repeat(depth)
+        val idStr = if (view.id != View.NO_ID) " #${Integer.toHexString(view.id)}" else ""
         val desc = when (view) {
-            is ViewGroup -> "${view.javaClass.simpleName}[${view.childCount}]"
-            is TextView -> "${view.javaClass.simpleName} \"${view.text}\""
-            else -> view.javaClass.simpleName
+            is ViewGroup -> "${view.javaClass.simpleName}[${view.childCount}]$idStr"
+            is TextView -> "${view.javaClass.simpleName}$idStr \"${view.text}\""
+            else -> "${view.javaClass.simpleName}$idStr"
         }
         log("$indent$desc")
         if (view is ViewGroup && depth < maxDepth) {
