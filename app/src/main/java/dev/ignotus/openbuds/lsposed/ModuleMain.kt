@@ -41,6 +41,11 @@ class ModuleMain : XposedModule() {
                 val cardHook = CardContentHook(cl)
                 cardHook.probe()
                 cardHook.hook()
+
+                // Diagnostic: trace name source for control center
+                val nameTrace = NameTraceHook(cl)
+                nameTrace.probe()
+                nameTrace.hook()
             }
         }
         ProbeResultCache.persistShared()
