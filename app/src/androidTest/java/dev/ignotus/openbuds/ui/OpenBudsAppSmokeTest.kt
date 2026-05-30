@@ -7,7 +7,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.test.core.app.ApplicationProvider
-import dev.ignotus.openbuds.data.SonyHeadphoneUiState
+import dev.ignotus.openbuds.data.HeadphoneUiState
 import dev.ignotus.openbuds.theme.OpenBudsTheme
 import kotlinx.coroutines.runBlocking
 import org.junit.Rule
@@ -79,7 +79,7 @@ class OpenBudsAppSmokeTest {
 @Composable
 private fun SmokeOpenBudsApp() {
     OpenBudsApp(
-        state = SonyHeadphoneUiState(),
+        state = HeadphoneUiState(),
         onStartScan = {},
         onStopScan = {},
         onConnect = {},

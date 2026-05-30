@@ -92,7 +92,7 @@ class ProtocolCompatibilityArchitectureTest {
 
     @Test
     fun repositoryDoesNotDropCommandChannel() {
-        val source = mainSource("data/SonyHeadphoneRepository.kt")
+        val source = mainSource("data/HeadphoneRepository.kt")
         assertFalse(source.contains("send(bytes)"))
         assertTrue(source.contains("sendToChannel(command.channel, command.bytes)"))
     }

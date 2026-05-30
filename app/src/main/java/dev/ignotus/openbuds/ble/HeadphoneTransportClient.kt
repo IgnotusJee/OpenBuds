@@ -6,7 +6,7 @@ import dev.ignotus.openbuds.headphones.TandemChannel
  * Transport-layer abstraction for BLE headphone communication.
  *
  * Each brand (Sony Tandem, QCY GATT, …) implements this interface so that
- * [SonyHeadphoneRepository] can route connect/disconnect/send calls through a
+ * [HeadphoneRepository] can route connect/disconnect/send calls through a
  * single active client without brand-specific branching.
  *
  * The listener ([HeadphoneTransportListener]) is shared across all clients;

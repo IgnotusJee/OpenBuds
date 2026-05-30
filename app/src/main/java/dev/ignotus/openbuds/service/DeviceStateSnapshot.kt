@@ -1,7 +1,7 @@
 package dev.ignotus.openbuds.service
 
 import android.os.Bundle
-import dev.ignotus.openbuds.data.SonyHeadphoneUiState
+import dev.ignotus.openbuds.data.HeadphoneUiState
 import dev.ignotus.openbuds.protocol.NoiseControlMode
 import dev.ignotus.openbuds.protocol.PlaybackStatus
 
@@ -89,7 +89,7 @@ data class DeviceStateSnapshot(
             isProtocolReady = bundle.getBoolean(KEY_IS_PROTOCOL_READY, false),
         )
 
-        fun fromUiState(state: SonyHeadphoneUiState): DeviceStateSnapshot = DeviceStateSnapshot(
+        fun fromUiState(state: HeadphoneUiState): DeviceStateSnapshot = DeviceStateSnapshot(
             deviceName = state.connectedDevice?.name ?: state.deviceInfo.modelName,
             deviceMac = state.connectedDevice?.address,
             batterySingle = state.batteryState.single,

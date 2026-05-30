@@ -1,6 +1,6 @@
 package dev.ignotus.openbuds.data.qcy
 
-import dev.ignotus.openbuds.data.SonyHeadphoneUiState
+import dev.ignotus.openbuds.data.HeadphoneUiState
 import dev.ignotus.openbuds.protocol.EqPresetId
 import dev.ignotus.openbuds.protocol.NoiseControlMode
 import dev.ignotus.openbuds.protocol.ParsedHeadphoneResponse
@@ -11,7 +11,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class QcyResponseMapperTest {
-    private val initial = SonyHeadphoneUiState()
+    private val initial = HeadphoneUiState()
 
     @Test
     fun applyBattery_setsAllLevelsExceptCharging() {

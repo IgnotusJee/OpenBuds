@@ -25,8 +25,8 @@ import androidx.activity.ComponentActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
-import dev.ignotus.openbuds.data.SonyHeadphoneRepository
-import dev.ignotus.openbuds.data.SonyHeadphoneUiState
+import dev.ignotus.openbuds.data.HeadphoneRepository
+import dev.ignotus.openbuds.data.HeadphoneUiState
 import dev.ignotus.openbuds.service.ControlCommand
 import dev.ignotus.openbuds.service.DeviceStateSnapshot
 import dev.ignotus.openbuds.service.SonyControlService
@@ -35,7 +35,7 @@ import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
 
-    private lateinit var repository: SonyHeadphoneRepository
+    private lateinit var repository: HeadphoneRepository
     private var serviceBinder: SonyControlService.LocalBinder? = null
     private var bound = false
     private val handler = Handler(Looper.getMainLooper())
@@ -62,7 +62,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        repository = SonyHeadphoneRepository.getInstance(applicationContext)
+        repository = HeadphoneRepository.getInstance(applicationContext)
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -158,7 +158,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun updateUi(state: SonyHeadphoneUiState) {
+    private fun updateUi(state: HeadphoneUiState) {
         // Status section
         val sb = StringBuilder()
         sb.appendLine("OpenBuds")

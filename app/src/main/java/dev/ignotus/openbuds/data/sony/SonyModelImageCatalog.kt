@@ -1,4 +1,4 @@
-package dev.ignotus.openbuds.data
+package dev.ignotus.openbuds.data.sony
 
 import android.content.Context
 import org.json.JSONArray

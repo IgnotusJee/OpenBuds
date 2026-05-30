@@ -13,7 +13,7 @@ import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import dev.ignotus.openbuds.MainActivity
-import dev.ignotus.openbuds.data.SonyHeadphoneRepository
+import dev.ignotus.openbuds.data.HeadphoneRepository
 import dev.ignotus.openbuds.lsposed.DeviceWhitelist
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -23,7 +23,7 @@ import kotlinx.coroutines.launch
 
 class SonyControlService : Service() {
 
-    private lateinit var repository: SonyHeadphoneRepository
+    private lateinit var repository: HeadphoneRepository
     private val binder = LocalBinder()
     private val stateLiveData = MutableLiveData(DeviceStateSnapshot.EMPTY)
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -67,7 +67,7 @@ class SonyControlService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        repository = SonyHeadphoneRepository.getInstance(this)
+        repository = HeadphoneRepository.getInstance(this)
         startForeground(NOTIFICATION_ID, createNotification(DeviceStateSnapshot.EMPTY))
 
         serviceScope.launch {

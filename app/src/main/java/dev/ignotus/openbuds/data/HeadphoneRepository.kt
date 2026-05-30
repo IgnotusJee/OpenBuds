@@ -30,6 +30,7 @@ import dev.ignotus.openbuds.headphones.HeadphoneTransport
 import dev.ignotus.openbuds.headphones.PlaybackDispatchStrategy
 import dev.ignotus.openbuds.headphones.TandemChannel
 import dev.ignotus.openbuds.media.MediaPlaybackController
+import dev.ignotus.openbuds.data.sony.SonyModelImageCatalog
 import dev.ignotus.openbuds.protocol.AmbientSoundMode
 import dev.ignotus.openbuds.protocol.DeviceInfoType
 import dev.ignotus.openbuds.protocol.EqEbbInquiredType
@@ -144,7 +145,7 @@ data class FeatureStatus(
     val implemented: Boolean,
 )
 
-data class SonyHeadphoneUiState(
+data class HeadphoneUiState(
     val scanState: String = "Idle",
     val isScanning: Boolean = false,
     val permissionIssue: String? = null,
@@ -172,7 +173,7 @@ data class SonyHeadphoneUiState(
     val preferredProtocol: String = "Sony Tandem",
 )
 
-class SonyHeadphoneRepository private constructor(context: Context) : SonyBleClientListener {
+class HeadphoneRepository private constructor(context: Context) : SonyBleClientListener {
     private val appContext = context.applicationContext
     private val sonyClient = SonyBleClient(appContext, this)
     private val qcyClient = QcyBleClient(appContext, this)
@@ -185,11 +186,11 @@ class SonyHeadphoneRepository private constructor(context: Context) : SonyBleCli
     private val playbackRefreshRunnable = Runnable { refreshPlaybackStatusAfterCommand() }
     private val playbackReconcileRunnable = Runnable { refreshPlaybackStatusAfterCommand() }
     private val playbackHeartbeatRunnable = Runnable { sendPlaybackHeartbeat() }
-    private val _state = MutableStateFlow(SonyHeadphoneUiState())
+    private val _state = MutableStateFlow(HeadphoneUiState())
     private var pendingPlaybackStatus: PendingPlaybackStatus? = null
     private var playbackHeartbeatActive = false
 
-    val state: StateFlow<SonyHeadphoneUiState> = _state.asStateFlow()
+    val state: StateFlow<HeadphoneUiState> = _state.asStateFlow()
 
     fun startScan() {
         _state.update {
@@ -1188,11 +1189,11 @@ class SonyHeadphoneRepository private constructor(context: Context) : SonyBleCli
 
     companion object {
         @Volatile
-        private var instance: SonyHeadphoneRepository? = null
+        private var instance: HeadphoneRepository? = null
 
-        fun getInstance(context: Context): SonyHeadphoneRepository {
+        fun getInstance(context: Context): HeadphoneRepository {
             return instance ?: synchronized(this) {
-                instance ?: SonyHeadphoneRepository(context.applicationContext).also { instance = it }
+                instance ?: HeadphoneRepository(context.applicationContext).also { instance = it }
             }
         }
 

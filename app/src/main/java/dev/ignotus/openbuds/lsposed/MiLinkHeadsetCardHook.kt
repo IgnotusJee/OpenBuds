@@ -41,7 +41,7 @@ class MiLinkHeadsetCardHook(private val classLoader: ClassLoader) {
     private var cachedHostListener: Any? = null
 
     // Real BLE data bridge
-    private var repository: dev.ignotus.openbuds.data.SonyHeadphoneRepository? = null
+    private var repository: dev.ignotus.openbuds.data.HeadphoneRepository? = null
     private var dataBridgeStarted = false
 
     fun probe(): Boolean {
@@ -506,7 +506,7 @@ class MiLinkHeadsetCardHook(private val classLoader: ClassLoader) {
         }, "OpenBuds-DataBridge").start()
     }
 
-    private fun applyRealState(uiState: dev.ignotus.openbuds.data.SonyHeadphoneUiState) {
+    private fun applyRealState(uiState: dev.ignotus.openbuds.data.HeadphoneUiState) {
         val mac = MiLinkIdentityHook.lastSonyMac ?: return
         val state = stateFor(mac)
         var changed = false
