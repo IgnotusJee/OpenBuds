@@ -14,7 +14,7 @@ class ModuleMain : XposedModule() {
         } catch (_: Exception) {
             "unknown"
         }
-        log("ModuleMain loaded in process: $processName")
+        log("loaded in process: $processName")
         instance = this
         try {
             val marker = java.io.File("/sdcard/openbuds_lsposed_startup.txt")
@@ -25,25 +25,17 @@ class ModuleMain : XposedModule() {
 
     override fun onPackageLoaded(param: PackageLoadedParam) {
         super.onPackageLoaded(param)
-        log("onPackageLoaded: ${param.packageName}, isFirst=${param.isFirstPackage}")
+        log("onPackageLoaded: ${param.packageName} isFirst=${param.isFirstPackage}")
 
         if (!param.isFirstPackage) return
 
         val cl = param.defaultClassLoader ?: return
 
         when (param.packageName) {
-            // Primary: com.android.bluetooth — proven approach from HyperPods/OppoPods
-            "com.android.bluetooth" -> {
-                // A2DP detection → whitelist MAC + MiLink identity spoofing
-                val hook = BluetoothProcessHook(cl)
-                hook.probe()
-                hook.hook()
-            }
-            // Fallback: com.milink.service — if BluetoothServiceClient runs here
             "com.milink.service" -> {
-                val hook = MiLinkServiceHook(cl)
-                hook.probe()
-                hook.hook()
+                val hook = MiLinkIdentityHook(cl)
+                val found = hook.probe()
+                if (found) hook.hook()
             }
         }
         ProbeResultCache.persistShared()
