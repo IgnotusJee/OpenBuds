@@ -161,7 +161,12 @@ class MiLinkIdentityHook(private val classLoader: ClassLoader) {
 
         @Volatile
         var lastSonyName: String? = null
-            private set
+            internal set
+
+        /** Repository instance created by preconnectBle() — shared with MiLinkHeadsetCardHook. */
+        @Volatile
+        var preconnectRepository: dev.ignotus.openbuds.data.SonyHeadphoneRepository? = null
+            internal set
 
         private val preconnectInProgress = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<String, Boolean>())
 
@@ -189,6 +194,7 @@ class MiLinkIdentityHook(private val classLoader: ClassLoader) {
                     }
                     log("preconnect: starting BLE for $name ($mac)")
                     val repo = dev.ignotus.openbuds.data.SonyHeadphoneRepository.getInstance(app)
+                    preconnectRepository = repo
                     repo.connect(mac, name)
                 } catch (e: Exception) {
                     log("preconnect failed: ${e.message}")

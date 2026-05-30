@@ -1,14 +1,18 @@
 package dev.ignotus.openbuds.lsposed
 
+import android.content.Context
+import android.media.AudioManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import dev.ignotus.openbuds.protocol.NoiseControlMode
 import io.github.libxposed.api.XposedInterface
 import java.lang.reflect.InvocationHandler
 import java.lang.reflect.Method
 import java.lang.reflect.Proxy
 import java.util.Collections
 import java.util.concurrent.CompletableFuture
+import kotlinx.coroutines.runBlocking
 
 /**
  * Redirects MiLink's third-party headset MLCard path to the native first-party
@@ -35,6 +39,10 @@ class MiLinkHeadsetCardHook(private val classLoader: ClassLoader) {
     // proactively when controller data is requested (before initialize() fires)
     @Volatile
     private var cachedHostListener: Any? = null
+
+    // Real BLE data bridge
+    private var repository: dev.ignotus.openbuds.data.SonyHeadphoneRepository? = null
+    private var dataBridgeStarted = false
 
     fun probe(): Boolean {
         if (probed) return mlCardServiceClass != null || controllerClass != null || factoryClass != null
@@ -146,14 +154,21 @@ class MiLinkHeadsetCardHook(private val classLoader: ClassLoader) {
 
         hookSetOperation(clazz, serviceInfoClass, "m19883Z") { state, value ->
             state.mode = value.coerceIn(0, 2)
+            // Forward ANC mode change to real BLE device
+            forwardAncModeToDevice(value)
         }
         hookSetOperation(clazz, serviceInfoClass, "m19885b0") { state, value ->
             state.volume = value.coerceIn(0, 100)
+            // Forward volume change to system Bluetooth volume via AudioManager
+            forwardVolumeToSystem(value.coerceIn(0, 100))
         }
         hookSetOperation(clazz, serviceInfoClass, "m19882Y") { state, value ->
             state.audioEffect = value
         }
         log("hooked: controller set operations")
+
+        // Start bridging real BLE data into synthetic state (retry until repository is ready)
+        scheduleDataBridgeWhenReady(300)
     }
 
     private fun hookHeadsetClientFactory() {
@@ -453,6 +468,145 @@ class MiLinkHeadsetCardHook(private val classLoader: ClassLoader) {
             log("synthetic host update failed: ${it.message}")
         }
     }
+
+    // ── Real BLE data bridge ─────────────────────────────
+
+    private fun scheduleDataBridgeWhenReady(delayMs: Long) {
+        if (dataBridgeStarted) return
+        if (delayMs > 10_000) {
+            log("DataBridge: giving up after 10s — repository never ready")
+            return
+        }
+        val repo = MiLinkIdentityHook.preconnectRepository
+        if (repo != null) {
+            repository = repo
+            dataBridgeStarted = true
+            log("DataBridge: repository ready, starting collector")
+            startDataBridgeCollector()
+            return
+        }
+        mainHandler.postDelayed({
+            scheduleDataBridgeWhenReady(delayMs + 500)
+        }, delayMs)
+    }
+
+    private fun startDataBridgeCollector() {
+        val repo = repository ?: return
+        Thread({
+            try {
+                runBlocking {
+                    repo.state.collect { uiState ->
+                        applyRealState(uiState)
+                    }
+                }
+            } catch (e: Exception) {
+                log("DataBridge: collection stopped — ${e.message}")
+                dataBridgeStarted = false
+            }
+        }, "OpenBuds-DataBridge").start()
+    }
+
+    private fun applyRealState(uiState: dev.ignotus.openbuds.data.SonyHeadphoneUiState) {
+        val mac = MiLinkIdentityHook.lastSonyMac ?: return
+        val state = stateFor(mac)
+        var changed = false
+
+        // ── Battery ──
+        val bs = uiState.batteryState
+        val newPowers = mutableListOf<Int>()
+        if (bs.left != null || bs.right != null) {
+            newPowers.add(bs.left ?: 0)
+            newPowers.add(bs.right ?: 0)
+            newPowers.add(bs.cradle ?: 0)
+        } else {
+            newPowers.add(bs.single ?: 0)
+            newPowers.add(0)
+            newPowers.add(0)
+        }
+        // Pad to 6 elements (MiUI expects [L, R, Case, ?, ?, ?])
+        while (newPowers.size < 6) newPowers.add(0)
+        if (state.powers != newPowers) {
+            state.powers = newPowers
+            changed = true
+        }
+
+        // ── ANC mode (reverse-sync: BLE → UI) ──
+        val ncMode = uiState.noiseControlState.controlMode
+        val uiMode = when (ncMode) {
+            NoiseControlMode.NOISE_CANCELLING -> 0
+            NoiseControlMode.AMBIENT_SOUND -> 1
+            NoiseControlMode.OFF -> 2
+            null -> state.mode // no data yet, keep current
+        }
+        if (state.mode != uiMode) {
+            state.mode = uiMode
+            changed = true
+        }
+
+        // ── Device name ──
+        val repoName = uiState.connectedDevice?.name
+            ?: uiState.deviceInfo.modelName
+        if (!repoName.isNullOrBlank() && repoName != state.name) {
+            state.name = repoName
+            MiLinkIdentityHook.lastSonyName = repoName
+            changed = true
+        }
+
+        if (changed) {
+            mainHandler.post {
+                val listener = cachedHostListener
+                if (listener != null) {
+                    sendSyntheticHostUpdate(listener, "dataBridge")
+                }
+            }
+        }
+    }
+
+    // ── ANC / Volume forwarding ──────────────────────────
+
+    private fun forwardAncModeToDevice(uiValue: Int) {
+        val repo = MiLinkIdentityHook.preconnectRepository ?: return
+        val ncMode = when (uiValue) {
+            0 -> NoiseControlMode.NOISE_CANCELLING
+            1 -> NoiseControlMode.AMBIENT_SOUND
+            else -> NoiseControlMode.OFF
+        }
+        Thread({
+            try {
+                repo.setNoiseControlMode(ncMode)
+                log("DataBridge: forwarded ANC mode $ncMode to device")
+            } catch (e: Exception) {
+                log("DataBridge: ANC forward failed — ${e.message}")
+            }
+        }, "OpenBuds-ANC").start()
+    }
+
+    private fun forwardVolumeToSystem(percent: Int) {
+        try {
+            val app = getApplicationContext() ?: return
+            val am = app.getSystemService(AudioManager::class.java) ?: return
+            val maxVol = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+            if (maxVol <= 0) return
+            val targetVol = ((percent / 100.0) * maxVol).toInt().coerceIn(0, maxVol)
+            am.setStreamVolume(AudioManager.STREAM_MUSIC, targetVol, 0)
+            log("DataBridge: system volume → $targetVol/$maxVol ($percent%)")
+        } catch (e: Exception) {
+            log("DataBridge: volume forward failed — ${e.message}")
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun getApplicationContext(): Context? {
+        return try {
+            val atClass = Class.forName("android.app.ActivityThread")
+            val method = atClass.getDeclaredMethod("currentApplication")
+            method.invoke(null) as? Context
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    // ── Synthetic data builders ──────────────────────────
 
     private fun syntheticDeviceInfo(service: Any): Any? {
         val state = syntheticStateForService(service) ?: return null
