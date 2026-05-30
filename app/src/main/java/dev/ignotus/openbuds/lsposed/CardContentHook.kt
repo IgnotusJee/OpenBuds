@@ -5,13 +5,11 @@ import android.graphics.Color
 import android.graphics.Typeface
 import android.os.Handler
 import android.os.Looper
-import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
 import android.widget.LinearLayout
-import android.widget.ScrollView
 import android.widget.TextView
 import dev.ignotus.openbuds.data.SonyHeadphoneRepository
 import dev.ignotus.openbuds.data.SonyHeadphoneUiState
@@ -19,124 +17,162 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import java.util.Collections
 
-/**
- * Injects local first-party-style content into the MLCard popup for Sony headphones.
- *
- * Hooks the MLCard window creation in com.milink.service, detects Sony devices,
- * establishes a BLE connection via the existing SonyHeadphoneRepository, and
- * injects battery/NC/EQ Views into the card's overlay FrameLayout.
- */
 class CardContentHook(private val classLoader: ClassLoader) {
 
     private var probed = false
     private var activeRepository: SonyHeadphoneRepository? = null
     private var injectedContainer: LinearLayout? = null
     private val handler = Handler(Looper.getMainLooper())
+    private var hookAttempted = false
+
+    // Dedup: track already-processed views (identityHashCode)
+    private val processedCards = Collections.newSetFromMap(java.util.WeakHashMap<View, Boolean>())
+
+    private val cardTitlePatterns = listOf(
+        "com.milink.card.frame.library.host.MLCard",
+        "MLCard",
+        "CirculateCard",
+    )
+
+    // UI words to exclude from device name detection
+    private val uiWords = setOf("断开", "更多设置", "disconnect", "已连接", "未连接", "连接", "设置")
 
     fun probe() {
         if (probed) return
         probed = true
-        try {
-            val clazz = Class.forName("android.view.WindowManagerGlobal")
-            clazz.getDeclaredMethod("addView", View::class.java, ViewGroup.LayoutParams::class.java)
-            ProbeResultCache.markFound("WindowManagerGlobal.addView")
-            log("found WindowManagerGlobal.addView")
-        } catch (_: Exception) {
-            ProbeResultCache.markNotFound("WindowManagerGlobal.addView")
-            log("WindowManagerGlobal.addView not found")
-        }
         ProbeResultCache.persistShared()
     }
 
     fun hook() {
-        try {
-            val wmClass = Class.forName("android.view.WindowManagerGlobal")
-            // Try multiple method signatures for different Android versions
-            val addViewMethod = try {
-                wmClass.getDeclaredMethod("addView", View::class.java, ViewGroup.LayoutParams::class.java)
-            } catch (_: Exception) {
-                wmClass.declaredMethods.firstOrNull { m ->
-                    m.name == "addView" && m.parameterTypes.any { ViewGroup.LayoutParams::class.java.isAssignableFrom(it) }
-                } ?: throw NoSuchMethodException("addView not found")
-            }
+        if (hookAttempted) return
+        hookAttempted = true
 
-            ModuleMain.instance.hook(addViewMethod)
+        // Hook WM addView
+        var count = 0
+        for (wmClassName in listOf("android.view.WindowManagerGlobal", "android.view.WindowManagerImpl")) {
+            try {
+                val wmClass = Class.forName(wmClassName)
+                for (m in wmClass.declaredMethods) {
+                    if (m.name == "addView" && m.parameterTypes.size >= 2 &&
+                        View::class.java.isAssignableFrom(m.parameterTypes[0]) &&
+                        ViewGroup.LayoutParams::class.java.isAssignableFrom(m.parameterTypes[1])) {
+                        hookAddViewMethod(m, wmClassName)
+                        count++
+                    }
+                }
+            } catch (_: Exception) {}
+        }
+        log("hooked $count addView methods")
+
+        // Also hook Dialog/PopupWindow for control center path
+        hookDialogShow()
+    }
+
+    private fun hookDialogShow() {
+        try {
+            val dialogClass = Class.forName("android.app.Dialog")
+            val showMethod = dialogClass.getDeclaredMethod("show")
+            ModuleMain.instance.hook(showMethod)
                 .setExceptionMode(io.github.libxposed.api.XposedInterface.ExceptionMode.PROTECTIVE)
                 .intercept(object : io.github.libxposed.api.XposedInterface.Hooker {
                     override fun intercept(chain: io.github.libxposed.api.XposedInterface.Chain): Any? {
                         val result = chain.proceed()
-                        val view = chain.args[0] as? View ?: return result
-                        val lp = chain.args.getOrNull(1) as? ViewGroup.LayoutParams ?: return result
-                        if (lp is WindowManager.LayoutParams &&
-                            lp.title == "com.milink.card.frame.library.host.MLCard") {
-                            log("MLCard window detected")
-                            handler.postDelayed({ onCardWindowAdded(view as? ViewGroup) }, 200)
-                        }
+                        val dialog = chain.thisObject
+                        val window = dialog.javaClass.getMethod("getWindow").invoke(dialog) as? android.view.Window
+                        val decorView = window?.decorView as? ViewGroup ?: return result
+                        handler.postDelayed({ checkForCardView(decorView, "Dialog") }, 200)
                         return result
                     }
                 })
-            log("hooked WindowManagerGlobal.addView")
+            log("hooked Dialog.show")
         } catch (e: Exception) {
-            log("FAILED to hook WindowManager: ${e.message}")
+            log("Dialog.show hook failed: ${e.message}")
         }
     }
 
-    // ── Card window detected ───────────────────────────────
+    // ── Window addView hook ────────────────────────────────
 
-    private fun onCardWindowAdded(rootView: ViewGroup?) {
-        if (rootView == null) return
+    private fun hookAddViewMethod(method: java.lang.reflect.Method, className: String) {
+        ModuleMain.instance.hook(method)
+            .setExceptionMode(io.github.libxposed.api.XposedInterface.ExceptionMode.PROTECTIVE)
+            .intercept(object : io.github.libxposed.api.XposedInterface.Hooker {
+                override fun intercept(chain: io.github.libxposed.api.XposedInterface.Chain): Any? {
+                    val result = chain.proceed()
+                    val view = chain.args[0] as? View ?: return result
+                    val lp = chain.args.getOrNull(1) as? ViewGroup.LayoutParams ?: return result
+                    if (lp is WindowManager.LayoutParams) {
+                        val title = lp.title?.toString() ?: ""
+                        if (title.isNotEmpty()) {
+                            log("WM title=\"$title\"")
+                        }
+                        if (cardTitlePatterns.any { title.contains(it, ignoreCase = true) }) {
+                            log("!!! MLCard $className")
+                            handler.postDelayed({ checkForCardView(view, className) }, 300)
+                        }
+                    }
+                    return result
+                }
+            })
+    }
 
-        // Find the device name TextView and overlay FrameLayout
-        val finder = ViewFinder()
-        rootView.findViewsWithText(
-            ArrayList<View>().also { rootView.findViewsWithText(it, "查找超时", View.FIND_VIEWS_WITH_TEXT) },
-            "查找超时", View.FIND_VIEWS_WITH_TEXT
-        )
+    // ── Card view check (deduped) ──────────────────────────
 
-        // Traverse manually for the overlay FrameLayout (Loading/Error state container)
-        val overlay = findOverlayFrame(rootView) ?: run {
-            log("overlay FrameLayout not found in card view")
+    private fun checkForCardView(view: View, source: String) {
+        val root = view as? ViewGroup ?: return
+        if (!processedCards.add(view)) return  // dedup
+
+        log("checking card from $source: ${root.javaClass.simpleName}[${root.childCount}]")
+        dumpViewTree(root, 0, 2)
+
+        val deviceName = findDeviceNameInCard(root) ?: run {
+            log("no device name found in card")
             return
         }
-        val deviceNameView = findDeviceNameText(overlay)
-        val deviceName = deviceNameView?.text?.toString() ?: return
+        log("device name: \"$deviceName\"")
 
-        if (!MiLinkIdentityHook.matchesSonyPattern(deviceName)) return
-        log("Sony card detected: \"$deviceName\"")
+        if (!MiLinkIdentityHook.matchesSonyPattern(deviceName)) {
+            log("not Sony → skip")
+            return
+        }
+        log("Sony confirmed: \"$deviceName\"")
 
         val mac = MiLinkIdentityHook.lastSonyMac
         if (mac == null) {
-            log("no cached MAC, cannot connect")
+            log("no cached MAC")
             return
         }
 
-        // Get Context from the view (com.milink.service has Bluetooth permissions)
-        val context = rootView.context.applicationContext
+        // Inject into the card's content area — find MainCardView or RelativeLayout
+        val injectTarget = findCardContentArea(root) ?: root
+        log("injecting into ${injectTarget.javaClass.simpleName}")
 
-        // Inject content container
+        val context = root.context.applicationContext
         val container = LinearLayout(context).apply {
+            id = View.generateViewId()
+            tag = "openbuds_card_content"
             orientation = LinearLayout.VERTICAL
-            setPadding(24, 16, 24, 16)
-            setBackgroundColor(Color.argb(180, 10, 10, 30))
-            visibility = View.GONE // hidden until we have data
+            setPadding(32, 20, 32, 20)
             addView(TextView(context).apply {
                 textSize = 12f
                 setTextColor(Color.parseColor("#888888"))
                 typeface = Typeface.MONOSPACE
-                text = "Connecting via BLE..."
+                text = "Connecting BLE..."
                 id = View.generateViewId()
-                tag = "card_status"
+                tag = "openbuds_card_status"
             })
         }
         injectedContainer = container
-        overlay.addView(container)
+        injectTarget.addView(container)
 
-        // Start BLE connection via existing protocol stack
+        // Fix display name if wrong (from control center)
+        fixDeviceNameDisplay(root, deviceName)
+
         val repo = SonyHeadphoneRepository.getInstance(context)
         activeRepository = repo
         repo.connect(mac, deviceName)
-        log("BLE connecting to $mac")
+        log("repo.connect($mac)")
 
         GlobalScope.launch(Dispatchers.Main) {
             repo.state.collectLatest { state ->
@@ -145,102 +181,107 @@ class CardContentHook(private val classLoader: ClassLoader) {
         }
     }
 
+    private fun findCardContentArea(root: ViewGroup): ViewGroup? {
+        // Find MainCardView or a child RelativeLayout/LinearLayout inside it
+        val mainCard = findChildByType(root, ViewGroup::class.java) { v ->
+            v.javaClass.simpleName.contains("MainCard", ignoreCase = true)
+        }
+        if (mainCard != null && mainCard.childCount > 0) {
+            // First child is usually the content layout
+            return mainCard.getChildAt(0) as? ViewGroup
+        }
+        return null
+    }
+
+    private fun fixDeviceNameDisplay(root: ViewGroup, correctName: String) {
+        val candidates = mutableListOf<TextView>()
+        collectAllTextViews(root, candidates)
+        for (tv in candidates) {
+            if (tv.tag == "openbuds_card_status") continue  // skip our views
+            val text = tv.text?.toString() ?: ""
+            if (text.contains("的Xiaomi") || text.contains("Xiaomi") && text.length > 30) {
+                tv.text = correctName
+                log("fixed name: \"$text\" → \"$correctName\"")
+            }
+        }
+    }
+
+    private fun findDeviceNameInCard(root: ViewGroup): String? {
+        val candidates = mutableListOf<TextView>()
+        collectAllTextViews(root, candidates)
+        log("${candidates.size} TextViews")
+        for (tv in candidates.take(10)) {
+            log("  TV: \"${tv.text}\" (len=${tv.text.length} tag=${tv.tag})")
+        }
+        return candidates
+            .filter { tv ->
+                if (tv.tag == "openbuds_card_status") return@filter false  // skip ours
+                val t = tv.text.toString().trim()
+                t.isNotEmpty() && t.length in 3..50 &&
+                    !uiWords.any { t == it || t.contains(it) }
+            }
+            .maxByOrNull { it.text.length }
+            ?.text?.toString()
+    }
+
     // ── Content update ─────────────────────────────────────
 
     private fun updateCardContent(state: SonyHeadphoneUiState, container: LinearLayout, context: Context) {
         if (injectedContainer !== container) return
-
         container.removeAllViews()
-        container.visibility = View.VISIBLE
 
-        // Device name header
         val header = TextView(context).apply {
-            textSize = 16f
-            setTextColor(Color.WHITE)
-            typeface = Typeface.DEFAULT_BOLD
+            textSize = 16f; setTextColor(Color.WHITE); typeface = Typeface.DEFAULT_BOLD
             text = state.connectedDevice?.name ?: state.deviceInfo.modelName ?: "Sony Headphones"
             setPadding(0, 0, 0, 12)
         }
         container.addView(header)
 
-        // Connection / protocol status
         if (!state.deviceInfo.protocolReady) {
-            container.addView(statusLine(context, "Protocol: initializing..."))
+            container.addView(statusLine(context, "Protocol initializing..."))
             return
         }
 
-        // Battery row
         val bat = buildString {
             state.batteryState.single?.let { append("$it%  ") }
             state.batteryState.left?.let { append("L:${it}%  ") }
             state.batteryState.right?.let { append("R:${it}%  ") }
             state.batteryState.cradle?.let { append("Case:${it}%") }
         }
-        if (bat.isNotBlank()) {
-            container.addView(infoLine(context, "Battery", bat.trim()))
-        }
-
-        // Noise control
-        state.noiseControlState.controlMode?.let {
-            container.addView(infoLine(context, "Noise Control", it.name))
-        }
-
-        // EQ
-        state.eqState.preset?.let {
-            container.addView(infoLine(context, "EQ", it.name))
-        }
-
-        // Wearing state
-        state.wearingState.status?.let {
-            container.addView(infoLine(context, "Wearing", it))
-        }
+        if (bat.isNotBlank()) container.addView(infoLine(context, "Battery", bat.trim()))
+        state.noiseControlState.controlMode?.let { container.addView(infoLine(context, "Noise Control", it.name)) }
+        state.eqState.preset?.let { container.addView(infoLine(context, "EQ", it.name)) }
+        state.wearingState.status?.let { container.addView(infoLine(context, "Wearing", it)) }
     }
 
-    private fun infoLine(context: Context, label: String, value: String): TextView {
-        return TextView(context).apply {
-            textSize = 13f
-            setTextColor(Color.parseColor("#CCCCCC"))
-            text = "$label: $value"
-            setPadding(0, 4, 0, 4)
+    private fun infoLine(context: Context, label: String, value: String): TextView =
+        TextView(context).apply {
+            textSize = 13f; setTextColor(Color.parseColor("#CCCCCC"))
+            text = "$label: $value"; setPadding(0, 4, 0, 4)
         }
-    }
 
-    private fun statusLine(context: Context, text: String): TextView {
-        return TextView(context).apply {
-            textSize = 12f
-            setTextColor(Color.parseColor("#AAAAAA"))
-            this.text = text
-            setPadding(0, 4, 0, 4)
+    private fun statusLine(context: Context, text: String): TextView =
+        TextView(context).apply {
+            textSize = 12f; setTextColor(Color.parseColor("#AAAAAA"))
+            this.text = text; setPadding(0, 4, 0, 4)
         }
-    }
 
-    // ── View traversal helpers ──────────────────────────────
+    // ── View traversal ──────────────────────────────────────
 
-    private fun findOverlayFrame(root: ViewGroup): ViewGroup? {
-        return findChildByType(root, FrameLayout::class.java) { child ->
-            // The overlay has ImageView + TextView + ProgressBar children
-            var hasImage = false
-            var hasProgress = false
-            var hasText = false
-            if (child is ViewGroup) {
-                for (i in 0 until child.childCount) {
-                    when (child.getChildAt(i)) {
-                        is android.widget.ImageView -> hasImage = true
-                        is android.widget.ProgressBar -> hasProgress = true
-                        is TextView -> hasText = true
-                    }
-                }
+    private fun dumpViewTree(view: View, depth: Int, maxDepth: Int) {
+        if (depth > maxDepth) return
+        val indent = "  ".repeat(depth)
+        val desc = when (view) {
+            is ViewGroup -> "${view.javaClass.simpleName}[${view.childCount}]"
+            is TextView -> "${view.javaClass.simpleName} \"${view.text}\""
+            else -> view.javaClass.simpleName
+        }
+        log("$indent$desc")
+        if (view is ViewGroup && depth < maxDepth) {
+            for (i in 0 until view.childCount) {
+                dumpViewTree(view.getChildAt(i), depth + 1, maxDepth)
             }
-            hasImage && hasProgress && hasText
         }
-    }
-
-    private fun findDeviceNameText(parent: ViewGroup): TextView? {
-        val candidates = mutableListOf<TextView>()
-        findViewsByType(parent, TextView::class.java, candidates)
-        // Device name is the longest TextView in the overlay (not the error/toast text)
-        return candidates.filter { it.text.length > 3 && it.text.length < 50 }
-            .maxByOrNull { it.text.length }
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -256,25 +297,17 @@ class CardContentHook(private val classLoader: ClassLoader) {
         return null
     }
 
-    private fun <T : View> findViewsByType(root: ViewGroup, type: Class<T>, out: MutableList<T>) {
+    private fun collectAllTextViews(root: ViewGroup, out: MutableList<TextView>) {
         for (i in 0 until root.childCount) {
             val child = root.getChildAt(i)
-            if (type.isInstance(child)) out.add(child as T)
-            if (child is ViewGroup) findViewsByType(child, type, out)
+            if (child is TextView) out.add(child)
+            if (child is ViewGroup) collectAllTextViews(child, out)
         }
     }
 
-    // ── ViewFinder helper class ─────────────────────────────
-
-    private class ViewFinder : ArrayList<View>() {
-        // Used with findViewsWithText
-    }
-
-    // ── Logging ─────────────────────────────────────────────
-
     companion object {
         fun log(msg: String) {
-            android.util.Log.i("OpenBuds", "[CardContent] $msg")
+            android.util.Log.i("OpenBuds", "[CC] $msg")
         }
     }
 }
