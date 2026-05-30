@@ -27,14 +27,8 @@ class ModuleMain : XposedModule() {
         val cl = param.defaultClassLoader ?: return
 
         when (param.packageName) {
-            "com.android.bluetooth" -> BluetoothProcessHook(cl).probe()
-            "com.xiaomi.bluetooth" -> {
-                val hook = XiaomiBluetoothHook(cl)
-                hook.probe()
-                hook.hook()
-            }
-            "com.android.systemui" -> {
-                val hook = SystemUiHook(cl)
+            "com.milink.service" -> {
+                val hook = MiLinkServiceHook(cl)
                 hook.probe()
                 hook.hook()
             }

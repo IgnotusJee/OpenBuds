@@ -14,8 +14,6 @@ data class AppSettings(
     val notificationPersistent: Boolean = true,
     val notificationLockscreen: Boolean = true,
     val connectionPopup: Boolean = false,
-    val hyperOsNotification: Boolean = false,
-    val controlCenterIntercept: Boolean = false,
 )
 
 class AppSettingsStore(private val context: Context) {
@@ -25,8 +23,6 @@ class AppSettingsStore(private val context: Context) {
             notificationPersistent = prefs[NotificationPersistentKey] ?: true,
             notificationLockscreen = prefs[NotificationLockscreenKey] ?: true,
             connectionPopup = prefs[ConnectionPopupKey] ?: false,
-            hyperOsNotification = prefs[HyperOsNotificationKey] ?: false,
-            controlCenterIntercept = prefs[ControlCenterInterceptKey] ?: false,
         )
     }
 
@@ -54,24 +50,10 @@ class AppSettingsStore(private val context: Context) {
         }
     }
 
-    suspend fun setHyperOsNotification(enabled: Boolean) {
-        context.openbudsUiSettingsDataStore.edit { prefs ->
-            prefs[HyperOsNotificationKey] = enabled
-        }
-    }
-
-    suspend fun setControlCenterIntercept(enabled: Boolean) {
-        context.openbudsUiSettingsDataStore.edit { prefs ->
-            prefs[ControlCenterInterceptKey] = enabled
-        }
-    }
-
     private companion object {
         val ServiceBackgroundRunKey = booleanPreferencesKey("service_background_run")
         val NotificationPersistentKey = booleanPreferencesKey("notification_persistent")
         val NotificationLockscreenKey = booleanPreferencesKey("notification_lockscreen")
         val ConnectionPopupKey = booleanPreferencesKey("connection_popup")
-        val HyperOsNotificationKey = booleanPreferencesKey("hyper_os_notification")
-        val ControlCenterInterceptKey = booleanPreferencesKey("control_center_intercept")
     }
 }
