@@ -1,29 +1,15 @@
-package dev.ignotus.openbuds.ui
+package dev.ignotus.openbuds.data.settings
 
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.intPreferencesKey
-import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import dev.ignotus.openbuds.R
 
 private val Context.openbudsUiSettingsDataStore by preferencesDataStore("openbuds_ui_settings_v2")
 
-enum class AppColorMode(val titleResId: Int) {
-    Light(R.string.color_mode_light),
-    Dark(R.string.color_mode_dark),
-    System(R.string.color_mode_system),
-}
-
-data class AppUiSettings(
-    val navigationBarMode: String = ReareyeNavigationBarMode.Floating.name,
-    val themeStyle: String = ThemeStyle.Material.name,
-    val colorMode: String = AppColorMode.System.name,
-    val seedColorIndex: Int = 0,
-    val effectsEnabled: Boolean = false,
+data class AppSettings(
     val serviceBackgroundRun: Boolean = false,
     val notificationPersistent: Boolean = true,
     val notificationLockscreen: Boolean = true,
@@ -32,14 +18,9 @@ data class AppUiSettings(
     val controlCenterIntercept: Boolean = false,
 )
 
-class AppUiSettingsStore(private val context: Context) {
-    val settings: Flow<AppUiSettings> = context.openbudsUiSettingsDataStore.data.map { prefs ->
-        AppUiSettings(
-            navigationBarMode = prefs[NavigationBarModeKey] ?: ReareyeNavigationBarMode.Floating.name,
-            themeStyle = prefs[ThemeStyleKey] ?: ThemeStyle.Material.name,
-            colorMode = prefs[ColorModeKey] ?: AppColorMode.System.name,
-            seedColorIndex = prefs[SeedColorIndexKey] ?: 0,
-            effectsEnabled = prefs[EffectsEnabledKey] ?: false,
+class AppSettingsStore(private val context: Context) {
+    val settings: Flow<AppSettings> = context.openbudsUiSettingsDataStore.data.map { prefs ->
+        AppSettings(
             serviceBackgroundRun = prefs[ServiceBackgroundRunKey] ?: false,
             notificationPersistent = prefs[NotificationPersistentKey] ?: true,
             notificationLockscreen = prefs[NotificationLockscreenKey] ?: true,
@@ -47,36 +28,6 @@ class AppUiSettingsStore(private val context: Context) {
             hyperOsNotification = prefs[HyperOsNotificationKey] ?: false,
             controlCenterIntercept = prefs[ControlCenterInterceptKey] ?: false,
         )
-    }
-
-    suspend fun setNavigationBarMode(mode: ReareyeNavigationBarMode) {
-        context.openbudsUiSettingsDataStore.edit { prefs ->
-            prefs[NavigationBarModeKey] = mode.name
-        }
-    }
-
-    suspend fun setThemeStyle(style: ThemeStyle) {
-        context.openbudsUiSettingsDataStore.edit { prefs ->
-            prefs[ThemeStyleKey] = style.name
-        }
-    }
-
-    suspend fun setColorMode(mode: AppColorMode) {
-        context.openbudsUiSettingsDataStore.edit { prefs ->
-            prefs[ColorModeKey] = mode.name
-        }
-    }
-
-    suspend fun setSeedColorIndex(index: Int) {
-        context.openbudsUiSettingsDataStore.edit { prefs ->
-            prefs[SeedColorIndexKey] = index
-        }
-    }
-
-    suspend fun setEffectsEnabled(enabled: Boolean) {
-        context.openbudsUiSettingsDataStore.edit { prefs ->
-            prefs[EffectsEnabledKey] = enabled
-        }
     }
 
     suspend fun setServiceBackgroundRun(enabled: Boolean) {
@@ -116,11 +67,6 @@ class AppUiSettingsStore(private val context: Context) {
     }
 
     private companion object {
-        val NavigationBarModeKey = stringPreferencesKey("navigation_bar_mode")
-        val ThemeStyleKey = stringPreferencesKey("theme_style")
-        val ColorModeKey = stringPreferencesKey("color_mode")
-        val SeedColorIndexKey = intPreferencesKey("seed_color_index")
-        val EffectsEnabledKey = booleanPreferencesKey("effects_enabled")
         val ServiceBackgroundRunKey = booleanPreferencesKey("service_background_run")
         val NotificationPersistentKey = booleanPreferencesKey("notification_persistent")
         val NotificationLockscreenKey = booleanPreferencesKey("notification_lockscreen")
@@ -129,10 +75,3 @@ class AppUiSettingsStore(private val context: Context) {
         val ControlCenterInterceptKey = booleanPreferencesKey("control_center_intercept")
     }
 }
-
-fun resolveDarkTheme(colorMode: AppColorMode, systemDarkTheme: Boolean): Boolean =
-    when (colorMode) {
-        AppColorMode.Light -> false
-        AppColorMode.Dark -> true
-        AppColorMode.System -> systemDarkTheme
-    }

@@ -6,7 +6,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Handler
 import android.os.HandlerThread
-import dev.ignotus.openbuds.QuickPopupActivity
+import dev.ignotus.openbuds.MainActivity
 import io.github.libxposed.api.XposedInterface
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -105,7 +105,7 @@ class DeviceCardHook(private val pluginClassLoader: ClassLoader) {
                 if (received && localMac != null && localMac == deviceId) {
                     ModuleMain.instance.log("DeviceCardHook: MAC match, launching QuickPopup")
                     context.startActivity(
-                        Intent(context, QuickPopupActivity::class.java).apply {
+                        Intent(context, MainActivity::class.java).apply {
                             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         }
                     )

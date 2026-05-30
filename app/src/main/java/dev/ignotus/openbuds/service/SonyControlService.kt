@@ -13,10 +13,9 @@ import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import dev.ignotus.openbuds.MainActivity
-import dev.ignotus.openbuds.QuickPopupActivity
 import dev.ignotus.openbuds.data.SonyHeadphoneRepository
+import dev.ignotus.openbuds.data.settings.AppSettingsStore
 import dev.ignotus.openbuds.lsposed.CrossProcessActions
-import dev.ignotus.openbuds.ui.AppUiSettingsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -73,7 +72,7 @@ class SonyControlService : Service() {
         repository = SonyHeadphoneRepository.getInstance(this)
         startForeground(NOTIFICATION_ID, createNotification(DeviceStateSnapshot.EMPTY))
 
-        val settingsStore = AppUiSettingsStore(this)
+        val settingsStore = AppSettingsStore(this)
         serviceScope.launch {
             settingsStore.settings.collect { settings ->
                 hyperOsEnabled = settings.hyperOsNotification
@@ -104,12 +103,6 @@ class SonyControlService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_DISCONNECT -> repository.disconnect()
-            ACTION_SHOW_POPUP -> {
-                val popupIntent = Intent(this@SonyControlService, QuickPopupActivity::class.java).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                startActivity(popupIntent)
-            }
         }
         return START_STICKY
     }
@@ -145,14 +138,6 @@ class SonyControlService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
 
-        val popupIntent = Intent(this@SonyControlService, QuickPopupActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        val popupPending = PendingIntent.getActivity(
-            this, 2, popupIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
-        )
-
         val mainIntent = Intent(this, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         }
@@ -167,7 +152,6 @@ class SonyControlService : Service() {
             .setContentText(content)
             .setContentIntent(mainPending)
             .setOngoing(connected)
-            .addAction(0, "Popup", popupPending)
             .apply { if (connected) addAction(0, "Disconnect", disconnectPending) }
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .build()
@@ -216,7 +200,6 @@ class SonyControlService : Service() {
         private const val CHANNEL_ID = "sony_control_service"
         private const val NOTIFICATION_ID = 2001
         const val ACTION_DISCONNECT = "dev.ignotus.openbuds.action.DISCONNECT"
-        const val ACTION_SHOW_POPUP = "dev.ignotus.openbuds.action.SHOW_QUICK_POPUP"
 
         @Volatile
         var currentDeviceMac: String? = null

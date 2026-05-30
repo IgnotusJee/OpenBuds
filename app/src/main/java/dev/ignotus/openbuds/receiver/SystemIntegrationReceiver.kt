@@ -5,7 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Binder
 import android.util.Log
-import dev.ignotus.openbuds.QuickPopupActivity
+import dev.ignotus.openbuds.MainActivity
 import dev.ignotus.openbuds.lsposed.CrossProcessActions
 import dev.ignotus.openbuds.service.SonyControlService
 
@@ -25,7 +25,7 @@ class SystemIntegrationReceiver : BroadcastReceiver() {
 
         when (intent.action) {
             CrossProcessActions.ACTION_SHOW_QUICK_POPUP -> {
-                val popupIntent = Intent(context, QuickPopupActivity::class.java).apply {
+                val popupIntent = Intent(context, MainActivity::class.java).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     intent.getStringExtra(CrossProcessActions.EXTRA_DEVICE_MAC)
                         ?.let { putExtra(CrossProcessActions.EXTRA_DEVICE_MAC, it) }

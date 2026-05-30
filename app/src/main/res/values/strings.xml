@@ -1,6 +1,9 @@
 <resources>
     <string name="app_name">OpenBuds</string>
 
+    <!-- ===== Crash Handler ===== -->
+    <string name="crash_handle_title">App Crashed</string>
+
     <!-- ===== Navigation ===== -->
     <string name="nav_home">Home</string>
     <string name="nav_device">Device</string>
