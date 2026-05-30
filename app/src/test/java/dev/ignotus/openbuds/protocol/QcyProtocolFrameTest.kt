@@ -1,5 +1,7 @@
 package dev.ignotus.openbuds.protocol
 
+import dev.ignotus.openbuds.protocol.qcy.QcyProtocol
+import dev.ignotus.openbuds.protocol.qcy.QcyTlvEntry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue

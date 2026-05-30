@@ -1,6 +1,7 @@
 package dev.ignotus.openbuds.headphones
 
-import dev.ignotus.openbuds.ble.DiscoveredSonyDevice
+import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
+import dev.ignotus.openbuds.headphones.qcy.QcyHeadphoneAdapter
 import dev.ignotus.openbuds.protocol.ParsedHeadphoneResponse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

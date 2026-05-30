@@ -1,5 +1,7 @@
-package dev.ignotus.openbuds.headphones
+package dev.ignotus.openbuds.headphones.sony
 
+import dev.ignotus.openbuds.headphones.HeadphoneProtocolVariant
+import dev.ignotus.openbuds.headphones.TandemChannel
 import dev.ignotus.openbuds.protocol.AmbientSoundMode
 import dev.ignotus.openbuds.protocol.EqPresetId
 import dev.ignotus.openbuds.protocol.NoiseControlMode

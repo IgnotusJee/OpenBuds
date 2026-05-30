@@ -1,4 +1,4 @@
-package dev.ignotus.openbuds.ble
+package dev.ignotus.openbuds.ble.sony
 
 import dev.ignotus.openbuds.headphones.TandemChannel
 import dev.ignotus.openbuds.protocol.sony.SonyGatt

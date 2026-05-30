@@ -1,9 +1,9 @@
 package dev.ignotus.openbuds.data
 
-import dev.ignotus.openbuds.ble.DiscoveredSonyDevice
+import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
 import dev.ignotus.openbuds.headphones.EqWriteContext
 import dev.ignotus.openbuds.headphones.HeadphoneAdapterRegistry
-import dev.ignotus.openbuds.headphones.SonyTandemHeadphoneAdapter
+import dev.ignotus.openbuds.headphones.sony.SonyTandemHeadphoneAdapter
 import dev.ignotus.openbuds.protocol.EqPresetId
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals

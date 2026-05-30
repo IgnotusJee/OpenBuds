@@ -1,7 +1,23 @@
-package dev.ignotus.openbuds.headphones
+package dev.ignotus.openbuds.headphones.qcy
 
-import dev.ignotus.openbuds.ble.DiscoveredSonyDevice
-import dev.ignotus.openbuds.headphones.qcydevices.QcyC30SProfile
+import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
+import dev.ignotus.openbuds.headphones.ConnectedHeadphoneProfile
+import dev.ignotus.openbuds.headphones.EqDeviceConfig
+import dev.ignotus.openbuds.headphones.sony.EqProtocolEngine
+import dev.ignotus.openbuds.headphones.EqWriteContext
+import dev.ignotus.openbuds.headphones.FeatureProtocolBinding
+import dev.ignotus.openbuds.headphones.HeadphoneAdapter
+import dev.ignotus.openbuds.headphones.HeadphoneCapabilities
+import dev.ignotus.openbuds.headphones.HeadphoneCommand
+import dev.ignotus.openbuds.headphones.HeadphoneFeature
+import dev.ignotus.openbuds.headphones.HeadphoneFormFactor
+import dev.ignotus.openbuds.headphones.HeadphoneProtocolVariant
+import dev.ignotus.openbuds.headphones.HeadphoneTransport
+import dev.ignotus.openbuds.headphones.InfoLayoutHint
+import dev.ignotus.openbuds.headphones.PlaybackDispatchStrategy
+import dev.ignotus.openbuds.headphones.ProfileTemplate
+import dev.ignotus.openbuds.headphones.TandemChannel
+import dev.ignotus.openbuds.headphones.qcy.devices.QcyC30SProfile
 import dev.ignotus.openbuds.protocol.AmbientSoundMode
 import dev.ignotus.openbuds.protocol.EqPresetId
 import dev.ignotus.openbuds.protocol.NoiseControlMode

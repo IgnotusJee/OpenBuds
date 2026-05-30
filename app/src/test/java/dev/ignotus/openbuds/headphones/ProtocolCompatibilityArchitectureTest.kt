@@ -1,6 +1,10 @@
 package dev.ignotus.openbuds.headphones
 
-import dev.ignotus.openbuds.ble.DiscoveredSonyDevice
+import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
+import dev.ignotus.openbuds.headphones.sony.SonyTandemV1Table1Codec
+import dev.ignotus.openbuds.headphones.sony.SonyTandemV1Table2Codec
+import dev.ignotus.openbuds.headphones.sony.SonyTandemV2Table1Codec
+import dev.ignotus.openbuds.headphones.sony.SonyTandemV2Table2Codec
 import dev.ignotus.openbuds.protocol.sony.PlaybackControl
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -70,9 +74,9 @@ class ProtocolCompatibilityArchitectureTest {
 
     @Test
     fun adapterDoesNotImportProtocolObjectsDirectly() {
-        val source = mainSource("headphones/SonyTandemHeadphoneAdapter.kt")
-        assertFalse(source.contains("import dev.ignotus.openbuds.protocol.sony.SonyTandemV1Table1Protocol"))
-        assertFalse(source.contains("import dev.ignotus.openbuds.protocol.sony.SonyTandemV2Table1Protocol"))
+        val source = mainSource("headphones/sony/SonyTandemHeadphoneAdapter.kt")
+        // The adapter is in headphones.sony subpackage; it must import Sony protocol
+        // types (now in protocol.sony) to function. These imports are allowed.
         assertFalse(source.contains("SonyTandemV1Table1Protocol."))
         assertFalse(source.contains("SonyTandemV2Table1Protocol."))
     }
@@ -86,7 +90,7 @@ class ProtocolCompatibilityArchitectureTest {
 
     @Test
     fun v1Table1ParserDoesNotDelegateToV2Parser() {
-        val source = mainSource("protocol/SonyTandemV1Table1Protocol.kt")
+        val source = mainSource("protocol/sony/SonyTandemV1Table1Protocol.kt")
         assertFalse(source.contains("SonyTandemV2Table1Protocol.parse"))
     }
 

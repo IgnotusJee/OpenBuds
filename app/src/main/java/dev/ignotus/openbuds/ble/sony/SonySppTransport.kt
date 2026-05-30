@@ -1,4 +1,4 @@
-package dev.ignotus.openbuds.ble
+package dev.ignotus.openbuds.ble.sony
 
 import android.bluetooth.BluetoothSocket
 import dev.ignotus.openbuds.protocol.hexString

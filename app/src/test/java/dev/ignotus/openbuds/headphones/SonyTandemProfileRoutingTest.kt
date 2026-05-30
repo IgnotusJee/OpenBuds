@@ -1,7 +1,12 @@
 package dev.ignotus.openbuds.headphones
 
-import dev.ignotus.openbuds.ble.DiscoveredSonyDevice
+import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
+import dev.ignotus.openbuds.headphones.sony.SonyTandemHeadphoneAdapter
 import dev.ignotus.openbuds.protocol.AmbientSoundMode
+import dev.ignotus.openbuds.protocol.EqPresetId
+import dev.ignotus.openbuds.protocol.NoiseControlMode
+import dev.ignotus.openbuds.protocol.ParsedHeadphoneResponse
+import dev.ignotus.openbuds.protocol.PlaybackStatus
 import dev.ignotus.openbuds.protocol.sony.DeviceInfoType
 import dev.ignotus.openbuds.protocol.sony.EqEbbInquiredType
 import dev.ignotus.openbuds.protocol.sony.NcAsmInquiredType

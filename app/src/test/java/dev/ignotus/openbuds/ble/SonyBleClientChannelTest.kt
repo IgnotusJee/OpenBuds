@@ -1,5 +1,7 @@
 package dev.ignotus.openbuds.ble
 
+import dev.ignotus.openbuds.ble.sony.TandemGattRouting
+import dev.ignotus.openbuds.ble.sony.tandemEndpointSupportState
 import dev.ignotus.openbuds.headphones.TandemChannel
 import dev.ignotus.openbuds.protocol.sony.SonyGatt
 import org.junit.Assert.assertEquals

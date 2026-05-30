@@ -1,6 +1,25 @@
 package dev.ignotus.openbuds.protocol
 
+import dev.ignotus.openbuds.protocol.sony.CommonInquiredType
+import dev.ignotus.openbuds.protocol.sony.DeviceInfoType
+import dev.ignotus.openbuds.protocol.sony.EqBandInformationType
+import dev.ignotus.openbuds.protocol.sony.EqEbbInquiredType
+import dev.ignotus.openbuds.protocol.sony.LeaEnableDisable
+import dev.ignotus.openbuds.protocol.sony.LeaInquiredType
+import dev.ignotus.openbuds.protocol.sony.LeaPairedHistory
+import dev.ignotus.openbuds.protocol.sony.LeaStreamingStatus
+import dev.ignotus.openbuds.protocol.sony.NcAsmInquiredType
+import dev.ignotus.openbuds.protocol.sony.PlaybackControl
+import dev.ignotus.openbuds.protocol.sony.PlayInquiredType
+import dev.ignotus.openbuds.protocol.sony.PowerInquiredType
+import dev.ignotus.openbuds.protocol.sony.QuickAccessFunction
+import dev.ignotus.openbuds.protocol.sony.QuickAccessKey
+import dev.ignotus.openbuds.protocol.sony.SonyTandemV1Table1Protocol
+import dev.ignotus.openbuds.protocol.sony.SonyTandemV2Table1Protocol
+import dev.ignotus.openbuds.protocol.sony.WearingDetectionResult
+import dev.ignotus.openbuds.protocol.sony.WearingDetectionStatus
 import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue

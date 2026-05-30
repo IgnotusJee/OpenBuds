@@ -1,4 +1,4 @@
-package dev.ignotus.openbuds.headphones.qcydevices
+package dev.ignotus.openbuds.headphones.qcy.devices
 
 import dev.ignotus.openbuds.headphones.EqDeviceConfig
 import dev.ignotus.openbuds.headphones.HeadphoneCapabilities

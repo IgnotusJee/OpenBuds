@@ -1,4 +1,4 @@
-package dev.ignotus.openbuds.ble
+package dev.ignotus.openbuds.ble.sony
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -22,6 +22,9 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
+import dev.ignotus.openbuds.ble.HeadphoneTransportClient
+import dev.ignotus.openbuds.ble.sony.SonyBleClientListener
+import dev.ignotus.openbuds.ble.sony.SonyBleConnectionInfo
 import dev.ignotus.openbuds.headphones.TandemChannel
 import dev.ignotus.openbuds.protocol.qcy.QcyGatt
 import dev.ignotus.openbuds.protocol.sony.SonyGatt

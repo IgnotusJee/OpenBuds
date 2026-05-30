@@ -1,5 +1,6 @@
 package dev.ignotus.openbuds.ble
 
+import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
 import dev.ignotus.openbuds.headphones.TandemChannel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

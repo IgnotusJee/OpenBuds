@@ -1,4 +1,4 @@
-package dev.ignotus.openbuds.headphones.sonydevices
+package dev.ignotus.openbuds.headphones.sony.devices
 
 import dev.ignotus.openbuds.headphones.ClearBassWriteMode
 import dev.ignotus.openbuds.headphones.EqDeviceConfig
@@ -12,7 +12,7 @@ import dev.ignotus.openbuds.protocol.sony.EqEbbInquiredType
 import dev.ignotus.openbuds.protocol.sony.NcAsmInquiredType
 import dev.ignotus.openbuds.protocol.sony.PowerInquiredType
 
-object LinkBudsSProfile {
+object Wh1000Xm4Profile {
     private val features = setOf(
         HeadphoneFeature.DEVICE_INFO,
         HeadphoneFeature.BATTERY,
@@ -22,26 +22,20 @@ object LinkBudsSProfile {
         HeadphoneFeature.PLAYBACK_CONTROL,
         HeadphoneFeature.EQ,
         HeadphoneFeature.CLEAR_BASS,
-        HeadphoneFeature.LEA_STATUS,
-        HeadphoneFeature.QUICK_ACCESS,
-        HeadphoneFeature.WEARING_STATUS,
     )
 
     val template = ProfileTemplate(
-        modelName = "LinkBuds S",
-        series = "LINK_BUDS",
+        modelName = "WH-1000XM4",
+        series = "PREMIUM",
         capabilities = HeadphoneCapabilities(
             features = features,
-            formFactor = HeadphoneFormFactor.TRUE_WIRELESS,
-            batteryQueries = listOf(
-                PowerInquiredType.LEFT_RIGHT_BATTERY,
-                PowerInquiredType.CRADLE_BATTERY,
-            ),
+            formFactor = HeadphoneFormFactor.HEADSET,
+            batteryQueries = listOf(PowerInquiredType.BATTERY),
             noiseControlQueryTypes = listOf(
-                NcAsmInquiredType.MODE_NC_ASM_DUAL_NC_MODE_SWITCH_AND_ASM_SEAMLESS,
+                NcAsmInquiredType.V1_TABLE_SET1_NC_ASM,
             ),
             writableNoiseControlTypes = setOf(
-                NcAsmInquiredType.MODE_NC_ASM_DUAL_NC_MODE_SWITCH_AND_ASM_SEAMLESS,
+                NcAsmInquiredType.V1_TABLE_SET1_NC_ASM,
             ),
             eqConfig = EqDeviceConfig(
                 availablePresets = listOf(
@@ -61,11 +55,14 @@ object LinkBudsSProfile {
                 writeInquiredType = EqEbbInquiredType.PRESET_EQ,
                 statusQueryTypes = listOf(EqEbbInquiredType.PRESET_EQ),
                 paramQueryTypes = listOf(EqEbbInquiredType.PRESET_EQ),
+                extendedInfoQueryTypes = listOf(EqEbbInquiredType.PRESET_EQ),
                 bandCount = 6,
                 hasClearBass = true,
                 clearBassWriteMode = ClearBassWriteMode.PRESET_EQ_BANDS,
             ),
+            queryProtocolInfo = false,
+            queryNoiseControlParams = true,
         ),
-        featureProtocolMap = features.associateWith { HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1 },
+        featureProtocolMap = features.associateWith { HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1 },
     )
 }

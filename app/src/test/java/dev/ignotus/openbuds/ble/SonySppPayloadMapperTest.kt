@@ -1,5 +1,7 @@
 package dev.ignotus.openbuds.ble
 
+import dev.ignotus.openbuds.ble.sony.SonySppFrameType
+import dev.ignotus.openbuds.ble.sony.SonySppPayloadMapper
 import dev.ignotus.openbuds.protocol.sony.SonyTandemConstants
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals

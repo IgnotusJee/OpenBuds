@@ -1,5 +1,7 @@
 package dev.ignotus.openbuds.ble
 
+import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
+import dev.ignotus.openbuds.ble.sony.SonyBleClientListener
 import dev.ignotus.openbuds.headphones.TandemChannel
 
 /**

@@ -1,4 +1,4 @@
-package dev.ignotus.openbuds.headphones.sonydevices
+package dev.ignotus.openbuds.headphones.sony.devices
 
 import dev.ignotus.openbuds.headphones.ClearBassWriteMode
 import dev.ignotus.openbuds.headphones.EqDeviceConfig
@@ -12,7 +12,7 @@ import dev.ignotus.openbuds.protocol.sony.EqEbbInquiredType
 import dev.ignotus.openbuds.protocol.sony.NcAsmInquiredType
 import dev.ignotus.openbuds.protocol.sony.PowerInquiredType
 
-object Wf1000Xm5Profile {
+object LinkBudsSProfile {
     private val features = setOf(
         HeadphoneFeature.DEVICE_INFO,
         HeadphoneFeature.BATTERY,
@@ -28,8 +28,8 @@ object Wf1000Xm5Profile {
     )
 
     val template = ProfileTemplate(
-        modelName = "WF-1000XM5",
-        series = "PREMIUM",
+        modelName = "LinkBuds S",
+        series = "LINK_BUDS",
         capabilities = HeadphoneCapabilities(
             features = features,
             formFactor = HeadphoneFormFactor.TRUE_WIRELESS,

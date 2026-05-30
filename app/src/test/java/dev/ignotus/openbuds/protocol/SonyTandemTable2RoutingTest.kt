@@ -1,7 +1,10 @@
 package dev.ignotus.openbuds.protocol
 
 import dev.ignotus.openbuds.headphones.HeadphoneProtocolVariant
-import dev.ignotus.openbuds.headphones.TandemCodecRegistry
+import dev.ignotus.openbuds.headphones.sony.TandemCodecRegistry
+import dev.ignotus.openbuds.protocol.sony.SonyTandemV1Table1Protocol
+import dev.ignotus.openbuds.protocol.sony.SonyTandemV2Table1Protocol
+import dev.ignotus.openbuds.protocol.sony.SonyTandemV2Table2Protocol
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue

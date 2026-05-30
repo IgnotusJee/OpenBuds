@@ -1,5 +1,16 @@
 package dev.ignotus.openbuds.protocol
 
+import dev.ignotus.openbuds.protocol.sony.LeaInquiredTypeTable2
+import dev.ignotus.openbuds.protocol.sony.PartyInquiredTypeTable2
+import dev.ignotus.openbuds.protocol.sony.PeripheralInquiredTypeTable2
+import dev.ignotus.openbuds.protocol.sony.PeripheralInquiredTypeV1Table2
+import dev.ignotus.openbuds.protocol.sony.PowerInquiredTypeTable2
+import dev.ignotus.openbuds.protocol.sony.SafeListeningInquiredTypeTable2
+import dev.ignotus.openbuds.protocol.sony.SonyTandemV1Table2Protocol
+import dev.ignotus.openbuds.protocol.sony.SonyTandemV2Table2Protocol
+import dev.ignotus.openbuds.protocol.sony.SystemInquiredTypeTable2
+import dev.ignotus.openbuds.protocol.sony.VoiceGuidanceInquiredTypeTable2
+import dev.ignotus.openbuds.protocol.sony.VoiceGuidanceInquiredTypeV1Table2
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue

@@ -4,8 +4,12 @@ import dev.ignotus.openbuds.headphones.ConnectedHeadphoneProfile
 import dev.ignotus.openbuds.headphones.HeadphoneAdapterRegistry
 import dev.ignotus.openbuds.headphones.HeadphoneFeature
 import dev.ignotus.openbuds.headphones.HeadphoneProtocolVariant
-import dev.ignotus.openbuds.headphones.SonyTandemHeadphoneAdapter
-import dev.ignotus.openbuds.ble.DiscoveredSonyDevice
+import dev.ignotus.openbuds.headphones.sony.SonyTandemHeadphoneAdapter
+import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
+import dev.ignotus.openbuds.protocol.sony.CommonInquiredType
+import dev.ignotus.openbuds.protocol.sony.PowerInquiredType
+import dev.ignotus.openbuds.protocol.sony.SonyTandemV1Table1Protocol
+import dev.ignotus.openbuds.protocol.sony.SonyTandemV2Table1Protocol
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue

@@ -1,4 +1,4 @@
-package dev.ignotus.openbuds.ble
+package dev.ignotus.openbuds.ble.qcy
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
@@ -13,6 +13,10 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import dev.ignotus.openbuds.ble.HeadphoneTransportClient
+import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
+import dev.ignotus.openbuds.ble.sony.SonyBleClientListener
+import dev.ignotus.openbuds.ble.sony.SonyBleConnectionInfo
 import dev.ignotus.openbuds.headphones.TandemChannel
 import dev.ignotus.openbuds.protocol.qcy.QcyGatt
 import dev.ignotus.openbuds.protocol.hexString

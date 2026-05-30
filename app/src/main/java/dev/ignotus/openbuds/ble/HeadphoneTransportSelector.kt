@@ -1,5 +1,6 @@
 package dev.ignotus.openbuds.ble
 
+import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
 import dev.ignotus.openbuds.headphones.TandemChannel
 import java.util.concurrent.ConcurrentHashMap
 
