@@ -213,15 +213,18 @@ class CardContentHook(private val classLoader: ClassLoader) {
         for (tv in candidates.take(10)) {
             log("  TV: \"${tv.text}\" (len=${tv.text.length} tag=${tv.tag})")
         }
-        return candidates
-            .filter { tv ->
-                if (tv.tag == "openbuds_card_status") return@filter false  // skip ours
-                val t = tv.text.toString().trim()
-                t.isNotEmpty() && t.length in 3..50 &&
-                    !uiWords.any { t == it || t.contains(it) }
-            }
-            .maxByOrNull { it.text.length }
-            ?.text?.toString()
+        // Filter: skip our injected views, UI words, account-name patterns
+        val valid = candidates.filter { tv ->
+            if (tv.tag == "openbuds_card_status") return@filter false
+            val t = tv.text.toString().trim()
+            if (t.isEmpty() || t.length !in 3..50) return@filter false
+            if (uiWords.any { t == it || t.contains(it) }) return@filter false
+            // Skip account-name format: "XXX的Xiaomi XXX" from control center
+            if (t.contains("的Xiaomi") && t.length > 10) return@filter false
+            true
+        }
+        return valid.maxByOrNull { it.text.length }?.text?.toString()
+            ?: MiLinkIdentityHook.lastSonyName  // fallback to cached name
     }
 
     // ── Content update ─────────────────────────────────────
