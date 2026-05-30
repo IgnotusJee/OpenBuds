@@ -1,6 +1,8 @@
 package dev.ignotus.openbuds.lsposed
 
 import android.bluetooth.BluetoothDevice
+import android.content.Context
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * LSPosed hook for MiLink Fusion Device Center identity spoofing.
@@ -89,6 +91,7 @@ class MiLinkIdentityHook(private val classLoader: ClassLoader) {
                         if (device != null && isSonyHeadphone(device)) {
                             log("isMiHeadset → TRUE for \"${device.name}\" (${device.address})")
                             cacheSonyDevice(device.address, device.name)
+                            preconnectBle(device.address, device.name ?: "Sony")
                             return true  // skip original MxBluetoothManager.checkIsMiTWS()
                         }
                         return chain.proceed()
@@ -158,9 +161,38 @@ class MiLinkIdentityHook(private val classLoader: ClassLoader) {
         var lastSonyName: String? = null
             private set
 
+        private val preconnectInProgress = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<String, Boolean>())
+
         fun cacheSonyDevice(mac: String, name: String?) {
             lastSonyMac = mac
             lastSonyName = name
+        }
+
+        /**
+         * Pre-connect BLE as soon as a Sony device is identified.
+         * This gives the connection a head start before the MLCard appears,
+         * so real BLE data is available by the time the card renders.
+         */
+        private fun preconnectBle(mac: String, name: String) {
+            val normalizedMac = mac.trim().uppercase()
+            if (!preconnectInProgress.add(normalizedMac)) return
+            Thread({
+                try {
+                    val atClass = Class.forName("android.app.ActivityThread")
+                    val app = atClass.getDeclaredMethod("currentApplication").invoke(null) as? Context
+                    if (app == null) {
+                        log("preconnect: no Application context")
+                        preconnectInProgress.remove(normalizedMac)
+                        return@Thread
+                    }
+                    log("preconnect: starting BLE for $name ($mac)")
+                    val repo = dev.ignotus.openbuds.data.SonyHeadphoneRepository.getInstance(app)
+                    repo.connect(mac, name)
+                } catch (e: Exception) {
+                    log("preconnect failed: ${e.message}")
+                    preconnectInProgress.remove(normalizedMac)
+                }
+            }, "OpenBuds-Preconnect-${normalizedMac.take(8)}").start()
         }
 
         /**

@@ -75,6 +75,8 @@ class MiLinkHeadsetCardHook(private val classLoader: ClassLoader) {
                     val args = chain.args
                     val deviceInfo = args.getOrNull(0) ?: return chain.proceed()
                     val cardId = args.getOrNull(1) as? Int ?: return chain.proceed()
+                    val deviceType = runCatching { invokeString(deviceInfo, "getDeviceType") }.getOrNull() ?: "?"
+                    log("MLCardViewHostService.v() called: deviceType=$deviceType cardId=$cardId")
                     if (!isTargetThirdHeadsetDevice(deviceInfo)) return chain.proceed()
 
                     val service = chain.thisObject ?: return chain.proceed()
@@ -392,8 +394,6 @@ class MiLinkHeadsetCardHook(private val classLoader: ClassLoader) {
 
     private fun scheduleSyntheticHostUpdate(hostListener: Any?, reason: String) {
         if (hostListener == null) return
-        val mac = MiLinkIdentityHook.lastSonyMac ?: return
-        if (stateByAddress[normalize(mac)]?.hostUpdateSent == true) return
         mainHandler.postDelayed({
             sendSyntheticHostUpdate(hostListener, reason)
         }, 300L)
@@ -403,14 +403,13 @@ class MiLinkHeadsetCardHook(private val classLoader: ClassLoader) {
         if (hostListener == null) return
         val mac = MiLinkIdentityHook.lastSonyMac ?: return
         val state = stateFor(mac)
-        if (state.hostUpdateSent) return
+        // Always send update — multiple cards may need it
         val headsetInfo = newHeadsetInfo(state) ?: return
         val host = newHeadsetHost(headsetInfo) ?: return
         runCatching {
             hostListener.javaClass.methods.first {
                 it.name == "onHeadsetHostUpdate" && it.parameterTypes.size == 2
             }.invoke(hostListener, HEADSET_ACTIVE_CHANGE, host)
-            state.hostUpdateSent = true
             log("synthetic HeadsetHost update sent ($reason)")
         }.onFailure {
             log("synthetic host update failed: ${it.message}")
@@ -502,7 +501,14 @@ class MiLinkHeadsetCardHook(private val classLoader: ClassLoader) {
 
     private fun syntheticStateForService(service: Any): SyntheticHeadsetState? {
         val address = getStringField(service, "deviceId") ?: return null
-        if (!isTargetAddress(address)) return null
+        val target = isTargetAddress(address)
+        // Fallback: match by device name if MAC not cached yet
+        val nameField = if (!target) getStringField(service, "devicesName") else null
+        val nameMatch = nameField != null && MiLinkIdentityHook.matchesSonyPattern(nameField)
+        if (!target && !nameMatch) return null
+        if (nameMatch && MiLinkIdentityHook.lastSonyMac == null) {
+            MiLinkIdentityHook.cacheSonyDevice(address, nameField)
+        }
         return stateFor(address).also {
             it.serviceRef = service
             val cachedName = MiLinkIdentityHook.lastSonyName
@@ -525,11 +531,27 @@ class MiLinkHeadsetCardHook(private val classLoader: ClassLoader) {
         if (type != "third_headset") return false
         val id = invokeString(deviceInfo, "getId")
         val mac = invokeString(deviceInfo, "getMac")
-        return isTargetAddress(id) || isTargetAddress(mac)
+        val byMac = isTargetAddress(id) || isTargetAddress(mac)
+        if (byMac) return true
+        // Fallback: match by name if MAC not cached yet (cross-process race)
+        val name = runCatching { invokeString(deviceInfo, "getName") }.getOrNull()
+            ?: runCatching { invokeString(deviceInfo, "getDeviceName") }.getOrNull()
+        if (name != null && MiLinkIdentityHook.matchesSonyPattern(name)) {
+            // Cache this MAC for future calls
+            val addr = id ?: mac ?: return false
+            MiLinkIdentityHook.cacheSonyDevice(addr, name)
+            return true
+        }
+        log("third_headset skipped: id=$id mac=$mac name=$name (no match)")
+        return false
     }
 
     private fun isTargetService(service: Any): Boolean {
-        return isTargetAddress(getStringField(service, "deviceId"))
+        val addr = getStringField(service, "deviceId")
+        if (isTargetAddress(addr)) return true
+        // Fallback: match by name if MAC not cached yet
+        val name = getStringField(service, "devicesName")
+        return name != null && MiLinkIdentityHook.matchesSonyPattern(name)
     }
 
     private fun isTargetAddress(address: String?): Boolean {
@@ -718,8 +740,7 @@ class MiLinkHeadsetCardHook(private val classLoader: ClassLoader) {
         var mode: Int = 2,
         var volume: Int = 60,
         var audioEffect: Int = -1,
-        var serviceRef: Any? = null,
-        var hostUpdateSent: Boolean = false,
+        var serviceRef: Any? = null
     )
 
     companion object {
