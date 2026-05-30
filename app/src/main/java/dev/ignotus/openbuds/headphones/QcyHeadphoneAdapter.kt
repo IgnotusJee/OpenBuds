@@ -6,9 +6,11 @@ import dev.ignotus.openbuds.protocol.AmbientSoundMode
 import dev.ignotus.openbuds.protocol.EqPresetId
 import dev.ignotus.openbuds.protocol.NoiseControlMode
 import dev.ignotus.openbuds.protocol.ParsedHeadphoneResponse
-import dev.ignotus.openbuds.protocol.PlaybackControl
+import dev.ignotus.openbuds.protocol.sony.EqEbbInquiredType
+import dev.ignotus.openbuds.protocol.sony.PlaybackControl
 import dev.ignotus.openbuds.protocol.QcyEqBand
-import dev.ignotus.openbuds.protocol.QcyProtocol
+import dev.ignotus.openbuds.protocol.qcy.QcyProtocol
+import dev.ignotus.openbuds.protocol.qcy.QcyTlvEntry
 import dev.ignotus.openbuds.protocol.unsigned
 
 /**
@@ -68,7 +70,7 @@ object QcyHeadphoneAdapter : HeadphoneAdapter {
                 writableNoiseControlTypes = emptySet(),
                 eqConfig = EqDeviceConfig(
                     availablePresets = listOf(EqPresetId.OFF),
-                    writeInquiredType = dev.ignotus.openbuds.protocol.EqEbbInquiredType.PRESET_EQ,
+                    writeInquiredType = dev.ignotus.openbuds.protocol.sony.EqEbbInquiredType.PRESET_EQ,
                     statusQueryTypes = emptyList(),
                     paramQueryTypes = emptyList(),
                     bandCount = 0,
@@ -351,7 +353,7 @@ object QcyHeadphoneAdapter : HeadphoneAdapter {
      * The `raw` parameter is the full frame for traceability; individual subtypes
      * also keep entry.data for debugging.
      */
-    private fun mapTlvEntry(entry: dev.ignotus.openbuds.protocol.QcyTlvEntry, raw: ByteArray): ParsedHeadphoneResponse? {
+    private fun mapTlvEntry(entry: dev.ignotus.openbuds.protocol.qcy.QcyTlvEntry, raw: ByteArray): ParsedHeadphoneResponse? {
         return when (entry.cmdId) {
             QcyProtocol.CMDID_BATTERY -> parseQcyBattery(entry.data)
             QcyProtocol.CMDID_NOISE_MODE -> ParsedHeadphoneResponse.Qcy.NoiseControl(

@@ -1,6 +1,8 @@
-package dev.ignotus.openbuds.protocol
+package dev.ignotus.openbuds.protocol.sony
 
-import dev.ignotus.openbuds.protocol.SonyTandemConstants.DATA_MDR
+import dev.ignotus.openbuds.protocol.ParsedHeadphoneResponse
+import dev.ignotus.openbuds.protocol.sony.SonyTandemConstants.DATA_MDR
+import dev.ignotus.openbuds.protocol.unsigned
 
 /**
  * Sony Tandem V1 Table2 codec (MC channel).

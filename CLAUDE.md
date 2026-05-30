@@ -48,7 +48,7 @@ The Android rebuild lives in `app/` as a Jetpack Compose project with package `d
 1. **BLE GATT 传输层** — `SonyBleClient.kt` + `SonySppTransport.kt` + `TandemTransportRouting.kt` — GATT握手、SPP帧封装/拆包、GATT endpoint spec（service/to-acc/from-acc UUID 三元组）、SPP payload 双向映射、设备发现和连接生命周期。不直接理解UI业务。
 2. **Tandem 协议消息层** — `protocol/SonyTandemV1Table1Protocol.kt`, `SonyTandemV2Table1Protocol.kt`, `SonyTandemV1Table2Protocol.kt`, `SonyTandemV2Table2Protocol.kt` — 命令构造和响应解析，不持有Android Context和UI状态。消息格式: `[DataType(1)] [Command(1)] [Payload(N)]`，DataType: `0x0E`=DATA_MDR(Table1), `0x0F`=DATA_MDR_NO2(Table2)。枚举和类型定义在 `SonyTandemEnums.kt`/`SonyTandemTypes.kt`/`SonyTandemConstants.kt`，EQ/EBB payload 解析由 `SonyEqEbbPayloadParser.kt` 统一处理。
 3. **Codec/Adapter/profile 层** — `TandemCodecRegistry.kt` 将 4 种 protocol variant 包装为统一 `TandemCodec` 接口；`HeadphoneAdapter.kt` 声明 `ProfileTemplate`、`FeatureProtocolBinding`、`HeadphoneCapabilities` 等类型；`SonyTandemHeadphoneAdapter.kt` 按品牌/型号选择 adapter、按功能粒度选择协议版本（`featureProtocolMap`）。新增设备型号只需增加 `ProfileTemplate`。`EqProtocolEngine.kt` 是 EQ 写入/刷新/解析的单一入口，消费 `EqDeviceConfig`（定义在各 device profile）输出 `EqUiCapability`。
-4. **应用层** — `data/SonyHeadphoneRepository.kt` — 状态聚合，不按型号直接构造协议字节。UI只消费state调用repository action。
+4. **应用层** — `data/HeadphoneRepository.kt` — 状态聚合，不按型号直接构造协议字节。UI只消费state调用repository action。
 
 关键：Repository不直接构造协议字节，UI不持有BLE状态，协议codec独立于Android框架，EQ所有路径通过EqProtocolEngine进入。
 
@@ -63,8 +63,11 @@ app/src/main/java/dev/ignotus/openbuds/
 │   ├── SonySppTransport.kt       # Sony SPP 帧、ACK、转义、校验和
 │   └── TandemTransportRouting.kt # GATT endpoint spec、SPP payload 映射、channel 路由
 ├── data/
-│   ├── SonyHeadphoneRepository.kt
-│   └── SonyModelImageCatalog.kt
+│   ├── HeadphoneRepository.kt
+│   ├── sony/
+│   │   └── SonyModelImageCatalog.kt
+│   └── qcy/
+│       └── QcyResponseMapper.kt
 ├── headphones/
 │   ├── HeadphoneAdapter.kt       # 接口、ProfileTemplate、FeatureProtocolBinding、HeadphoneCommand、HeadphoneCapabilities
 │   ├── EqProtocolEngine.kt       # 设备无关 EQ 引擎：EqDeviceConfig → EqUiCapability、写入/刷新/解析
@@ -270,7 +273,7 @@ Start-Sleep -Seconds 5
 测试缺口（按优先级）：
 - `SonySppTransport` 帧编码/解码/转义/校验和/ACK重试（高）
 - `SonyBleClient` Sony Audio AD解析（高）
-- `SonyHeadphoneRepository` 状态管理 onMessage→state更新链（中）
+- `HeadphoneRepository` 状态管理 onMessage→state更新链（中）
 - NC/ASM全部8种子类型parser测试（中）
 - V2 Table2扩展入口（低）
 

@@ -10,9 +10,9 @@
 |------|------|
 | `protocol/SonyTandemTypes.kt` | `PlaybackAck` 增加 `isUnsolicited` 字段 |
 | `protocol/SonyTandemV2Table1Protocol.kt` | parser 为 `PlaybackAck` 填充新字段 |
-| `data/SonyHeadphoneRepository.kt` | 主要修改：交叉验证、心跳、reconcile回退 |
+| `data/HeadphoneRepository.kt` | 主要修改：交叉验证、心跳、reconcile回退 |
 | `protocol/SonyTandemTypes.kt` / 新建测试 | PlaybackAck 新字段测试 |
-| `SonyHeadphoneRepository` 测试文件（新建）| 播放状态管理集成测试 |
+| `HeadphoneRepository` 测试文件（新建）| 播放状态管理集成测试 |
 
 ---
 
@@ -54,7 +54,7 @@ PLAY_NTFY_STATUS -> ParsedTandemResponse.PlaybackAck(
 
 ## Phase 2 — 收到非请求NTFY时交叉验证AudioManager
 
-### 2.1 `SonyHeadphoneRepository.kt` — `applyPlayback` 改造
+### 2.1 `HeadphoneRepository.kt` — `applyPlayback` 改造
 
 修改 `applyPlayback` 方法（第893行），当收到的消息满足以下条件时触发交叉验证：
 

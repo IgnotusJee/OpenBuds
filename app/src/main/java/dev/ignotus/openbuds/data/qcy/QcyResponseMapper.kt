@@ -4,7 +4,7 @@ import dev.ignotus.openbuds.data.HeadphoneUiState
 import dev.ignotus.openbuds.protocol.EqPresetId
 import dev.ignotus.openbuds.protocol.NoiseControlMode
 import dev.ignotus.openbuds.protocol.ParsedHeadphoneResponse
-import dev.ignotus.openbuds.protocol.QcyProtocol
+import dev.ignotus.openbuds.protocol.qcy.QcyProtocol
 
 /**
  * Maps QCY parsed responses into [HeadphoneUiState] mutations.

@@ -1,4 +1,9 @@
-package dev.ignotus.openbuds.protocol
+package dev.ignotus.openbuds.protocol.qcy
+
+import dev.ignotus.openbuds.protocol.ParsedHeadphoneResponse
+import dev.ignotus.openbuds.protocol.QcyEqBand
+import dev.ignotus.openbuds.protocol.hexString
+import dev.ignotus.openbuds.protocol.unsigned
 
 /**
  * QCY TLV frame serialization/deserialization and command ID constants.

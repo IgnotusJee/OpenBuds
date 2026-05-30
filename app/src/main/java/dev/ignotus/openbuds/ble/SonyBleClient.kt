@@ -23,8 +23,8 @@ import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
 import dev.ignotus.openbuds.headphones.TandemChannel
-import dev.ignotus.openbuds.protocol.QcyGatt
-import dev.ignotus.openbuds.protocol.SonyGatt
+import dev.ignotus.openbuds.protocol.qcy.QcyGatt
+import dev.ignotus.openbuds.protocol.sony.SonyGatt
 import dev.ignotus.openbuds.protocol.hexString
 import java.io.IOException
 import java.util.UUID

@@ -44,10 +44,10 @@ Application 子类，作为全局异常处理器。
 
 | 类/函数 | 描述 |
 |---------|------|
-| `MainActivity` | `ComponentActivity`，持有 `SonyHeadphoneRepository` 引用 |
+| `MainActivity` | `ComponentActivity`，持有 `HeadphoneRepository` 引用 |
 | `onCreate(savedInstanceState)` | 构建 LinearLayout UI：状态文本、扫描按钮、断开按钮、已发现设备列表；请求蓝牙权限；绑定 `SonyControlService`；订阅 `repository.state` Flow 更新 UI |
 | `toggleScan()` | 切换 BLE 扫描启停 |
-| `updateUi(state)` | 将 `SonyHeadphoneUiState` 渲染到文本 UI：连接状态、MAC、RSSI、协议就绪、电量、NC 模式、EQ 预设 |
+| `updateUi(state)` | 将 `HeadphoneUiState` 渲染到文本 UI：连接状态、MAC、RSSI、协议就绪、电量、NC 模式、EQ 预设 |
 | `requestPermissions()` | 按 API 级别请求 `BLUETOOTH_SCAN`/`BLUETOOTH_CONNECT`/`ACCESS_FINE_LOCATION`/`POST_NOTIFICATIONS` |
 | `bindSonyService()` | 绑定 `SonyControlService`，获取 `LocalBinder` 引用 |
 | `handleDebugIntent(intent)` | 仅 debug 构建：解析 `debug_connect_address`/`debug_action`/`debug_raw_hex` 额外参数，执行连接或调试操作 |
@@ -61,7 +61,7 @@ Application 子类，作为全局异常处理器。
 
 **包**: `dev.ignotus.openbuds.ble`
 
-传输层抽象接口，使 `SonyHeadphoneRepository` 可以统一操作 Sony 和 QCY 两种品牌的 BLE 客户端。
+传输层抽象接口，使 `HeadphoneRepository` 可以统一操作 Sony 和 QCY 两种品牌的 BLE 客户端。
 
 | 类/接口 | 描述 |
 |---------|------|
@@ -536,11 +536,11 @@ QCY TLV 帧序列化/反序列化和命令 ID 常量。
 
 ## 4. 数据层 (`data/`)
 
-### `SonyHeadphoneRepository.kt`
+### `HeadphoneRepository.kt`
 
 **包**: `dev.ignotus.openbuds.data`
 
-应用的核心状态管理单例。持有所有 BLE 客户端和传输选择器，将原始协议响应聚合成 `SonyHeadphoneUiState`，对外暴露操作动作（扫描、连接、断开、NC 控制、EQ 控制、播放控制）。
+应用的核心状态管理单例。持有所有 BLE 客户端和传输选择器，将原始协议响应聚合成 `HeadphoneUiState`，对外暴露操作动作（扫描、连接、断开、NC 控制、EQ 控制、播放控制）。
 
 **UI 状态数据类**:
 
@@ -556,7 +556,7 @@ QCY TLV 帧序列化/反序列化和命令 ID 常量。
 | `EndpointDiagnosticState` | reason, serviceLabels, leAudioSwitchCompatibility, friendlyName, publicAddress, rawReads |
 | `Table2DiagnosticState` | channel, family, command, inquiredType, values, rawHex |
 | `FeatureStatus` | title, description, implemented |
-| `SonyHeadphoneUiState` | 以上所有状态 + scanState, isScanning, permissionIssue, discoveredDevices, knownDevices, connectedDevice, connectionInfo, connectedProfile, eqUiCapability, playbackStatus, endpointDiagnostic, table2Diagnostic, supportedFeatures, debugLogs, debugLogging, autoReconnect, strictSonyScanFilter, preferredProtocol |
+| `HeadphoneUiState` | 以上所有状态 + scanState, isScanning, permissionIssue, discoveredDevices, knownDevices, connectedDevice, connectionInfo, connectedProfile, eqUiCapability, playbackStatus, endpointDiagnostic, table2Diagnostic, supportedFeatures, debugLogs, debugLogging, autoReconnect, strictSonyScanFilter, preferredProtocol |
 
 **公共动作方法**:
 
@@ -602,9 +602,9 @@ QCY TLV 帧序列化/反序列化和命令 ID 常量。
 
 ---
 
-### `SonyModelImageCatalog.kt`
+### `data/sony/SonyModelImageCatalog.kt`
 
-**包**: `dev.ignotus.openbuds.data`
+**包**: `dev.ignotus.openbuds.data.sony`
 
 Sony 耳机型号图片目录。从 `assets/sony_model_images.json` 加载型号/颜色/图片 URL 映射。
 
@@ -622,7 +622,7 @@ Sony 耳机型号图片目录。从 `assets/sony_model_images.json` 加载型号
 
 **包**: `dev.ignotus.openbuds.data.qcy`
 
-QCY 解析响应 → `SonyHeadphoneUiState` 的状态映射器。独立对象，避免污染 `SonyHeadphoneRepository`。
+QCY 解析响应 → `HeadphoneUiState` 的状态映射器。独立对象，避免污染 `HeadphoneRepository`。
 
 | 函数 | 描述 |
 |------|------|
@@ -870,7 +870,7 @@ Android AudioManager 媒体键控制。作为 Tandem 播放控制不可用时的
 
 **包**: `dev.ignotus.openbuds.service`
 
-Android 前台 Service。持有 `SonyHeadphoneRepository` 单例，提供 `LocalBinder` 供 Activity/外部进程绑定，维护前台通知，管理 MiLink 设备白名单。
+Android 前台 Service。持有 `HeadphoneRepository` 单例，提供 `LocalBinder` 供 Activity/外部进程绑定，维护前台通知，管理 MiLink 设备白名单。
 
 | 类/函数 | 描述 |
 |---------|------|
@@ -907,7 +907,7 @@ Android 前台 Service。持有 `SonyHeadphoneRepository` 单例，提供 `Local
 |------|------|
 | `toBundle()` | 将快照序列化到 `Bundle` |
 | `fromBundle(bundle)` | 从 `Bundle` 反序列化 |
-| `fromUiState(state)` | 从 `SonyHeadphoneUiState` 构造 |
+| `fromUiState(state)` | 从 `HeadphoneUiState` 构造 |
 
 ---
 
@@ -1052,7 +1052,7 @@ LSPosed 探测结果缓存。内存 + 文件（`/data/local/tmp/lsposed_probe_re
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                  Application Layer                       │
-│  SonyHeadphoneRepository  ←→  SonyHeadphoneUiState      │
+│  HeadphoneRepository  ←→  HeadphoneUiState      │
 │  MediaPlaybackController    SonyModelImageCatalog        │
 ├─────────────────────────────────────────────────────────┤
 │              Headphone Adapter Layer                     │

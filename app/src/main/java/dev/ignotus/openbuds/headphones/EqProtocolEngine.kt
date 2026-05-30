@@ -1,6 +1,6 @@
 package dev.ignotus.openbuds.headphones
 
-import dev.ignotus.openbuds.protocol.EqEbbInquiredType
+import dev.ignotus.openbuds.protocol.sony.EqEbbInquiredType
 import dev.ignotus.openbuds.protocol.EqPresetId
 import dev.ignotus.openbuds.protocol.ParsedHeadphoneResponse
 

@@ -1,4 +1,4 @@
-package dev.ignotus.openbuds.protocol
+package dev.ignotus.openbuds.protocol.sony
 
 object SonyTandemConstants {
     const val DATA_MDR: Byte = 0x0E

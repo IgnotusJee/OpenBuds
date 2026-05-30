@@ -7,7 +7,7 @@ import dev.ignotus.openbuds.headphones.HeadphoneFormFactor
 import dev.ignotus.openbuds.headphones.HeadphoneProtocolVariant
 import dev.ignotus.openbuds.headphones.InfoLayoutHint
 import dev.ignotus.openbuds.headphones.ProfileTemplate
-import dev.ignotus.openbuds.protocol.EqEbbInquiredType
+import dev.ignotus.openbuds.protocol.sony.EqEbbInquiredType
 import dev.ignotus.openbuds.protocol.EqPresetId
 
 /**

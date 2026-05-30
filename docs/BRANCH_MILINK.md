@@ -13,7 +13,7 @@
 | `25c9a50` | MainActivity 加入扫描/连接/断开功能；LSPosed 诊断日志 |
 | `f1cba24` | 挂钩进程从 com.milink.service 移到 com.android.bluetooth（参考 HyperPods/OppoPods） |
 | `711aa81` | 重写为 MiLinkIdentityHook：基于名称的 Sony 检测，无需白名单文件 |
-| `0d08235` | Phase 2：CardContentHook — 卡片弹窗内通过 SonyHeadphoneRepository 注入电池/降噪/EQ 数据 |
+| `0d08235` | Phase 2：CardContentHook — 卡片弹窗内通过 HeadphoneRepository 注入电池/降噪/EQ 数据 |
 | `67bd63f` | Phase 3 探索：HeadsetClientTraceHook + TextViewNameFixHook |
 | `7c6a998` | Phase 2 重写：MiLinkHeadsetCardHook — 协议层 hooks 实现原生第一方富控件 |
 | `f6a4ad8` | 稳定性修复：名称匹配回退、移除 hostUpdateSent、跨进程 MAC 白名单 |
@@ -29,7 +29,7 @@ LSPosed 模块 → com.milink.service
   ├── MiLinkIdentityHook        Phase 1: isMiHeadset/getHeadsetType/isCirculateDevice
   │                              ├─ Sony 耳机识别为第一方卫星贴纸 ✅
   │                              ├─ isCirculateDevice 仅在连接时返回 true
-  │                              ├─ BLE 预连接触发 → SonyHeadphoneRepository
+  │                              ├─ BLE 预连接触发 → HeadphoneRepository
   │                              └─ 跨进程 MAC 白名单写入
   ├── MiLinkHeadsetCardHook     Phase 2: 协议层 — 原生第一方富控件
   │                              ├─ MLCardViewHostService.v() → third_headset → AUDIOGLASSES
@@ -95,7 +95,7 @@ MLCardViewHostService.v(DeviceInfo, cardId)
 
 `SyntheticHeadsetState` 初始以静态占位值启动（`power=[0,0,0]`, `mode=2`, `volume=60`），卡片首次渲染后 `DataBridge` 自动启动：
 
-- `MiLinkIdentityHook.preconnectBle()` → 创建 `SonyHeadphoneRepository` 并启动 BLE 连接
+- `MiLinkIdentityHook.preconnectBle()` → 创建 `HeadphoneRepository` 并启动 BLE 连接
 - `MiLinkHeadsetCardHook.scheduleDataBridgeWhenReady()` → 重试等待 Repository 就绪（最多 10 秒）
 - `startDataBridgeCollector()` → 在独立线程中通过 `runBlocking { repo.state.collect {} }` 持续监听状态变化
 - `applyRealState()` → 映射 BLE 状态到 SyntheticHeadsetState（电量/降噪/名称），变更时推送 HeadsetHost 更新
@@ -152,7 +152,7 @@ MLCardViewHostService.v(DeviceInfo, cardId)
 | `ble/` | BLE GATT/SPP 传输层 (SonyBleClient, QcyBleClient 等) |
 | `protocol/` | Tandem V1/V2 + QCY 协议 |
 | `headphones/` | 设备适配器 + profile |
-| `data/` | SonyHeadphoneRepository + 图片目录 + settings |
+| `data/` | HeadphoneRepository + 图片目录 + settings |
 | `service/` | SonyControlService 前台服务 |
 | `receiver/` | SystemIntegrationReceiver |
 | `media/` | MediaPlaybackController |

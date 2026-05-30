@@ -1,20 +1,20 @@
 package dev.ignotus.openbuds.headphones
 
 import dev.ignotus.openbuds.protocol.AmbientSoundMode
-import dev.ignotus.openbuds.protocol.DeviceInfoType
-import dev.ignotus.openbuds.protocol.EqEbbInquiredType
 import dev.ignotus.openbuds.protocol.EqPresetId
-import dev.ignotus.openbuds.protocol.LeaInquiredType
-import dev.ignotus.openbuds.protocol.NcAsmInquiredType
 import dev.ignotus.openbuds.protocol.NoiseControlMode
 import dev.ignotus.openbuds.protocol.ParsedHeadphoneResponse
-import dev.ignotus.openbuds.protocol.PlaybackControl
-import dev.ignotus.openbuds.protocol.PlayInquiredType
-import dev.ignotus.openbuds.protocol.PowerInquiredType
-import dev.ignotus.openbuds.protocol.SonyTandemV1Table1Protocol
-import dev.ignotus.openbuds.protocol.SonyTandemV1Table2Protocol
-import dev.ignotus.openbuds.protocol.SonyTandemV2Table1Protocol
-import dev.ignotus.openbuds.protocol.SonyTandemV2Table2Protocol
+import dev.ignotus.openbuds.protocol.sony.DeviceInfoType
+import dev.ignotus.openbuds.protocol.sony.EqEbbInquiredType
+import dev.ignotus.openbuds.protocol.sony.LeaInquiredType
+import dev.ignotus.openbuds.protocol.sony.NcAsmInquiredType
+import dev.ignotus.openbuds.protocol.sony.PlaybackControl
+import dev.ignotus.openbuds.protocol.sony.PlayInquiredType
+import dev.ignotus.openbuds.protocol.sony.PowerInquiredType
+import dev.ignotus.openbuds.protocol.sony.SonyTandemV1Table1Protocol
+import dev.ignotus.openbuds.protocol.sony.SonyTandemV1Table2Protocol
+import dev.ignotus.openbuds.protocol.sony.SonyTandemV2Table1Protocol
+import dev.ignotus.openbuds.protocol.sony.SonyTandemV2Table2Protocol
 
 interface TandemCodec {
     val variant: HeadphoneProtocolVariant

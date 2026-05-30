@@ -1,4 +1,4 @@
-package dev.ignotus.openbuds.protocol
+package dev.ignotus.openbuds.protocol.qcy
 
 import java.util.UUID
 

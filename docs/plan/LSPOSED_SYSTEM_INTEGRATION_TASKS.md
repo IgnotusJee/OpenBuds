@@ -74,7 +74,7 @@
 - [x] 更新 `app/build.gradle.kts` — `compileOnly(libs.libxposed.api)` + `implementation(libs.libxposed.service)`。
 - [x] 新增 `service/DeviceStateSnapshot.kt` — 精简状态 DTO：设备名、MAC、左右/盒电量、NC 模式、ANC/ASM 开关、播放状态、EQ preset 名。提供 `fromUiState()` 映射和 `toBundle()`/`fromBundle()` 序列化。
 - [x] 新增 `service/ControlCommand.kt` — sealed class：`SetNoiseControl(mode)`, `SetAmbientLevel(level)`, `SetAmbientVoiceMode(enabled)`, `Playback(action)`, `Refresh`。
-- [x] 新增 `service/SonyControlService.kt` — 前台 Service，持有 `SonyHeadphoneRepository`，通过 `LiveData<DeviceStateSnapshot>` 暴露状态，通过 `LocalBinder.execute()` 委托命令。管理常驻通知（设备名 + 电量 + 断开/弹窗操作）。
+- [x] 新增 `service/SonyControlService.kt` — 前台 Service，持有 `HeadphoneRepository`，通过 `LiveData<DeviceStateSnapshot>` 暴露状态，通过 `LocalBinder.execute()` 委托命令。管理常驻通知（设备名 + 电量 + 断开/弹窗操作）。
 - [x] 更新 `AndroidManifest.xml` — `FOREGROUND_SERVICE` / `FOREGROUND_SERVICE_CONNECTED_DEVICE` / `POST_NOTIFICATIONS` 权限 + Service 声明。
 - [x] 更新 `AppUiSettingsStore.kt` — 新增 `serviceBackgroundRun`、`notificationPersistent`、`notificationLockscreen`、`connectionPopup` 四个偏好。
 
@@ -134,7 +134,7 @@
 审计范围：
 
 - 最近 LSPosed 系统集成基础改动：P1 到 P4。
-- 重点文件：`QuickPopupActivity.kt`、`QuickPopupScreen.kt`、`AndroidManifest.xml`、`SonyControlService.kt`、`SonyHeadphoneRepository.kt`、`SonyTandemV2Table1Protocol.kt`、`lsposed/*`。
+- 重点文件：`QuickPopupActivity.kt`、`QuickPopupScreen.kt`、`AndroidManifest.xml`、`SonyControlService.kt`、`HeadphoneRepository.kt`、`SonyTandemV2Table1Protocol.kt`、`lsposed/*`。
 - 工具结果：CodeRabbit 对 `HEAD~1` 到当前工作区的审计问题。
 
 修复清单：

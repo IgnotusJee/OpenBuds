@@ -1,7 +1,7 @@
 package dev.ignotus.openbuds.headphones
 
 import dev.ignotus.openbuds.ble.DiscoveredSonyDevice
-import dev.ignotus.openbuds.protocol.PlaybackControl
+import dev.ignotus.openbuds.protocol.sony.PlaybackControl
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -71,8 +71,8 @@ class ProtocolCompatibilityArchitectureTest {
     @Test
     fun adapterDoesNotImportProtocolObjectsDirectly() {
         val source = mainSource("headphones/SonyTandemHeadphoneAdapter.kt")
-        assertFalse(source.contains("import dev.ignotus.openbuds.protocol.SonyTandemV1Table1Protocol"))
-        assertFalse(source.contains("import dev.ignotus.openbuds.protocol.SonyTandemV2Table1Protocol"))
+        assertFalse(source.contains("import dev.ignotus.openbuds.protocol.sony.SonyTandemV1Table1Protocol"))
+        assertFalse(source.contains("import dev.ignotus.openbuds.protocol.sony.SonyTandemV2Table1Protocol"))
         assertFalse(source.contains("SonyTandemV1Table1Protocol."))
         assertFalse(source.contains("SonyTandemV2Table1Protocol."))
     }

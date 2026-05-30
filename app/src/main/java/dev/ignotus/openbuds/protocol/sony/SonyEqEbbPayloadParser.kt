@@ -1,4 +1,9 @@
-package dev.ignotus.openbuds.protocol
+package dev.ignotus.openbuds.protocol.sony
+
+import dev.ignotus.openbuds.protocol.EqPresetId
+import dev.ignotus.openbuds.protocol.ParsedHeadphoneResponse
+import dev.ignotus.openbuds.protocol.hexString
+import dev.ignotus.openbuds.protocol.unsigned
 
 internal enum class EqEbbPayloadVersion {
     V1,

@@ -32,17 +32,18 @@ import dev.ignotus.openbuds.headphones.TandemChannel
 import dev.ignotus.openbuds.media.MediaPlaybackController
 import dev.ignotus.openbuds.data.sony.SonyModelImageCatalog
 import dev.ignotus.openbuds.protocol.AmbientSoundMode
-import dev.ignotus.openbuds.protocol.DeviceInfoType
-import dev.ignotus.openbuds.protocol.EqEbbInquiredType
 import dev.ignotus.openbuds.protocol.EqPresetId
-import dev.ignotus.openbuds.protocol.NcAsmInquiredType
 import dev.ignotus.openbuds.protocol.NoiseControlMode
 import dev.ignotus.openbuds.protocol.ParsedHeadphoneResponse
-import dev.ignotus.openbuds.protocol.PlaybackControl
 import dev.ignotus.openbuds.protocol.PlaybackStatus
-import dev.ignotus.openbuds.protocol.PowerInquiredType
-import dev.ignotus.openbuds.protocol.QcyProtocol
-import dev.ignotus.openbuds.protocol.QuickAccessKey
+import dev.ignotus.openbuds.protocol.qcy.QcyProtocol
+import dev.ignotus.openbuds.protocol.sony.CommonInquiredType
+import dev.ignotus.openbuds.protocol.sony.DeviceInfoType
+import dev.ignotus.openbuds.protocol.sony.EqEbbInquiredType
+import dev.ignotus.openbuds.protocol.sony.NcAsmInquiredType
+import dev.ignotus.openbuds.protocol.sony.PlaybackControl
+import dev.ignotus.openbuds.protocol.sony.PowerInquiredType
+import dev.ignotus.openbuds.protocol.sony.QuickAccessKey
 import dev.ignotus.openbuds.protocol.hexString
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -724,7 +725,7 @@ class HeadphoneRepository private constructor(context: Context) : SonyBleClientL
 
     private fun applyCommonStatus(response: ParsedHeadphoneResponse.SonyTandem.CommonStatus) {
         appendLog("Common status ${response.type} text=${response.text} values=${response.values} raw=${response.raw.hexString()}")
-        if (response.type != dev.ignotus.openbuds.protocol.CommonInquiredType.DISPLAY_FW_VERSION) return
+        if (response.type != dev.ignotus.openbuds.protocol.sony.CommonInquiredType.DISPLAY_FW_VERSION) return
         _state.update { current ->
             current.copy(
                 deviceInfo = current.deviceInfo.copy(

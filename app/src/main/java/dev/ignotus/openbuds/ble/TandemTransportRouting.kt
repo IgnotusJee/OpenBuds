@@ -1,8 +1,8 @@
 package dev.ignotus.openbuds.ble
 
 import dev.ignotus.openbuds.headphones.TandemChannel
-import dev.ignotus.openbuds.protocol.SonyGatt
-import dev.ignotus.openbuds.protocol.SonyTandemConstants
+import dev.ignotus.openbuds.protocol.sony.SonyGatt
+import dev.ignotus.openbuds.protocol.sony.SonyTandemConstants
 import java.util.UUID
 
 data class PendingTandemWrite(

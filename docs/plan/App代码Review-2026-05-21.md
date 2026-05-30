@@ -12,7 +12,7 @@
 |------|---------|---------|------|
 | BLE GATT 传输层 | `SonyBleClient.kt` + `SonySppTransport.kt` | `ble/` | ✅ |
 | Tandem 协议消息层 | `SonyTandemV2Table1Protocol.kt` / `V1` / `V2Table2` | `protocol/` | ✅ |
-| 应用层 | `SonyHeadphoneRepository.kt` + `headphones/` adapter | `data/` + `headphones/` | ✅ |
+| 应用层 | `HeadphoneRepository.kt` + `headphones/` adapter | `data/` + `headphones/` | ✅ |
 
 DEVELOPMENT.md 规定的职责边界全部遵守。Repository 不直接构造协议字节，UI 不持有 BLE 状态。
 
@@ -89,7 +89,7 @@ SPP 接收后规范化为 `[0x0E, command, payload...]`，使 GATT 和 SPP 路�
 Repository 的 `playbackPrevious/playbackPlayPause/playbackNext` 只发送 Android `AudioManager` media key 事件，从未调用 adapter 的 `buildPlaybackCommands()`。
 
 ```kotlin
-// SonyHeadphoneRepository.kt
+// HeadphoneRepository.kt
 fun playbackPlayPause() {
     if (!canWrite(HeadphoneFeature.PLAYBACK_CONTROL)) return
     appendLog("MEDIA play/pause via AudioManager")
@@ -182,7 +182,7 @@ V1 协议类将 EQ 方法直接委托给 V2。这是因为 WH-1000XM4 的 EQ fea
 
 `DeviceInfoState` 包含 `modelColor`, `modelImageUrl`, `modelImageSourceColor` 和 `protocolReady`。其中 `protocolReady` 语义上不属于设备信息（它表示传输层就绪状态），`modelColor/modelImageUrl/modelImageSourceColor` 是派生/缓存值。
 
-**建议**：`protocolReady` 可以提升到 `SonyHeadphoneUiState` 顶层，图片相关字段可以合并到一个 `DeviceImageState`。
+**建议**：`protocolReady` 可以提升到 `HeadphoneUiState` 顶层，图片相关字段可以合并到一个 `DeviceImageState`。
 
 ### 3.8 缺少 SonyTandemFrame.kt ℹ️
 
@@ -210,7 +210,7 @@ DEVELOPMENT.md 的代码结构图中列出了 `protocol/SonyTandemFrame.kt`，�
 |--------|--------|
 | `SonySppTransport` 帧编码/解码、转义、校验和、ACK 重试 | 高 |
 | `SonyBleClient` Sony Audio AD 解析（V1/V2 组合 payload） | 高 |
-| `SonyHeadphoneRepository` 状态管理（onMessage → state 更新链） | 中 |
+| `HeadphoneRepository` 状态管理（onMessage → state 更新链） | 中 |
 | XM4 Clear Bass 路径的端到端测试 | 中 |
 | NC/ASM 全部 8 种子类型的 parser 测试 | 中 |
 | V2 Table2 扩展入口测试（即使当前只返回 Unknown） | 低 |

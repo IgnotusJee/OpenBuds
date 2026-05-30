@@ -7,10 +7,10 @@ import dev.ignotus.openbuds.headphones.HeadphoneFeature
 import dev.ignotus.openbuds.headphones.HeadphoneFormFactor
 import dev.ignotus.openbuds.headphones.HeadphoneProtocolVariant
 import dev.ignotus.openbuds.headphones.ProfileTemplate
-import dev.ignotus.openbuds.protocol.EqEbbInquiredType
 import dev.ignotus.openbuds.protocol.EqPresetId
-import dev.ignotus.openbuds.protocol.NcAsmInquiredType
-import dev.ignotus.openbuds.protocol.PowerInquiredType
+import dev.ignotus.openbuds.protocol.sony.EqEbbInquiredType
+import dev.ignotus.openbuds.protocol.sony.NcAsmInquiredType
+import dev.ignotus.openbuds.protocol.sony.PowerInquiredType
 
 object LinkBudsSProfile {
     private val features = setOf(

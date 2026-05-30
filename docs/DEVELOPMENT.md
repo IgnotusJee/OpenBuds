@@ -58,8 +58,11 @@ app/src/main/java/dev/ignotus/openbuds/
 │   ├── SonySppTransport.kt       # Sony SPP 帧、ACK、转义、校验和
 │   └── TandemTransportRouting.kt # GATT endpoint spec、SPP payload 映射、channel 路由
 ├── data/
-│   ├── SonyHeadphoneRepository.kt
-│   └── SonyModelImageCatalog.kt
+│   ├── HeadphoneRepository.kt
+│   ├── sony/
+│   │   └── SonyModelImageCatalog.kt
+│   └── qcy/
+│       └── QcyResponseMapper.kt
 ├── headphones/                   # 设备/品牌 profile、capability、adapter、EQ 引擎
 │   ├── HeadphoneAdapter.kt       # 接口、ProfileTemplate、FeatureProtocolBinding、HeadphoneCapabilities
 │   ├── EqProtocolEngine.kt       # 设备无关 EQ 引擎：EqDeviceConfig → EqUiCapability、写入/刷新/解析
@@ -105,7 +108,7 @@ app/src/main/java/dev/ignotus/openbuds/
 - `protocol/` 中的 Sony Tandem codec 只负责命令构造和响应解析，不持有 Android Context 和 UI 状态。`SonyEqEbbPayloadParser` 供 V1/V2 codec 共享 EQ/EBB payload 解析。
 - `headphones/` 负责按品牌/型号选择 adapter、声明能力、绑定 feature 到 protocol variant/channel、生成刷新命令和判断写入是否安全。`EqProtocolEngine` 是 EQ 写入/刷新/解析的单一入口，消费 `EqDeviceConfig` 输出 `EqUiCapability`，消除跨 adapter/codec/repository 的 EQ 条件分支。
 - Repository 只发起领域操作，不按型号直接构造协议字节。
-- `SonyHeadphoneRepository` 是应用状态聚合层，负责把协议响应更新成 `SonyHeadphoneUiState`。
+- `HeadphoneRepository` 是应用状态聚合层，负责把协议响应更新成 `HeadphoneUiState`。
 - `OpenBudsApp` 只消费 state 和调用 repository action，不直接构造协议字节。
 
 ## 新增控制功能的流程
@@ -118,7 +121,7 @@ app/src/main/java/dev/ignotus/openbuds/
 3. 在 `headphones/` 中确认或新增 profile/capability；不要在 Repository 里按型号写 if。EQ 新增功能需要扩展 `EqDeviceConfig` 和 `EqProtocolEngine`，确保所有路径使用同一 config。
 4. 按功能所属协议在 `protocol/` 增加 enum、builder、parser，并在 `TandemCodecRegistry` 中暴露 codec wrapper；adapter 不直接 import protocol object。
 5. 在 `SonyTandemV2Table1ProtocolTest.kt`、Table2 test、routing test 和 adapter test 加编码、解析、命令计划单元测试。编码测试必须写死期望字节。
-6. 在 `SonyHeadphoneRepository.kt` 增加 state 聚合和 action，刷新命令应来自 adapter。
+6. 在 `HeadphoneRepository.kt` 增加 state 聚合和 action，刷新命令应来自 adapter。
 7. 在 `OpenBudsApp.kt` 增加 UI。未确认写入安全前，只显示状态和日志，不提供开关。
 8. 真机运行，打开 debug log，用 logcat 对照 TX/RX。
 
@@ -136,7 +139,7 @@ app/src/main/java/dev/ignotus/openbuds/
 
 5. **`ParsedTandemResponse` 变体** — 在 `protocol/SonyTandemTypes.kt` 的 sealed interface 中新增 data class，含 `override val raw: ByteArray`。nullable 字段便于安全落回 `Unknown`。
 
-6. **Repository state** — 在 `data/SonyHeadphoneRepository.kt` 中新增 `data class XxxState(...)`，在 `SonyHeadphoneUiState` 中添加默认字段。apply 函数 **统一使用 `current.copy(state = current.state.copy(...))` 的合并模式**，避免多响应互相覆盖。
+6. **Repository state** — 在 `data/HeadphoneRepository.kt` 中新增 `data class XxxState(...)`，在 `HeadphoneUiState` 中添加默认字段。apply 函数 **统一使用 `current.copy(state = current.state.copy(...))` 的合并模式**，避免多响应互相覆盖。
 
 7. **`XxxStatusCard`** — 在 `ui/screen/DeviceScreen.kt` 中添加 `@Composable internal fun XxxStatusCard(...)`，渲染字段为 `InfoLine`。所有字段为 null 时整个卡片返回（不渲染）。
 

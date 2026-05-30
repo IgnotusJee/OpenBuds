@@ -94,7 +94,7 @@ Extract state-mutation logic into `<Brand>ResponseMapper` (see `QcyResponseMappe
 
 ```kotlin
 object MyBrandResponseMapper {
-    fun apply(state: SonyHeadphoneUiState, response: ParsedHeadphoneResponse.MyBrand): SonyHeadphoneUiState
+    fun apply(state: HeadphoneUiState, response: ParsedHeadphoneResponse.MyBrand): HeadphoneUiState
 }
 ```
 
@@ -102,7 +102,7 @@ object MyBrandResponseMapper {
 
 ### Transport selector
 
-In `SonyHeadphoneRepository` constructor:
+In `HeadphoneRepository` constructor:
 
 ```kotlin
 private val myBrandClient = MyBrandBleClient(appContext, this)

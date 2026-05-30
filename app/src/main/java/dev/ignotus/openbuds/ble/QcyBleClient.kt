@@ -14,7 +14,7 @@ import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import dev.ignotus.openbuds.headphones.TandemChannel
-import dev.ignotus.openbuds.protocol.QcyGatt
+import dev.ignotus.openbuds.protocol.qcy.QcyGatt
 import dev.ignotus.openbuds.protocol.hexString
 import java.util.ArrayDeque
 import java.util.UUID

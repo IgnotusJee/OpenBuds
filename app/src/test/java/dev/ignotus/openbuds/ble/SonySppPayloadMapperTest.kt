@@ -1,6 +1,6 @@
 package dev.ignotus.openbuds.ble
 
-import dev.ignotus.openbuds.protocol.SonyTandemConstants
+import dev.ignotus.openbuds.protocol.sony.SonyTandemConstants
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull

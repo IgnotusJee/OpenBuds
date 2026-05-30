@@ -5,18 +5,19 @@ import dev.ignotus.openbuds.headphones.sonydevices.LinkBudsSProfile
 import dev.ignotus.openbuds.headphones.sonydevices.Wf1000Xm5Profile
 import dev.ignotus.openbuds.headphones.sonydevices.Wh1000Xm4Profile
 import dev.ignotus.openbuds.protocol.AmbientSoundMode
-import dev.ignotus.openbuds.protocol.CommonInquiredType
-import dev.ignotus.openbuds.protocol.DeviceInfoType
-import dev.ignotus.openbuds.protocol.EqEbbInquiredType
 import dev.ignotus.openbuds.protocol.EqPresetId
-import dev.ignotus.openbuds.protocol.LeaInquiredType
-import dev.ignotus.openbuds.protocol.NcAsmInquiredType
 import dev.ignotus.openbuds.protocol.NoiseControlMode
 import dev.ignotus.openbuds.protocol.ParsedHeadphoneResponse
-import dev.ignotus.openbuds.protocol.PlaybackControl
-import dev.ignotus.openbuds.protocol.PowerInquiredType
-import dev.ignotus.openbuds.protocol.SonyTandemConstants.DATA_MDR
-import dev.ignotus.openbuds.protocol.SonyTandemConstants.DATA_MDR_NO2
+import dev.ignotus.openbuds.protocol.PlaybackStatus
+import dev.ignotus.openbuds.protocol.sony.CommonInquiredType
+import dev.ignotus.openbuds.protocol.sony.DeviceInfoType
+import dev.ignotus.openbuds.protocol.sony.EqEbbInquiredType
+import dev.ignotus.openbuds.protocol.sony.LeaInquiredType
+import dev.ignotus.openbuds.protocol.sony.NcAsmInquiredType
+import dev.ignotus.openbuds.protocol.sony.PlaybackControl
+import dev.ignotus.openbuds.protocol.sony.PowerInquiredType
+import dev.ignotus.openbuds.protocol.sony.SonyTandemConstants.DATA_MDR
+import dev.ignotus.openbuds.protocol.sony.SonyTandemConstants.DATA_MDR_NO2
 
 object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
     private const val COMMON_RET_BATTERY_LEVEL: Byte = 0x11
