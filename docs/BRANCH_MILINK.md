@@ -1,4 +1,4 @@
-# refactor/strip-ui-keep-protocol-lsposed — 分支文档
+# feat/milink-sony-card — 分支文档
 
 ## 目标
 
@@ -19,6 +19,8 @@
 | `f6a4ad8` | 稳定性修复：名称匹配回退、移除 hostUpdateSent、跨进程 MAC 白名单 |
 | `e390e69` | 修复加载延迟：重试 hostListener 获取、移除死循环 |
 | `c9b869c` | 清理废弃的叠加层代码（CardContentHook, MLCardNativeControlsHook） |
+| `3af39ed` | 更新分支文档反映 Phase 2 架构 |
+| `7dd4ad6` | 数据桥接：Repository StateFlow → SyntheticHeadsetState（电量/降噪实时同步）；ANC set 转发 BLE；音量 → AudioManager；清理废弃 UI 测试 |
 
 ## 当前架构
 
@@ -27,14 +29,17 @@ LSPosed 模块 → com.milink.service
   ├── MiLinkIdentityHook        Phase 1: isMiHeadset/getHeadsetType/isCirculateDevice
   │                              ├─ Sony 耳机识别为第一方卫星贴纸 ✅
   │                              ├─ isCirculateDevice 仅在连接时返回 true
-  │                              ├─ BLE 预连接触发
+  │                              ├─ BLE 预连接触发 → SonyHeadphoneRepository
   │                              └─ 跨进程 MAC 白名单写入
   ├── MiLinkHeadsetCardHook     Phase 2: 协议层 — 原生第一方富控件
   │                              ├─ MLCardViewHostService.v() → third_headset → AUDIOGLASSES
   │                              ├─ b0 控制器 hooks: getter(A/B/C/D/F/G) + future(L/X/e0/M/O) + set(Z/b0/Y)
   │                              ├─ c 工厂 hooks: 代理 headset client (k/m/n 接口)
   │                              ├─ SyntheticHeadsetState → HeadsetDeviceInfo/HeadsetHost 合成数据
-  │                              ├─ 重试机制: 等 hostListener 就绪后推送 HeadsetHost 更新
+  │                              ├─ DataBridge: repository.state → 实时电量/降噪/名称同步
+  │                              ├─ ANC set 转发: hookSetOperation("Z") → repository.setNoiseControlMode()
+  │                              ├─ 音量转发: hookSetOperation("b0") → AudioManager
+  │                              ├─ 重试机制: 等 hostListener/dataBridge 就绪后推送
   │                              └─ 全部使用 ProGuard 运行时类名 (b0/c/k/m/n/l/i/j)
   ├── HeadsetClientTraceHook    Phase 3: HeadsetServiceClient.b(Message) 名称修复
   ├── TextViewNameFixHook       Phase 3 备选: TextView.setText 框架级拦截
@@ -86,9 +91,24 @@ MLCardViewHostService.v(DeviceInfo, cardId)
 
 方法名同理：`m19869B` → `B`，`m25629a` → `a`，`m19868A` → `A`，etc.
 
-### 合成数据
+### 合成数据 + BLE 数据桥接
 
-`SyntheticHeadsetState` 提供静态占位数据（`power=[85,85,85]`, `mode=2`, `volume=60`），卡片渲染后由 `SonyHeadphoneRepository` BLE 连接提供实时数据。未来可将 BLE 数据接入替换静态值。
+`SyntheticHeadsetState` 初始以静态占位值启动（`power=[0,0,0]`, `mode=2`, `volume=60`），卡片首次渲染后 `DataBridge` 自动启动：
+
+- `MiLinkIdentityHook.preconnectBle()` → 创建 `SonyHeadphoneRepository` 并启动 BLE 连接
+- `MiLinkHeadsetCardHook.scheduleDataBridgeWhenReady()` → 重试等待 Repository 就绪（最多 10 秒）
+- `startDataBridgeCollector()` → 在独立线程中通过 `runBlocking { repo.state.collect {} }` 持续监听状态变化
+- `applyRealState()` → 映射 BLE 状态到 SyntheticHeadsetState（电量/降噪/名称），变更时推送 HeadsetHost 更新
+
+**双向数据流：**
+
+| 方向 | 功能 | 实现 |
+|------|------|------|
+| BLE → UI | 电量同步 | `BatteryState` → `powers: List<Int>` |
+| BLE → UI | 降噪模式 | `NoiseControlMode` → `mode: Int` (0/1/2) |
+| BLE → UI | 设备名称 | `connectedDevice.name` → `state.name` |
+| UI → BLE | 降噪切换 | `forwardAncModeToDevice()` → `repository.setNoiseControlMode()` |
+| UI → 系统 | 音量调节 | `forwardVolumeToSystem()` → `AudioManager.setStreamVolume()` |
 
 ### 加载延迟处理
 
@@ -103,9 +123,10 @@ MLCardViewHostService.v(DeviceInfo, cardId)
 
 | 问题 | 状态 | 说明 |
 |------|:---:|------|
-| 加载延迟 (~1-2s) | ⚠️ | 需等工厂代理创建后才能推送 HeadsetHost 更新；已有 5s 重试机制兜底 |
-| 合成数据为静态值 | ⚠️ | `power=[85,85,85]`, `mode=2` 等为占位值，尚未接入 BLE 实时数据 |
-| 音量控件不可用 | ⚠️ | 合成数据 pipeline 未处理音量 set 操作的双向同步 |
+| 加载延迟 (~1-2s) | ✅ | 已通过重试机制 (5s hostListener / 10s dataBridge) 解决 |
+| 合成数据为静态值 | ✅ | 已通过 DataBridge 接入 BLE 实时数据（电量/降噪/名称） |
+| 音量控件不可用 | ✅ | 已通过 AudioManager 系统音量 fallback 解决 |
+| 音量映射为系统级而非耳机独立音量 | ⚠️ | Sony Tandem 协议不支持耳机音量控制，使用 Android 系统蓝牙流音量 |
 | 控制中心卡片标题偶尔显示错误名称 | ⚠️ | Message 层修复已生效但卡片可能从缓存渲染 |
 | `ProbeResultCache` 在系统进程中写入 `/data/local/tmp/` 权限被拒 | ⚠️ | 不影响功能，仅诊断缓存缺失 |
 
