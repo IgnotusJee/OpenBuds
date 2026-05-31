@@ -464,11 +464,24 @@ adb shell setprop debug.openbuds.milink_m1_intercept true
 
 ### 阶段 M2：状态字段对齐（1-2 周）
 
-- [ ] Hook `MxBluetoothManager.getAirPodsState(String)`，返回固定 9 元素假数据。
-- [ ] Hook `ContentResolver.call(airpodsstate, "getAirpodsState", mac, null)`，返回固定 11 字段 Bundle。
-- [ ] 验收：米链下拉栏贴纸显示假电量；展开 `HeadsetDetailFragment` 后分耳/盒电量稳定显示。
-- [ ] 实测 `String[]` index、Bundle key、`modelName/deviceId` 对 `headsetType` 的影响，更新 3.3 和 `docs/MILINK_BUNDLE_FORMAT.md`。
-- [ ] 抓 `ContentResolver.call` 与 `getAirPodsState` 的实际调用频率，决定 `notifyChange` 触发策略和节流上限。
+- [x] Hook `MxBluetoothManager.getAirPodsState(String)`，返回固定 9 元素假数据。
+- [x] Hook `ContentResolver.call(airpodsstate, "getAirpodsState", mac, null)`，返回固定 11 字段 Bundle。
+- [x] 验收：米链下拉栏贴纸显示占位电量（75/80/90），`HeadsetDetailFragment` 分耳/盒电量稳定显示。HyperOS 3.0 小米13 Pro 验证通过。
+- [x] 反编译确认 `String[]` index、Bundle key、`modelName/deviceId` 对 `headsetType` 的影响，更新 3.3 和 `docs/MILINK_BUNDLE_FORMAT.md`。真机调用链已通过 logcat 验证。
+- [x] 抓取调用频率：`getAirPodsState` 每 2-3 秒一组（每次 5-6 burst），`ContentResolver.call("getAirpodsState")` **0 次/会话**，仅 String[] 路径有效。`ContentResolver.query` 仅访问 `/device_classify/...soundbox`，不访问 `/airpodsstate`。`notifyChange` 节流上限建议 ≤1 Hz。
+
+#### M2 验收记录
+
+- HyperOS 3.0（小米13 Pro）真机通过：控制中心富控件卡片渲染、占位电量显示、`HeadsetDetailFragment` 分耳电量、Redmi Buds 6 无冒领、关闭 intercept 降级为 `third_headset`、真 AirPods 透传保护（代码路径）。
+- `ContentResolver.call` 路径在该版本未被触发，电池数据完全通过 `MxBluetoothManager.getAirPodsState(String[])` 获取。
+- 占位数据：左耳 75、右耳 80、盒 90、左右佩戴 true、全部 charging false、connectState=2、deviceId=01010101（type=0）。
+
+#### M2 实现记录
+
+- 新增 `AirpodsStateMapper`，固定输出 `getAirPodsState` 的 9 元素数组和 `/airpodsstate` 的 11 字段 Bundle。当前占位值：左耳 75、右耳 80、盒 90、左右佩戴 true、全部 charging false、connectState=2。
+- 新增 `DeviceIdRegistry`，默认使用 `01010101` 作为普通耳塞模板。该值存在于 `AbstractC14650b.m51179g()`，不命中 `m51162b()` 的 type=1/2/3/4/5/6 特殊分支，因此返回 type=0，避免 AirPods type=5/6 分支。
+- `MxBluetoothManager.getAirPodsState(String)` hook 会先调用原方法；若原返回值已是长度至少 9 的数组则透传，以保护真实 AirPods。只有 `debug.openbuds.milink_m1_intercept=true` 且 MAC allowlist 命中且原状态缺失时才返回固定假数据。
+- `ContentResolver.call(..., "getAirpodsState", mac, null)` 同样仅在 intercept + allowlist 命中时接管；若系统 provider 已返回 Bundle 则透传，否则返回固定 Bundle。
 
 ### 阶段 M3：OpenBuds 数据接入（2 周）
 

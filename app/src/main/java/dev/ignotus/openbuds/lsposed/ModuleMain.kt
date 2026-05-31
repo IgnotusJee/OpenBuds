@@ -25,6 +25,7 @@ import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
  * ```
  * com.milink.service process
  *   ├── MxBluetoothManager.checkIsAirPods(String)   ← intercepted
+ *   ├── MxBluetoothManager.getAirPodsState(String)  ← fake 9-field state
  *   ├── BluetoothServiceClient.isAirPods(BluetoothDevice) ← fallback
  *   ├── BluetoothServiceClient.getAirpodsDeviceId(...)    ← trace-only
  *   ├── BluetoothServiceClient.getAirpodsHeadsetType(...) ← trace-only

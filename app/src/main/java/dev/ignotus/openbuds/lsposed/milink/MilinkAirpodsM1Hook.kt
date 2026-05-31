@@ -10,13 +10,14 @@ import io.github.libxposed.api.XposedInterface
 import java.lang.reflect.Method
 
 /**
- * M1 AirPods adapter hooks for `com.milink.service`.
+ * M1/M2 AirPods adapter hooks for `com.milink.service`.
  *
  * ## Hooks installed
  *
  * | Hook target | Type | Effect |
  * |------------|------|--------|
  * | `MxBluetoothManager.checkIsAirPods(String)` | Intercept | Returns `true` for allowlisted MACs |
+ * | `MxBluetoothManager.getAirPodsState(String)` | Intercept | Returns a 9-element fixed state array for allowlisted MACs |
  * | `BluetoothServiceClient.isAirPods(BluetoothDevice)` | Intercept | Fallback if MxBluetoothManager signature changes |
  * | `BluetoothServiceClient.getAirpodsDeviceId(...)` | Trace | Logs deviceId resolution (no modification) |
  * | `BluetoothServiceClient.getAirpodsHeadsetType(...)` | Trace | Logs headset type mapping (no modification) |
@@ -68,7 +69,8 @@ class MilinkAirpodsM1Hook(
     // ── MxBluetoothManager hooks ────────────────────────────────────────
 
     /**
-     * Hooks `MxBluetoothManager.checkIsAirPods(String mac): boolean`.
+     * Hooks `MxBluetoothManager.checkIsAirPods(String mac): boolean` and
+     * `MxBluetoothManager.getAirPodsState(String mac): String[]`.
      *
      * This is the primary entry point for AirPods classification. Milink calls
      * this to determine if a MAC belongs to an AirPods device.
@@ -85,6 +87,11 @@ class MilinkAirpodsM1Hook(
      */
     private fun hookMxBluetoothManager() {
         val clazz = loadClass(MX_BLUETOOTH_MANAGER) ?: return
+        hookMxBluetoothManagerCheckIsAirPods(clazz)
+        hookMxBluetoothManagerGetAirPodsState(clazz)
+    }
+
+    private fun hookMxBluetoothManagerCheckIsAirPods(clazz: Class<*>) {
         val method = findMethod(clazz, "checkIsAirPods", String::class.java)
         if (method == null) {
             log("missing: $MX_BLUETOOTH_MANAGER.checkIsAirPods(String)")
@@ -107,6 +114,47 @@ class MilinkAirpodsM1Hook(
                     log(
                         "[$mode] MxBluetoothManager.checkIsAirPods mac=${safeMac(mac)} " +
                             "original=$original target=$target overridden=$overridden result=$result"
+                    )
+                    return result
+                }
+            })
+        log("hooked: $MX_BLUETOOTH_MANAGER.${method.name}(String)")
+    }
+
+    /**
+     * Hooks `MxBluetoothManager.getAirPodsState(String mac): String[]`.
+     *
+     * This is the read path used by `BluetoothServiceClient.getAirpodsDeviceId`
+     * and `AncBatteryController.getAirpodsStatus`. M2 supplies fixed state for
+     * allowlisted MACs only when the original method did not already return a
+     * valid 9-element AirPods state, preserving genuine AirPods behavior.
+     */
+    private fun hookMxBluetoothManagerGetAirPodsState(clazz: Class<*>) {
+        val method = findMethod(clazz, "getAirPodsState", String::class.java)
+        if (method == null) {
+            log("missing: $MX_BLUETOOTH_MANAGER.getAirPodsState(String)")
+            return
+        }
+
+        ModuleMain.instance.hook(method)
+            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+            .intercept(object : XposedInterface.Hooker {
+                override fun intercept(chain: XposedInterface.Chain): Any? {
+                    val mac = chain.args.getOrNull(0) as? String
+                    val original = chain.proceed()
+                    val macListValue = readDebugMacProperty()
+                    val target = MilinkAirpodsTargetMatcher.isTargetMac(mac, macListValue)
+                    val intercept = shouldIntercept()
+                    val originalValid = isValidAirpodsStateArray(original)
+                    val result = if (intercept && target && !originalValid) {
+                        AirpodsStateMapper.toStateArray(AirpodsStateMapper.placeholder(mac))
+                    } else {
+                        original
+                    }
+                    val mode = if (intercept) "INTERCEPT" else "TRACE"
+                    log(
+                        "[$mode] MxBluetoothManager.getAirPodsState mac=${safeMac(mac)} " +
+                            "target=$target originalValid=$originalValid result=${stateArraySummary(result)}"
                     )
                     return result
                 }
@@ -305,8 +353,14 @@ class MilinkAirpodsM1Hook(
                         return chain.proceed()
                     }
 
+                    val original = chain.proceed()
+                    if (original is Bundle) {
+                        log("ContentResolver.call getAirpodsState mac=$arg -> original Bundle")
+                        return original
+                    }
+
                     val bundle = createFakeAirpodsStateBundle(arg)
-                    log("ContentResolver.call getAirpodsState mac=$arg → fake Bundle")
+                    log("ContentResolver.call getAirpodsState mac=$arg -> fake Bundle")
                     return bundle
                 }
             })
@@ -387,21 +441,13 @@ class MilinkAirpodsM1Hook(
      * | isLeftCharging | Left ear in case/charging | "false" | Snapshot |
      * | isRightCharging | Right ear in case/charging | "false" | Snapshot |
      * | isBoxCharging | Case on charger | "false" | Snapshot |
-     * | modelName | Device ID for icon selection | "OpenBuds" | DeviceIdRegistry |
+     * | modelName | Device ID for icon selection | "01010101" | DeviceIdRegistry |
      */
     private fun createFakeAirpodsStateBundle(mac: String?): Bundle =
         Bundle().apply {
-            putString("device", mac.orEmpty())
-            putString("connectState", "2")
-            putString("isLeftWearing", "true")
-            putString("leftBattery", "75")
-            putString("isRightWearing", "true")
-            putString("rightBattery", "80")
-            putString("boxBattery", "90")
-            putString("isLeftCharging", "false")
-            putString("isRightCharging", "false")
-            putString("isBoxCharging", "false")
-            putString("modelName", "OpenBuds")
+            AirpodsStateMapper.toBundleFields(AirpodsStateMapper.placeholder(mac)).forEach { (key, value) ->
+                putString(key, value)
+            }
         }
 
     // ── Trace helper ────────────────────────────────────────────────────
@@ -462,6 +508,14 @@ class MilinkAirpodsM1Hook(
     ): Method? =
         names.firstNotNullOfOrNull { name -> findMethod(clazz, name, *parameterTypes) }
 
+    private fun isValidAirpodsStateArray(value: Any?): Boolean =
+        (value as? Array<*>)?.size?.let { it >= AIRPODS_STATE_ARRAY_SIZE } == true
+
+    private fun stateArraySummary(value: Any?): String {
+        val array = value as? Array<*> ?: return value?.javaClass?.simpleName ?: "null"
+        return "len=${array.size} deviceId=${array.getOrNull(8)?.toString().orEmpty()}"
+    }
+
     // ── Debug utilities ─────────────────────────────────────────────────
 
     /**
@@ -518,6 +572,7 @@ class MilinkAirpodsM1Hook(
         private const val AIRPODS_PROVIDER_AUTHORITY =
             "com.android.bluetooth.ble.app.headsetdata.provider"
         private const val AIRPODS_STATE_PATH = "/airpodsstate"
+        private const val AIRPODS_STATE_ARRAY_SIZE = 9
 
         private fun log(message: String) {
             Log.i(TAG, "[MiLinkAirPodsM1] $message")

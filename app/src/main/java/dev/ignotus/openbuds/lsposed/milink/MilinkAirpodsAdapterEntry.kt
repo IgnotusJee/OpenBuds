@@ -16,7 +16,8 @@ import android.util.Log
  *
  * | Phase | What's installed | State visibility |
  * |-------|-----------------|-----------------|
- * | M1    | [MilinkAirpodsM1Hook] — classification hooks (`checkIsAirPods`, `isAirPods`) + trace hooks (`getAirpodsDeviceId`, `getAirpodsHeadsetType`) + ContentResolver state fake | Placeholder bundle (static values) |
+ * | M1    | [MilinkAirpodsM1Hook] - classification hooks (`checkIsAirPods`, `isAirPods`) + trace hooks (`getAirpodsDeviceId`, `getAirpodsHeadsetType`) | Trace-only classification |
+ * | M2    | [MilinkAirpodsM1Hook] - fixed `getAirPodsState` array + `/airpodsstate` Bundle | Placeholder battery/wearing state |
  * | M3    | Bridge to OpenBuds App — real battery/ANC/wearing state via IPC | Live state from [HeadphoneRepository] |
  *
  * ## Key principle
@@ -32,7 +33,7 @@ class MilinkAirpodsAdapterEntry(
     private val classLoader: ClassLoader,
 ) {
     fun install() {
-        Log.i(TAG, "Installing MiLink AirPods M1 hooks")
+        Log.i(TAG, "Installing MiLink AirPods M1/M2 hooks")
         MilinkAirpodsM1Hook(classLoader).install()
     }
 
