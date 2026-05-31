@@ -1,6 +1,15 @@
 # OpenBuds LSPosed 系统集成任务清单
 
-更新日期：2026-05-26
+> **⚠️ 本方案已废弃（2026-05-31）**
+>
+> P5-P9 阶段的"系统 UI 注入"路径已完全放弃，替换为**蓝牙协议层注入方案**，见：
+> → **`docs/plan/MILINK_FIRST_PARTY_ADAPTER_PLAN.md`**
+>
+> 新方案同样是 LSPosed 模块，但注入进程改为 `com.android.bluetooth`，劫持米链的 `IMiuiHeadsetService` binder + `headsetdata.provider` ContentProvider 而非 UI 控件。效果是让米链**以为自己原生支持 OpenBuds 耳机**，不需要逐版本适配 UI 表层的混淆类名。
+>
+> **已保留的资产（P1-P4）**：`SonyControlService`、`DeviceStateSnapshot`、`ControlCommand`、模块壳、App-模块 AIDL IPC — 这些被新方案直接复用。
+
+更新日期：2026-05-26（废弃日期：2026-05-31）
 
 本文把"参考 OppoPods / HyperPods，为 Sony 耳机实现 HyperOS 弹窗、状态栏、控制中心入口，以及最终接近小米原生耳机设置体验"的目标拆成仓库级任务。使用 **libxposed 现代 API** (`io.github.libxposed:api:101.0.1`)，同一 hook 挂载点，更类型安全。
 
@@ -213,7 +222,7 @@ P5 入口条件现已全部满足，可进入 HyperOS 通知集成。
 
 ---
 
-## 阶段 P5 ✅ 已完成：HyperOS 通知集成（条件性）
+## 阶段 P5 ✅ 已完成：HyperOS 通知集成（条件性）~~已废弃，不再扩展~~
 
 风险：中到高
 前提：
@@ -258,7 +267,7 @@ HyperOS notification drawer (渠道 BTHeadset$MAC, ID 10003)
 
 ---
 
-## 阶段 P5.5：HyperOS 原生风格连接弹窗（Strong Toast / Focus Island）
+## 阶段 P5.5：HyperOS 原生风格连接弹窗 ~~已废弃~~
 
 风险：高
 前提：
@@ -367,7 +376,7 @@ HyperOS 原生风格顶部弹窗（左耳图+电量 | 右耳图+电量）
 
 ---
 
-## 阶段 P5.6：QuickPopupActivity 功能禁用
+## 阶段 P5.6：QuickPopupActivity 功能禁用 ~~已废弃~~
 
 风险：低
 目标：保留 `QuickPopupActivity` 和 `QuickPopupScreen` 代码但禁用其自动启动逻辑，留待未来决定使用还是移除。当前 App 级弹窗体验远不如系统级 Strong Toast / Focus Island，且外观与小米第一方耳机不一致。
@@ -383,7 +392,7 @@ HyperOS 原生风格顶部弹窗（左耳图+电量 | 右耳图+电量）
 
 ---
 
-## 阶段 P6 ✅ 已完成：控制中心设备卡片入口（条件性）
+## 阶段 P6 ✅ 已完成：控制中心设备卡片入口 ~~已废弃~~
 
 风险：高
 前提：`PluginInstance.loadPlugin` 在 ProbeResultCache 中标记为存在。（`DeviceInfoWrapper.performClicked`、`MainPanelController` 的类存在性在 hook 时通过 plugin ClassLoader 动态判断，失败则跳过并记录日志。）
@@ -421,7 +430,7 @@ User taps device card in HyperOS control center
 
 ---
 
-## 阶段 P7：系统蓝牙设置页入口（条件性）—— 弹窗/通知点击目标
+## 阶段 P7：系统蓝牙设置页入口 ~~已废弃~~
 
 风险：很高
 前提：
@@ -541,7 +550,7 @@ if (ProbeResultCache.hasClass("com.android.settings.bluetooth.BluetoothDeviceDet
 
 ---
 
-## 阶段 P8：状态栏耳机图标（条件性）
+## 阶段 P8：状态栏耳机图标 ~~已废弃~~
 
 风险：高
 前提：`StatusBarManager.setIconVisibility` 有效。
@@ -556,7 +565,7 @@ if (ProbeResultCache.hasClass("com.android.settings.bluetooth.BluetoothDeviceDet
 
 ---
 
-## 阶段 P9：系统设置页内嵌控制（条件性）
+## 阶段 P9：系统设置页内嵌控制 ~~已废弃~~
 
 风险：最高
 前提：P7 方案 A 已验证，仅经验证的 HyperOS 构建启用。
@@ -577,7 +586,7 @@ if (ProbeResultCache.hasClass("com.android.settings.bluetooth.BluetoothDeviceDet
 
 ---
 
-## 测试计划
+## 测试计划 ~~已废弃，仅保留已完成项~~
 
 基础测试：
 
@@ -610,7 +619,7 @@ if (ProbeResultCache.hasClass("com.android.settings.bluetooth.BluetoothDeviceDet
 
 ---
 
-## 发布和开关策略
+## 发布和开关策略 ~~已废弃~~
 
 所有系统集成功能挂在 Settings > Modules：
 

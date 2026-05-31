@@ -14,7 +14,6 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import dev.ignotus.openbuds.MainActivity
 import dev.ignotus.openbuds.data.HeadphoneRepository
-import dev.ignotus.openbuds.lsposed.DeviceWhitelist
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -27,7 +26,6 @@ class SonyControlService : Service() {
     private val binder = LocalBinder()
     private val stateLiveData = MutableLiveData(DeviceStateSnapshot.EMPTY)
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
-    private var lastConnectedMac: String? = null
 
     inner class LocalBinder : Binder() {
         val state: LiveData<DeviceStateSnapshot> get() = stateLiveData
@@ -76,18 +74,6 @@ class SonyControlService : Service() {
                 stateLiveData.postValue(snapshot)
                 updateNotification(snapshot)
                 Companion.currentDeviceMac = snapshot.deviceMac
-
-                // Phase 1: MiLink whitelist — write MAC when connected, remove when disconnected
-                if (snapshot.isConnected && snapshot.deviceMac != null && snapshot.deviceMac != lastConnectedMac) {
-                    lastConnectedMac?.let { DeviceWhitelist.remove(it) }
-                    DeviceWhitelist.add(snapshot.deviceMac)
-                    lastConnectedMac = snapshot.deviceMac
-                    Log.i(TAG, "MiLink whitelist: added ${snapshot.deviceMac}")
-                } else if (!snapshot.isConnected && lastConnectedMac != null) {
-                    lastConnectedMac?.let { DeviceWhitelist.remove(it) }
-                    Log.i(TAG, "MiLink whitelist: removed $lastConnectedMac")
-                    lastConnectedMac = null
-                }
             }
         }
     }

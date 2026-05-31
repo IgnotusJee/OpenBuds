@@ -1,9 +1,43 @@
 package dev.ignotus.openbuds.lsposed
 
 import android.util.Log
+import dev.ignotus.openbuds.lsposed.milink.MilinkAirpodsAdapterEntry
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
 
+/**
+ * LSPosed module entry for OpenBuds.
+ *
+ * ## Scope
+ *
+ * Configured via LSPosed Manager to inject into **`com.milink.service` only**.
+ * No other packages are in scope.
+ *
+ * ## Lifecycle
+ *
+ * 1. [init] — writes a startup marker to `/sdcard/openbuds_lsposed_startup.txt`
+ *    for diagnostics (process name + timestamp).
+ * 2. [onPackageLoaded] — when `com.milink.service` loads, delegates to
+ *    [MilinkAirpodsAdapterEntry] which installs all AirPods adapter path hooks.
+ *
+ * ## Hook architecture
+ *
+ * ```
+ * com.milink.service process
+ *   ├── MxBluetoothManager.checkIsAirPods(String)   ← intercepted
+ *   ├── BluetoothServiceClient.isAirPods(BluetoothDevice) ← fallback
+ *   ├── BluetoothServiceClient.getAirpodsDeviceId(...)    ← trace-only
+ *   ├── BluetoothServiceClient.getAirpodsHeadsetType(...) ← trace-only
+ *   └── ContentResolver.call(getAirpodsState)             ← fake Bundle
+ * ```
+ *
+ * No hooks target `com.android.bluetooth`, `com.android.systemui`, or any
+ * other system process. All interception happens **before** milink makes
+ * binder calls to the Bluetooth stack.
+ *
+ * @see MilinkAirpodsAdapterEntry
+ * @see docs/plan/MILINK_FIRST_PARTY_ADAPTER_PLAN.md
+ */
 class ModuleMain : XposedModule() {
 
     init {
@@ -23,31 +57,25 @@ class ModuleMain : XposedModule() {
         } catch (_: Exception) {}
     }
 
+    /**
+     * Called by LSPosed when a package in scope is loaded.
+     *
+     * Dispatches only on the first package load (`isFirstPackage`).
+     * Currently only handles `com.milink.service`.
+     */
     override fun onPackageLoaded(param: PackageLoadedParam) {
         super.onPackageLoaded(param)
         log("onPackageLoaded: ${param.packageName} isFirst=${param.isFirstPackage}")
 
         if (!param.isFirstPackage) return
 
-        val cl = param.defaultClassLoader ?: return
+        val cl = param.defaultClassLoader
 
         when (param.packageName) {
             "com.milink.service" -> {
-                // Phase 1: Identity spoofing (satellite sticker)
-                val identityHook = MiLinkIdentityHook(cl)
-                if (identityHook.probe()) identityHook.hook()
-
-                // Phase 2: Protocol-level redirect — third_headset → native headset (AUDIOGLASSES path)
-                val headsetCardHook = MiLinkHeadsetCardHook(cl)
-                if (headsetCardHook.probe()) headsetCardHook.hook()
-
-                // Phase 3: trace HeadsetServiceClient + fix name at framework level
-                val hsTrace = HeadsetClientTraceHook(cl)
-                if (hsTrace.probe()) hsTrace.hook()
-                TextViewNameFixHook(cl).hook()
+                MilinkAirpodsAdapterEntry(cl).install()
             }
         }
-        ProbeResultCache.persistShared()
     }
 
     fun log(msg: String) {

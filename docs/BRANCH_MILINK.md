@@ -1,5 +1,9 @@
 # feat/milink-sony-card — 分支文档
 
+> **⚠️ 已废弃 / 仅作历史参考**：本文档描述的旧方案（UI 控件注入 + 卡片重定向 + b0 控制器 hooks）已被新方案替代。
+> 新方案走 AirPods adapter 路径，Hook 目标仅限 `MxBluetoothManager` / `BluetoothServiceClient` 客户端方法，不 hook 卡片渲染策略。
+> 详见：[MILINK_FIRST_PARTY_ADAPTER_PLAN.md](plan/MILINK_FIRST_PARTY_ADAPTER_PLAN.md)
+
 ## 目标
 
 抛弃 Compose UI 界面，保留蓝牙协议 + LSPosed 模块，实现小米融合设备中心（MiLink Fusion Device Center）的索尼耳机适配，提供与第一方耳机一致的富控件体验。

@@ -32,7 +32,7 @@ $adb="C:\Software\platform-tools\adb.exe"
 & $adb logcat -v time OpenBuds:I AndroidRuntime:E '*:S'
 ```
 
-**LSPosed 模块安装注意**：LSPosed 框架要求禁用 Android Studio 的部署优化，否则模块更新不会生效。必须使用 `gradlew installDebug` 安装，或关闭 IDE 的 "Deploy Optimization" 选项。
+**给模块开发者的提示**：请在 Android Studio 上禁用部署优化，或使用 `gradlew installDebug` 命令进行安装，否则无法更新模块。
 
 ```powershell
 .\gradlew.bat installDebug

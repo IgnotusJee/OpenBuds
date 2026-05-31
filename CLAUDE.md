@@ -88,16 +88,12 @@ app/src/main/java/dev/ignotus/openbuds/
 │       ├── QcyHeadphoneAdapter.kt
 │       └── devices/
 │           └── QcyC30SProfile.kt
-├── lsposed/                      # LSPosed 模块（可选系统集成层）
-│   ├── ModuleMain.kt             # XposedModule 入口，按进程分发 probe + hook
-│   ├── BluetoothProcessHook.kt   # com.android.bluetooth 进程探测
-│   ├── XiaomiBluetoothHook.kt    # com.xiaomi.bluetooth hook（MiuiBluetoothNotification 构造函数 + HyperOsBatteryReceiver 注册）
-│   ├── SystemUiHook.kt           # com.android.systemui 进程探测 + PluginInstance.loadPlugin hook
-│   ├── DeviceCardHook.kt         # 控制中心设备卡片点击拦截：DeviceInfoWrapper.performClicked → MAC 匹配 → QuickPopup
-│   ├── MainPanelControllerProxy.kt # 反射封装 exitOrHide()，隐藏控制中心
-│   ├── CrossProcessActions.kt    # 跨进程 action 常量和 extra key 定义
-│   ├── HyperOsBatteryNotification.kt # HyperOS 风格电量通知 BroadcastReceiver
-│   └── ProbeResultCache.kt       # 类存在性 JSON 持久化，供 Settings 页读取
+├── lsposed/                      # LSPosed 模块（注入 com.milink.service）
+│   ├── ModuleMain.kt             # XposedModule 入口，仅路由到 MilinkAirpodsAdapterEntry
+│   └── milink/                   # AirPods adapter 主线（M0+）
+│       ├── MilinkAirpodsAdapterEntry.kt  # M1 占位入口，安装 AirPods 识别链路 hook
+│       ├── MilinkAirpodsM1Hook.kt        # M1 AirPods 查询链 hooks（checkIsAirPods / isAirPods / deviceId trace）
+│       └── MilinkAirpodsTargetMatcher.kt # MAC allowlist 匹配器 + airpodsDecision 逻辑
 ├── media/
 │   └── MediaPlaybackController.kt
 ├── protocol/

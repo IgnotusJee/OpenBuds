@@ -1,6 +1,6 @@
 # OpenBuds 源代码完整文档
 
-> 生成日期: 2026-05-31 | 共 45 个 Kotlin 源文件
+> 生成日期: 2026-05-31 | 共 44 个 Kotlin 源文件
 > 分支: `feat/milink-sony-card` | 最新提交: `9f97ed1` (2026-05-31) | 提交数: 72
 
 ---
@@ -891,13 +891,13 @@ Android AudioManager 媒体键控制。作为 Tandem 播放控制不可用时的
 
 **包**: `dev.ignotus.openbuds.service`
 
-Android 前台 Service。持有 `HeadphoneRepository` 单例，提供 `LocalBinder` 供 Activity/外部进程绑定，维护前台通知，管理 MiLink 设备白名单。
+Android 前台 Service。持有 `HeadphoneRepository` 单例，提供 `LocalBinder` 供 Activity/外部进程绑定，维护前台通知。
 
 | 类/函数 | 描述 |
 |---------|------|
 | `SonyControlService` | `Service`，前台运行 |
 | `LocalBinder` | Binder：暴露 `state: LiveData<DeviceStateSnapshot>` 和 `execute(command: ControlCommand)` |
-| `onCreate()` | 初始化 repository、启动前台服务、订阅 repository.state 更新 notification 和白名单 |
+| `onCreate()` | 初始化 repository、启动前台服务、订阅 repository.state 更新 notification |
 | `onBind(intent)` | 返回 `LocalBinder` |
 | `onStartCommand(intent, flags, startId)` | 处理 `ACTION_DISCONNECT` 操作 |
 | `onDestroy()` | 断开设备、取消协程作用域 |
@@ -938,119 +938,50 @@ Android 前台 Service。持有 `HeadphoneRepository` 单例，提供 `LocalBind
 
 **包**: `dev.ignotus.openbuds.lsposed`
 
-LSPosed 模块入口。在 `com.milink.service` 进程中 hook MiLink 蓝牙协议栈，实现 Sony 耳机身份伪装和控制中心集成。
+LSPosed 模块入口。在 `com.milink.service` 进程中加载 MiLink 第一方适配主线。M0 已移除旧 MiTWS 身份伪装、卡片重定向和名称修复 hook；M1 接入 AirPods 识别链路验证 hook。
 
 | 函数 | 描述 |
 |------|------|
 | `ModuleMain` (init) | 记录加载进程名，写入启动标记文件 `/sdcard/openbuds_lsposed_startup.txt` |
-| `onPackageLoaded(param)` | 按包名分发 hook：`com.milink.service` → 身份伪装 (MiLinkIdentityHook) + 控制中心卡片重定向 (MiLinkHeadsetCardHook) + HeadsetClient 追踪 (HeadsetClientTraceHook) + TextView 名称修复 (TextViewNameFixHook) |
+| `onPackageLoaded(param)` | `com.milink.service` → `MilinkAirpodsAdapterEntry.install()`；不加载旧 `isMiHeadset` / 卡片重定向 hook |
 | `log(msg)` | 日志输出 |
 
-### `MiLinkIdentityHook.kt`
+### `milink/MilinkAirpodsAdapterEntry.kt`
 
-**包**: `dev.ignotus.openbuds.lsposed`
+**包**: `dev.ignotus.openbuds.lsposed.milink`
 
-Phase 1 hook：拦截 `BluetoothServiceClient.isMiHeadset()` / `getHeadsetType()` / `isCirculateDevice()`，对 Sony 耳机返回 `true`，使其走第一方设备路径。
-
-| 函数 | 描述 |
-|------|------|
-| `probe()` | 探测目标类 `com.miui.circulate.api.protocol.bluetooth.BluetoothServiceClient` 是否存在 |
-| `hook()` | 安装三个 hook：isMiHeadset → 对 Sony 返回 true + 缓存 MAC + 预连接 BLE；getHeadsetType → 返回 2 (SINGER_BATTERY)；isCirculateDevice → 仅已连接时返回 true |
-| `preconnectBle(mac, name)` | 检测到 Sony 设备后立即启动 BLE 预连接（后台线程），使 MLCard 渲染时已有真实数据 |
-| `matchesSonyPattern(name)` | 名称模式匹配：WF-*/WH-*/WI-*/MDR-*/XBA-*/LinkBuds* |
-| `cacheSonyDevice(mac, name)` | 缓存最后一次识别的 Sony 设备 MAC 和名称 |
-
-**Companion 共享状态**:
-
-| 属性 | 描述 |
-|------|------|
-| `lastSonyMac` | 最后匹配的 Sony 设备 MAC（跨 hook 共享） |
-| `lastSonyName` | 最后匹配的 Sony 设备名称 |
-| `preconnectRepository` | 预连接创建的 Repository 实例（与 MiLinkHeadsetCardHook 共享） |
-
-### `MiLinkHeadsetCardHook.kt`
-
-**包**: `dev.ignotus.openbuds.lsposed`
-
-Phase 2 hook：重定向 `MLCardViewHostService` 中 third_headset 设备到 native headset 布局，并提供合成数据和真实 BLE 数据桥接。
+MiLink AirPods adapter 主线入口。M1 阶段安装只读识别验证 hook，不实现 `getAirPodsState` 或 `/airpodsstate` 状态代理。
 
 | 函数 | 描述 |
 |------|------|
-| `probe()` | 探测 10 个 MiLink 类是否存在 |
-| `hook()` | 安装三个子 hook：MLCard 策略重定向、控制器数据 hook、HeadsetClient 工厂代理 |
-| `hookMlCardStrategy()` | hook `MLCardViewHostService.v(DeviceInfo, int)`：对 third_headset 设备安装 native headset 策略 |
-| `hookControllerData()` | hook 控制器数据获取方法（A-F, G, L, M, O, X, Y, Z, b0, e0）：返回合成设备信息、状态、电量、模式、音量等 |
-| `hookHeadsetClientFactory()` | hook headset client 工厂 `a(Context, ServiceListener, HostListener, String)`：创建代理 Client/Profile/Query |
-| `createClientProxy(realClient, hostListener)` | 代理 HeadsetClient：拦截 getProfile/getQuery/initialize/startDiscovery/circulateStart/circulateEnd |
-| `createProfileProxy(realClient)` | 代理 Profile：拦截 connect/disconnect/getHeadsetProperty/updateHeadsetMode/updateHeadsetVolume/updateHeadsetAudioEffect |
-| `createQueryProxy(realClient)` | 代理 Query：拦截 getBondStateWithTargetHost/getSupportAncMode/isMmaHeadset/switchToHeadsetActivity/getMultipointInfo |
-| `startDataBridgeCollector()` | 启动协程收集 `repository.state` Flow，将真实 BLE 数据（电量、ANC 模式、设备名）同步到合成状态 |
-| `forwardAncModeToDevice(uiValue)` | UI ANC 模式变化 → 通过 repository 写入真实设备 |
-| `forwardVolumeToSystem(percent)` | UI 音量变化 → 设置系统 AudioManager 音量 |
+| `install()` | 创建 `MilinkAirpodsM1Hook` 并安装 AirPods 识别链路验证 hook |
 
-### `HeadsetClientTraceHook.kt`
+### `milink/MilinkAirpodsM1Hook.kt`
 
-**包**: `dev.ignotus.openbuds.lsposed`
+**包**: `dev.ignotus.openbuds.lsposed.milink`
 
-Phase 3 hook：追踪 `HeadsetServiceClient.b(Message)`，修复 Sony 设备的 HeadsetHost.name（替换 "xxx的Xiaomi" 为真实设备名）。
+M1 可行性验证 hook。只影响 `com.milink.service` 进程内米链客户端方法，不启动 OpenBuds 协议栈，不 hook `isMiHeadset` / `checkIsMiTWS`。
 
 | 函数 | 描述 |
 |------|------|
-| `probe()` | 探测 HeadsetServiceClient 和 HeadsetHost 类 |
-| `hook()` | hook `b(Message)`：拦截 msg.what==0 的消息，修复 HeadsetHost 中的名称字段 |
-| `handleMessage(msg)` | 首次调用时遍历 msg.obj 的字段找到 name 字段并缓存，后续调用直接替换名称 |
+| `install()` | 安装 `MxBluetoothManager` 主 hook 和 `BluetoothServiceClient` 兜底/trace hook |
+| `hookMxBluetoothManager()` | hook `checkIsAirPods(String)`：真实 AirPods 原结果透传；M1 allowlist MAC 覆盖为 true |
+| `hookBluetoothServiceIsAirPods()` | hook `BluetoothServiceClient.isAirPods(BluetoothDevice)`，在 AirPods manager 不可用时按同一 allowlist 兜底 |
+| `hookAirpodsDeviceIdTrace()` | 仅记录 `getAirpodsDeviceId` / `getDeviceIdForAirpods` 调用，不伪造 state |
+| `hookAirpodsHeadsetTypeTrace()` | 仅记录 `getAirpodsHeadsetType(String)` 调用和返回值 |
 
-### `TextViewNameFixHook.kt`
+### `milink/MilinkAirpodsTargetMatcher.kt`
 
-**包**: `dev.ignotus.openbuds.lsposed`
+**包**: `dev.ignotus.openbuds.lsposed.milink`
 
-Phase 3 辅助 hook：全局拦截 `TextView.setText(CharSequence)`，将包含 "的Xiaomi" 的文本替换为 Sony 设备真实名称。
+M1 临时目标匹配器。用 MAC allowlist 模拟未来 M3 bridge 的授权设备集合。
 
-| 函数 | 描述 |
-|------|------|
-| `hook()` | hook `TextView.setText(CharSequence)`：当文本含 "的Xiaomi" 时替换为 `MiLinkIdentityHook.lastSonyName` |
-
-### `HeadsetApiProbeHook.kt`
-
-**包**: `dev.ignotus.openbuds.lsposed`
-
-Phase 3 探测 hook：探测 MiLink headset API 类是否存在，记录类的方法签名用于逆向分析。
-
-| 函数 | 描述 |
-|------|------|
-| `probe()` | 尝试加载 7 个目标类，记录每个类的所有公开方法到 `ProbeResultCache` |
-
-### `DeviceWhitelist.kt`
-
-**包**: `dev.ignotus.openbuds.lsposed`
-
-MAC 地址白名单管理器。文件存储在 `/sdcard/headset_whitelist.txt`，供 App 进程和 LSPosed 模块（`com.milink.service` 进程）跨进程共享。
-
-| 函数 | 描述 |
-|------|------|
-| `read()` | 读取白名单，返回 normalized MAC 集合 |
-| `add(mac)` | 添加 MAC（去重） |
-| `remove(mac)` | 移除 MAC |
-| `contains(mac)` | 检查 MAC 是否在白名单中 |
-
-### `ProbeResultCache.kt`
-
-**包**: `dev.ignotus.openbuds.lsposed`
-
-LSPosed 探测结果缓存。内存 + 文件（`/data/local/tmp/lsposed_probe_results.json`）双重持久化，支持跨进程读写。
-
-| 数据类/函数 | 描述 |
-|-------------|------|
-| `ProbeStatus(className, found, methodsFound, methodsNotFound, timestamp)` | 探测状态记录 |
-| `markFound(className)` | 标记类已找到 |
-| `markNotFound(className)` | 标记类未找到 |
-| `markMethodFound(className, methodName)` | 标记方法已找到 |
-| `markMethodNotFound(className, methodName)` | 标记方法未找到 |
-| `allResults()` | 返回所有探测结果 |
-| `isCompatible()` | 返回兼容性评估：Compatible/Partial/Incompatible/Unknown |
-| `persistShared()` | 持久化到共享文件，合并其他进程写入的结果 |
-| `loadShared()` | 从共享文件加载 |
-| `save(context)` / `load(context)` | 兼容旧版 App 私有文件路径的读写 |
+| 函数/常量 | 描述 |
+|-----------|------|
+| `DEBUG_PROPERTY` | `debug.openbuds.milink_m1_macs`，可用逗号/分号/空白分隔多个 MAC |
+| `normalizeMac(value)` | 只接受完整 `XX:XX:XX:XX:XX:XX` 格式并转大写 |
+| `configuredTargets(value)` | 从 debug property 解析 allowlist；无有效值时使用 M1 默认测试 MAC |
+| `airpodsDecision(originalResult, mac, value)` | 原结果 true 时透传；原结果 false 且 MAC 命中 allowlist 时返回 true |
 
 ---
 
@@ -1101,8 +1032,7 @@ LSPosed 探测结果缓存。内存 + 文件（`/data/local/tmp/lsposed_probe_re
 │  ble/qcy/QcyBleClient (GATT only)                       │
 ├─────────────────────────────────────────────────────────┤
 │              LSPosed (Optional)                          │
-│  MiLinkIdentityHook  MiLinkHeadsetCardHook               │
-│  HeadsetClientTraceHook  TextViewNameFixHook             │
-│  DeviceWhitelist  ProbeResultCache                       │
+│  ModuleMain -> milink/MilinkAirpodsAdapterEntry          │
+│  M1: AirPods classification hook + MAC allowlist         │
 └─────────────────────────────────────────────────────────┘
 ```
