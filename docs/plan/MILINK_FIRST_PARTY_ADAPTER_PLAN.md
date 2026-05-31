@@ -413,7 +413,7 @@ docs/MILINK_BUNDLE_FORMAT.md                   // 11-字段 Bundle 的实际抓�
 
 ### 阶段 M1：可行性验证（1 周）
 
-> **状态：已完成代码实现，真机验证通过，HyperOS 2.x 类名/签名完全匹配。**
+> **状态：已完成代码实现，真机验证通过，HyperOS 3.0 类名/签名完全匹配。**
 
 #### 代码实现 (x)
 
@@ -425,7 +425,7 @@ docs/MILINK_BUNDLE_FORMAT.md                   // 11-字段 Bundle 的实际抓�
 - [x] 新增 M1 临时 MAC allowlist matcher，支持 `debug.openbuds.milink_m1_macs` 逗号分隔覆盖。
 - [x] 所有 KDoc 注释已完成（4 个文件）。
 
-#### 真机验证（HyperOS 2.x，小米13 Pro）(x)
+#### 真机验证（HyperOS 3.0，小米13 Pro）(x)
 
 - [x] 控制中心下拉栏日志确认：
   - `MxBluetoothManager.checkIsAirPods` 对所有已配对设备被调用
@@ -536,7 +536,7 @@ adb shell setprop debug.openbuds.milink_m1_intercept true
 
 ### 8.2 开放问题（需要在 M1 阶段确认）
 
-1. `MxBluetoothManager`、`BluetoothServiceClient`、`AncBatteryController` 在真机 dex 里的类名/方法名是否与 jadx 输出一致？→ **已确认 HyperOS 2.x 小米13 Pro 上完全匹配。** 其他机型/版本待验证。
+1. `MxBluetoothManager`、`BluetoothServiceClient`、`AncBatteryController` 在真机 dex 里的类名/方法名是否与 jadx 输出一致？→ **已确认 HyperOS 3.0 小米13 Pro 上完全匹配。** 其他机型/版本待验证。
 2. `mAirPodsAdapterEnable` 是否只在 `MxBluetoothManager` 层判断？如果某些版本在更上层也拦截 AirPods，需要 hook 更高层 `BluetoothServiceClient.isAirPods`。→ **`BluetoothServiceClient.isAirPods` 兜底 hook 已验证有效，调用链正常。**
 3. `AIRPODS_ADAPTER_JAR_ENABLE` 在没有 AirpodsAdapter.jar 的设备上是否影响 provider/observer 初始化？它不作为默认闸门，但 M1-M2 要记录它对调用链的影响。
 4. 米链 `HeadsetServiceClient.onActiveHeadsetChanged` 行 636 的 type=5/6 跳过逻辑，如果我们设 type=0/4，会不会触发其它意料外的代码路径。→ **未触发（trace 模式未改变 deviceId/type）。**

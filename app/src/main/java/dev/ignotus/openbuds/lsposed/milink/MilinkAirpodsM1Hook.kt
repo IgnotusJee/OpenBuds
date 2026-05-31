@@ -508,7 +508,7 @@ class MilinkAirpodsM1Hook(
         /** System property key for the intercept/trace-only mode toggle. */
         private const val INTERCEPT_PROPERTY = "debug.openbuds.milink_m1_intercept"
 
-        /** Fully-qualified class names as found in HyperOS 2.x dex. */
+        /** Fully-qualified class names as found in HyperOS 3.0 dex. */
         private const val MX_BLUETOOTH_MANAGER =
             "com.xiaomi.mxbluetoothsdk.manager.MxBluetoothManager"
         private const val BLUETOOTH_SERVICE_CLIENT =
