@@ -186,7 +186,7 @@ V1 协议类将 EQ 方法直接委托给 V2。这是因为 WH-1000XM4 的 EQ fea
 
 ### 3.8 缺少 SonyTandemFrame.kt ℹ️
 
-DEVELOPMENT.md 的代码结构图中列出了 `protocol/SonyTandemFrame.kt`，但实际文件系统中不存在。`SonyTandemFrame` 对象和 `TandemMessage` 数据类定义在 `SonyTandemV2Table1Protocol.kt` 文件的底部。这不影响功能但文档与实际不一致。
+DEVELOPMENT.md 的代码结构图中列出了 `protocol/SonyTandemFrame.kt`，但实际文件系统中不存在。`SonyTandemFrame` 对象和 `TandemMessage` 数据类定义在 `protocol/sony/SonyTandemTypes.kt` 文件中。这不影响功能但文档与实际不一致。
 
 **建议**：更新 DEVELOPMENT.md 的代码结构图。
 

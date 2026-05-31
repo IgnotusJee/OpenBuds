@@ -54,36 +54,55 @@ $adb="C:\Software\platform-tools\adb.exe"
 app/src/main/java/dev/ignotus/openbuds/
 ├── MainActivity.kt
 ├── ble/
-│   ├── SonyBleClient.kt          # 设备发现、GATT 握手、SPP 选择、诊断
-│   ├── SonySppTransport.kt       # Sony SPP 帧、ACK、转义、校验和
-│   └── TandemTransportRouting.kt # GATT endpoint spec、SPP payload 映射、channel 路由
+│   ├── HeadphoneTransportClient.kt  # 传输层接口
+│   ├── HeadphoneTransportSelector.kt# 多品牌客户端路由
+│   ├── sony/
+│   │   ├── SonyBleClient.kt        # 设备发现、GATT 握手、SPP 选择、诊断
+│   │   ├── SonySppTransport.kt     # Sony SPP 帧、ACK、转义、校验和
+│   │   └── TandemTransportRouting.kt# GATT endpoint spec、SPP payload 映射、channel 路由
+│   └── qcy/
+│       └── QcyBleClient.kt         # QCY GATT 客户端
 ├── data/
 │   ├── HeadphoneRepository.kt
 │   ├── sony/
 │   │   └── SonyModelImageCatalog.kt
-│   └── qcy/
-│       └── QcyResponseMapper.kt
+│   ├── qcy/
+│   │   └── QcyResponseMapper.kt
+│   └── settings/
+│       └── AppSettingsStore.kt
 ├── headphones/                   # 设备/品牌 profile、capability、adapter、EQ 引擎
 │   ├── HeadphoneAdapter.kt       # 接口、ProfileTemplate、FeatureProtocolBinding、HeadphoneCapabilities
-│   ├── EqProtocolEngine.kt       # 设备无关 EQ 引擎：EqDeviceConfig → EqUiCapability、写入/刷新/解析
-│   ├── SonyTandemHeadphoneAdapter.kt
-│   ├── TandemCodecRegistry.kt    # 4 种 protocol variant 的统一 TandemCodec wrapper
-│   └── sonydevices/
-│       ├── LinkBudsSProfile.kt
-│       ├── Wf1000Xm5Profile.kt
-│       └── Wh1000Xm4Profile.kt
+│   ├── EqDeviceConfig.kt         # 共享 EQ 数据类型
+│   ├── sony/
+│   │   ├── EqProtocolEngine.kt   # EQ 写入/刷新/解析引擎
+│   │   ├── SonyTandemHeadphoneAdapter.kt
+│   │   ├── TandemCodecRegistry.kt# 4 种 protocol variant 的统一 TandemCodec wrapper
+│   │   └── devices/
+│   │       ├── LinkBudsSProfile.kt
+│   │       ├── Wf1000Xm5Profile.kt
+│   │       └── Wh1000Xm4Profile.kt
+│   └── qcy/
+│       ├── QcyHeadphoneAdapter.kt
+│       └── devices/
+│           └── QcyC30SProfile.kt
 ├── media/
 │   └── MediaPlaybackController.kt
 ├── protocol/
-│   ├── SonyGatt.kt
-│   ├── SonyTandemConstants.kt    # DATA_MDR/DATA_MDR_NO2 等共享常量
-│   ├── SonyTandemEnums.kt        # 所有协议枚举
-│   ├── SonyTandemTypes.kt        # ParsedTandemResponse sealed class 及其变体
-│   ├── SonyEqEbbPayloadParser.kt # V1/V2 共享 EQ/EBB payload 解析器
-│   ├── SonyTandemV1Table1Protocol.kt
-│   ├── SonyTandemV1Table2Protocol.kt
-│   ├── SonyTandemV2Table1Protocol.kt
-│   └── SonyTandemV2Table2Protocol.kt
+│   ├── HeadphoneResponse.kt      # ParsedHeadphoneResponse sealed hierarchy
+│   ├── HeadphoneEnums.kt         # 跨品牌共享枚举 (EqPresetId, NoiseControlMode...)
+│   ├── sony/
+│   │   ├── SonyGatt.kt
+│   │   ├── SonyTandemConstants.kt# DATA_MDR/DATA_MDR_NO2 等常量
+│   │   ├── SonyTandemEnums.kt    # Sony 专用协议枚举
+│   │   ├── SonyTandemTypes.kt    # TandemMessage、SonyTandemFrame
+│   │   ├── SonyEqEbbPayloadParser.kt# V1/V2 共享 EQ/EBB payload 解析器
+│   │   ├── SonyTandemV1Table1Protocol.kt
+│   │   ├── SonyTandemV1Table2Protocol.kt
+│   │   ├── SonyTandemV2Table1Protocol.kt
+│   │   └── SonyTandemV2Table2Protocol.kt
+│   └── qcy/
+│       ├── QcyProtocol.kt
+│       └── QcyGatt.kt
 ├── theme/
 │   └── Theme.kt
 └── ui/
@@ -105,7 +124,7 @@ app/src/main/java/dev/ignotus/openbuds/
 - `SonyBleClient` 只负责传输层、设备发现、连接生命周期和底层日志，不直接理解 UI 业务。GATT 写入必须通过 `HeadphoneCommand.channel` 路由到对应 Tandem endpoint。
 - `SonySppTransport` 只负责 SPP 帧封装和拆包。传给上层的是带 app data type 的规范化 Tandem payload；Table1 为 `DATA_MDR (0x0E)`，Table2 为 `DATA_MDR_NO2 (0x0F)`。
 - `TandemTransportRouting` 提供 GATT endpoint spec（service/to-acc/from-acc UUID 三元组）、SPP payload 双向映射、通知订阅顺序和 channel 路由逻辑。
-- `protocol/` 中的 Sony Tandem codec 只负责命令构造和响应解析，不持有 Android Context 和 UI 状态。`SonyEqEbbPayloadParser` 供 V1/V2 codec 共享 EQ/EBB payload 解析。
+- `protocol/sony/` 中的 Sony Tandem codec 只负责命令构造和响应解析，不持有 Android Context 和 UI 状态。`SonyEqEbbPayloadParser` 供 V1/V2 codec 共享 EQ/EBB payload 解析。
 - `headphones/` 负责按品牌/型号选择 adapter、声明能力、绑定 feature 到 protocol variant/channel、生成刷新命令和判断写入是否安全。`EqProtocolEngine` 是 EQ 写入/刷新/解析的单一入口，消费 `EqDeviceConfig` 输出 `EqUiCapability`，消除跨 adapter/codec/repository 的 EQ 条件分支。
 - Repository 只发起领域操作，不按型号直接构造协议字节。
 - `HeadphoneRepository` 是应用状态聚合层，负责把协议响应更新成 `HeadphoneUiState`。
@@ -129,7 +148,7 @@ app/src/main/java/dev/ignotus/openbuds/
 
 大部分 Tandem V2 的状态查询功能（LEA、Quick Access、佩戴检测等）遵循相同的实现配方。以下为按步骤的模板：
 
-1. **枚举** — 在 `protocol/SonyTandemEnums.kt` 中添加 inquired type、状态码/结果码等 enum。命令常量字节定义放在 `protocol/SonyTandemConstants.kt`（如果跨版本共享）或对应 protocol object 内。参考 `LeaInquiredType`、`WearingDetectionStatus`、`QuickAccessFunction`。
+1. **枚举** — 在 `protocol/sony/SonyTandemEnums.kt` 中添加 inquired type、状态码/结果码等 enum。命令常量字节定义放在 `protocol/sony/SonyTandemConstants.kt`（如果跨版本共享）或对应 protocol object 内。参考 `LeaInquiredType`、`WearingDetectionStatus`、`QuickAccessFunction`。
 
 2. **命令常量** — 在对应 `SonyTandemV*Table*Protocol` object 中添加 `GET/RET/NTFY` 命令字节。GET_STATUS 命令 byte 通常在 `0xX2` 位置，RET 在 `0xX3`，NTFY 在 `0xX5`；GET_PARAM 在 `0xX6`，RET_PARAM 在 `0xX7`。
 
@@ -137,7 +156,7 @@ app/src/main/java/dev/ignotus/openbuds/
 
 4. **Parser** — 在 `when (command)` 分支中路由新命令到私有 parse 函数。parse 函数从 `payload` 中按偏移量提取字段，使用 `entries.firstOrNull { it.code == byte }` 查找枚举。dispatch 多个 inquired type 时使用 `parseSystemRetParam` 的分发模式：先读 `payload[0]`，再按 type 委托到具体 parser。
 
-5. **`ParsedTandemResponse` 变体** — 在 `protocol/SonyTandemTypes.kt` 的 sealed interface 中新增 data class，含 `override val raw: ByteArray`。nullable 字段便于安全落回 `Unknown`。
+5. **`ParsedHeadphoneResponse` 变体** — 在 `protocol/HeadphoneResponse.kt` 的 sealed interface 中新增 data class，含 `override val raw: ByteArray`。nullable 字段便于安全落回 `Unknown`。
 
 6. **Repository state** — 在 `data/HeadphoneRepository.kt` 中新增 `data class XxxState(...)`，在 `HeadphoneUiState` 中添加默认字段。apply 函数 **统一使用 `current.copy(state = current.state.copy(...))` 的合并模式**，避免多响应互相覆盖。
 

@@ -45,9 +45,9 @@ The Android rebuild lives in `app/` as a Jetpack Compose project with package `d
 
 ## Core Architecture (4 layers + adapter pattern + EQ engine)
 
-1. **BLE GATT 传输层** — `SonyBleClient.kt` + `SonySppTransport.kt` + `TandemTransportRouting.kt` — GATT握手、SPP帧封装/拆包、GATT endpoint spec（service/to-acc/from-acc UUID 三元组）、SPP payload 双向映射、设备发现和连接生命周期。不直接理解UI业务。
-2. **Tandem 协议消息层** — `protocol/SonyTandemV1Table1Protocol.kt`, `SonyTandemV2Table1Protocol.kt`, `SonyTandemV1Table2Protocol.kt`, `SonyTandemV2Table2Protocol.kt` — 命令构造和响应解析，不持有Android Context和UI状态。消息格式: `[DataType(1)] [Command(1)] [Payload(N)]`，DataType: `0x0E`=DATA_MDR(Table1), `0x0F`=DATA_MDR_NO2(Table2)。枚举和类型定义在 `SonyTandemEnums.kt`/`SonyTandemTypes.kt`/`SonyTandemConstants.kt`，EQ/EBB payload 解析由 `SonyEqEbbPayloadParser.kt` 统一处理。
-3. **Codec/Adapter/profile 层** — `TandemCodecRegistry.kt` 将 4 种 protocol variant 包装为统一 `TandemCodec` 接口；`HeadphoneAdapter.kt` 声明 `ProfileTemplate`、`FeatureProtocolBinding`、`HeadphoneCapabilities` 等类型；`SonyTandemHeadphoneAdapter.kt` 按品牌/型号选择 adapter、按功能粒度选择协议版本（`featureProtocolMap`）。新增设备型号只需增加 `ProfileTemplate`。`EqProtocolEngine.kt` 是 EQ 写入/刷新/解析的单一入口，消费 `EqDeviceConfig`（定义在各 device profile）输出 `EqUiCapability`。
+1. **BLE GATT 传输层** — `ble/sony/SonyBleClient.kt` + `ble/sony/SonySppTransport.kt` + `ble/sony/TandemTransportRouting.kt` — GATT握手、SPP帧封装/拆包、GATT endpoint spec（service/to-acc/from-acc UUID 三元组）、SPP payload 双向映射、设备发现和连接生命周期。不直接理解UI业务。
+2. **Tandem 协议消息层** — `protocol/sony/SonyTandemV1Table1Protocol.kt`, `protocol/sony/SonyTandemV2Table1Protocol.kt`, `protocol/sony/SonyTandemV1Table2Protocol.kt`, `protocol/sony/SonyTandemV2Table2Protocol.kt` — 命令构造和响应解析，不持有Android Context和UI状态。消息格式: `[DataType(1)] [Command(1)] [Payload(N)]`，DataType: `0x0E`=DATA_MDR(Table1), `0x0F`=DATA_MDR_NO2(Table2)。枚举和类型定义在 `protocol/sony/SonyTandemEnums.kt`/`protocol/sony/SonyTandemTypes.kt`/`protocol/sony/SonyTandemConstants.kt`，EQ/EBB payload 解析由 `protocol/sony/SonyEqEbbPayloadParser.kt` 统一处理。跨品牌共享响应类型定义在 `protocol/HeadphoneResponse.kt`，共享枚举在 `protocol/HeadphoneEnums.kt`。
+3. **Codec/Adapter/profile 层** — `headphones/sony/TandemCodecRegistry.kt` 将 4 种 protocol variant 包装为统一 `TandemCodec` 接口；`headphones/HeadphoneAdapter.kt` 声明 `ProfileTemplate`、`FeatureProtocolBinding`、`HeadphoneCapabilities` 等类型；`headphones/sony/SonyTandemHeadphoneAdapter.kt` 按品牌/型号选择 adapter、按功能粒度选择协议版本（`featureProtocolMap`）。新增设备型号只需增加 `ProfileTemplate`。`headphones/sony/EqProtocolEngine.kt` 是 EQ 写入/刷新/解析的单一入口，消费 `EqDeviceConfig`（定义在各 device profile）输出 `EqUiCapability`。
 4. **应用层** — `data/HeadphoneRepository.kt` — 状态聚合，不按型号直接构造协议字节。UI只消费state调用repository action。
 
 关键：Repository不直接构造协议字节，UI不持有BLE状态，协议codec独立于Android框架，EQ所有路径通过EqProtocolEngine进入。
@@ -59,9 +59,14 @@ app/src/main/java/dev/ignotus/openbuds/
 ├── MainActivity.kt
 ├── QuickPopupActivity.kt       # 对话框主题 Activity，承载 QuickPopupScreen
 ├── ble/
-│   ├── SonyBleClient.kt          # 设备发现、GATT 握手、SPP 选择、诊断
-│   ├── SonySppTransport.kt       # Sony SPP 帧、ACK、转义、校验和
-│   └── TandemTransportRouting.kt # GATT endpoint spec、SPP payload 映射、channel 路由
+│   ├── HeadphoneTransportClient.kt
+│   ├── HeadphoneTransportSelector.kt
+│   ├── sony/
+│   │   ├── SonyBleClient.kt          # 设备发现、GATT 握手、SPP 选择、诊断
+│   │   ├── SonySppTransport.kt       # Sony SPP 帧、ACK、转义、校验和
+│   │   └── TandemTransportRouting.kt # GATT endpoint spec、SPP payload 映射、channel 路由
+│   └── qcy/
+│       └── QcyBleClient.kt
 ├── data/
 │   ├── HeadphoneRepository.kt
 │   ├── sony/
@@ -70,13 +75,19 @@ app/src/main/java/dev/ignotus/openbuds/
 │       └── QcyResponseMapper.kt
 ├── headphones/
 │   ├── HeadphoneAdapter.kt       # 接口、ProfileTemplate、FeatureProtocolBinding、HeadphoneCommand、HeadphoneCapabilities
-│   ├── EqProtocolEngine.kt       # 设备无关 EQ 引擎：EqDeviceConfig → EqUiCapability、写入/刷新/解析
-│   ├── SonyTandemHeadphoneAdapter.kt
-│   ├── TandemCodecRegistry.kt    # 4 种 protocol variant 的统一 TandemCodec wrapper
-│   └── sonydevices/
-│       ├── LinkBudsSProfile.kt
-│       ├── Wf1000Xm5Profile.kt
-│       └── Wh1000Xm4Profile.kt
+│   ├── EqDeviceConfig.kt         # 共享 EQ 数据类型
+│   ├── sony/
+│   │   ├── EqProtocolEngine.kt   # 设备无关 EQ 引擎
+│   │   ├── SonyTandemHeadphoneAdapter.kt
+│   │   ├── TandemCodecRegistry.kt
+│   │   └── devices/
+│   │       ├── LinkBudsSProfile.kt
+│   │       ├── Wf1000Xm5Profile.kt
+│   │       └── Wh1000Xm4Profile.kt
+│   └── qcy/
+│       ├── QcyHeadphoneAdapter.kt
+│       └── devices/
+│           └── QcyC30SProfile.kt
 ├── lsposed/                      # LSPosed 模块（可选系统集成层）
 │   ├── ModuleMain.kt             # XposedModule 入口，按进程分发 probe + hook
 │   ├── BluetoothProcessHook.kt   # com.android.bluetooth 进程探测
@@ -90,15 +101,21 @@ app/src/main/java/dev/ignotus/openbuds/
 ├── media/
 │   └── MediaPlaybackController.kt
 ├── protocol/
-│   ├── SonyGatt.kt
-│   ├── SonyTandemConstants.kt    # DATA_MDR/DATA_MDR_NO2 等共享常量
-│   ├── SonyTandemEnums.kt        # 所有协议枚举（CommonInquiredType、PowerInquiredType、EqPresetId 等）
-│   ├── SonyTandemTypes.kt        # ParsedTandemResponse sealed class 及其变体
-│   ├── SonyEqEbbPayloadParser.kt # V1/V2 共享 EQ/EBB payload 解析器（preset、Clear Bass、band info）
-│   ├── SonyTandemV1Table1Protocol.kt
-│   ├── SonyTandemV1Table2Protocol.kt
-│   ├── SonyTandemV2Table1Protocol.kt  # 含 SonyTandemFrame + TandemMessage 定义
-│   └── SonyTandemV2Table2Protocol.kt
+│   ├── HeadphoneResponse.kt      # ParsedHeadphoneResponse sealed hierarchy
+│   ├── HeadphoneEnums.kt         # 跨品牌共享枚举 (EqPresetId, NoiseControlMode...)
+│   ├── sony/
+│   │   ├── SonyGatt.kt
+│   │   ├── SonyTandemConstants.kt# DATA_MDR/DATA_MDR_NO2 等常量
+│   │   ├── SonyTandemEnums.kt    # Sony 专用协议枚举
+│   │   ├── SonyTandemTypes.kt    # TandemMessage、SonyTandemFrame
+│   │   ├── SonyEqEbbPayloadParser.kt# V1/V2 共享 EQ/EBB payload 解析器
+│   │   ├── SonyTandemV1Table1Protocol.kt
+│   │   ├── SonyTandemV1Table2Protocol.kt
+│   │   ├── SonyTandemV2Table1Protocol.kt
+│   │   └── SonyTandemV2Table2Protocol.kt
+│   └── qcy/
+│       ├── QcyProtocol.kt
+│       └── QcyGatt.kt
 ├── receiver/
 │   └── SystemIntegrationReceiver.kt # 跨进程广播接收器，处理系统进程→App 通信
 ├── service/
@@ -122,7 +139,7 @@ app/src/main/java/dev/ignotus/openbuds/
         └── SettingsScreen.kt
 ```
 
-注意：`SonyTandemFrame` 和 `TandemMessage` 定义在 `SonyTandemV2Table1Protocol.kt` 底部，不存在独立的 `SonyTandemFrame.kt` 文件。协议枚举和常量已拆分为独立的 `SonyTandemConstants.kt`、`SonyTandemEnums.kt`、`SonyTandemTypes.kt`。EQ/EBB payload 解析由 `SonyEqEbbPayloadParser.kt` 统一处理，供 V1/V2 codec 共享。
+注意：`SonyTandemFrame` 和 `TandemMessage` 定义在 `protocol/sony/SonyTandemTypes.kt`，不存在独立的 `SonyTandemFrame.kt` 文件。协议枚举和常量在 `protocol/sony/` 子包下。跨品牌共享类型（`ParsedHeadphoneResponse`、`EqPresetId`、`NoiseControlMode`）在 `protocol/HeadphoneResponse.kt` 和 `protocol/HeadphoneEnums.kt`。EQ/EBB payload 解析由 `protocol/sony/SonyEqEbbPayloadParser.kt` 统一处理，供 V1/V2 codec 共享。
 
 ## Tandem V2 命令族字节范围
 
@@ -285,7 +302,7 @@ Start-Sleep -Seconds 5
 4. **`OnOffSettingValue` 反转**：`0x00=ON, 0x01=OFF`，不要按布尔直觉写。
 5. **EQ raw band 0 = Clear Bass**，非可见频段。
 6. **LE Audio切换会触发蓝牙重连**，不能按普通开关实现。
-7. **SonyTandemFrame.kt 不存在**：TandemMessage定义在 `SonyTandemV2Table1Protocol.kt` 底部，协议枚举在 `SonyTandemEnums.kt`，常量在 `SonyTandemConstants.kt`，响应类型在 `SonyTandemTypes.kt`。文档中如有引用需注意。
+7. **SonyTandemFrame.kt 不存在**：TandemMessage定义在 `protocol/sony/SonyTandemTypes.kt`，协议枚举在 `protocol/sony/SonyTandemEnums.kt`，常量在 `protocol/sony/SonyTandemConstants.kt`，响应类型在 `protocol/HeadphoneResponse.kt`。文档中如有引用需注意。
 8. **SystemUiHook probe 只检测 PluginInstance**：`MainPanelController` 和 `DeviceInfoWrapper` 位于 `miui.systemui.plugin` 的 ClassLoader 中，SystemUI ClassLoader 无法加载。probe 阶段仅检测 `PluginInstance`（SystemUI ClassLoader 中），插件类存在性在 hook 时动态判断（不存在则跳过并记录日志）。
 9. **控制中心 hook 依赖 HyperOS 版本**：`PluginInstance.mPluginFactory.mClassLoaderFactory` 反射链和 `MainPanelController.exitOrHide()` / `DeviceInfoWrapper.performClicked` 在不同 HyperOS 版本中可能变化。未知版本默认 hook 会跳过（try/catch 保护），不影响控制中心稳定性。禁用模块或关闭 toggle 后，点击 third_headset 卡片有 200ms 延迟（MAC 查询超时）后正常透传。
 

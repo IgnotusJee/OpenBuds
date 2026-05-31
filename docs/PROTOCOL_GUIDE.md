@@ -15,7 +15,7 @@ OpenBuds 当前实现的是 Sony Tandem V1/V2 的本地控制子集，主要覆�
 
 ### GATT
 
-GATT UUID 定义在 `SonyGatt.kt`。
+GATT UUID 定义在 `protocol/sony/SonyGatt.kt`。
 
 关键服务和特征：
 
@@ -98,9 +98,9 @@ App 内部统一使用：
 DataType(1) Command(1) Payload(N)
 ```
 
-共享 frame data type 只有两种：`DATA_MDR = 0x0E` 用于 Table1，`DATA_MDR_NO2 = 0x0F` 用于 Table2。协议命令常量保留在各自的 V1/V2/Table1/Table2 object 内，避免 `0x13` 等跨版本命令碰撞被错误共用。共享常量（`DATA_MDR`、`DATA_MDR_NO2` 等）定义在 `SonyTandemConstants.kt`。
+共享 frame data type 只有两种：`DATA_MDR = 0x0E` 用于 Table1，`DATA_MDR_NO2 = 0x0F` 用于 Table2。协议命令常量保留在各自的 V1/V2/Table1/Table2 object 内，避免 `0x13` 等跨版本命令碰撞被错误共用。共享常量（`DATA_MDR`、`DATA_MDR_NO2` 等）定义在 `protocol/sony/SonyTandemConstants.kt`。
 
-命令构造集中在 `protocol/` 的协议 object，并通过 `headphones/TandemCodecRegistry.kt` 和 `headphones/EqProtocolEngine.kt` 暴露给 adapter。不要在 UI 或 Repository 里手写字节数组，除非是在新增 builder 的过程中临时验证。
+命令构造集中在 `protocol/sony/` 和 `protocol/qcy/` 的协议 object，并通过 `headphones/sony/TandemCodecRegistry.kt` 和 `headphones/sony/EqProtocolEngine.kt` 暴露给 adapter。不要在 UI 或 Repository 里手写字节数组，除非是在新增 builder 的过程中临时验证。
 
 ## 当前已实现命令族
 
@@ -203,7 +203,7 @@ EQ 功能通过 `EqProtocolEngine` 进入，消费 `EqDeviceConfig`（声明于�
 - `hasClearBass`：是否支持 Clear Bass
 - `clearBassWriteMode`：`PRESET_EQ_BANDS`（合并到 EQ band 数组）或 `EBB_PARAM`（独立 Clear Bass 命令）
 
-**EQ/EBB payload 解析** 由 `SonyEqEbbPayloadParser` 统一处理，供 V1/V2 codec 共享。支持：
+**EQ/EBB payload 解析** 由 `protocol/sony/SonyEqEbbPayloadParser` 统一处理，供 V1/V2 codec 共享。支持：
 - V1 type codes: `PRESET_EQ(0x01)`, `EBB(0x02)`, `PRESET_EQ_NONCUSTOMIZABLE(0x03)`
 - V2 type codes: 所有 `EqEbbInquiredType` entries
 - EBB 自动检测 preset 字段（`v2EbbHasPresetField`）：payload 长度匹配时从 band count 偏移推断结构

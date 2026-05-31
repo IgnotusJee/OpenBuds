@@ -1,7 +1,7 @@
 # OpenBuds 源代码完整文档
 
-> 生成日期: 2026-05-30 | 共 45 个 Kotlin 源文件
-> 分支: `feat/milink-sony-card` | 最新提交: `3c7bf27` (2026-05-30) | 提交数: 69
+> 生成日期: 2026-05-31 | 共 45 个 Kotlin 源文件
+> 分支: `feat/milink-sony-card` | 最新提交: `9f97ed1` (2026-05-31) | 提交数: 72
 
 ---
 
@@ -12,7 +12,7 @@
 3. [协议层 (`protocol/`)](#3-协议层-protocol)
 4. [数据层 (`data/`)](#4-数据层-data)
 5. [耳机适配层 (`headphones/`)](#5-耳机适配层-headphones)
-6. [设备 Profile (`headphones/sonydevices/`, `headphones/qcydevices/`)](#6-设备-profile)
+6. [设备 Profile (`headphones/sony/devices/`, `headphones/qcy/devices/`)](#6-设备-profile)
 7. [媒体控制 (`media/`)](#7-媒体控制-media)
 8. [后台服务 (`service/`)](#8-后台服务-service)
 9. [LSPosed 模块 (`lsposed/`)](#9-lsposed-模块-lsposed)
@@ -102,9 +102,9 @@ Application 子类，作为全局异常处理器。
 
 ---
 
-### `SonyBleClient.kt`
+### `ble/sony/SonyBleClient.kt`
 
-**包**: `dev.ignotus.openbuds.ble`
+**包**: `dev.ignotus.openbuds.ble.sony`
 
 Sony Tandem 的 BLE 客户端实现。包含设备发现（BLE 扫描 + Sony Audio AD 解析）、GATT 连接握手（MTU 协商、通知启用）、SPP 传输路径、以及不支持的端点诊断探测。
 
@@ -150,9 +150,9 @@ Sony Tandem 的 BLE 客户端实现。包含设备发现（BLE 扫描 + Sony Aud
 
 ---
 
-### `SonySppTransport.kt`
+### `ble/sony/SonySppTransport.kt`
 
-**包**: `dev.ignotus.openbuds.ble`
+**包**: `dev.ignotus.openbuds.ble.sony`
 
 Sony SPP (RFCOMM) 传输层实现。处理帧封装/拆包、转义、校验和、ACK 重试。
 
@@ -184,9 +184,9 @@ Sony SPP (RFCOMM) 传输层实现。处理帧封装/拆包、转义、校验和�
 
 ---
 
-### `TandemTransportRouting.kt`
+### `ble/sony/TandemTransportRouting.kt`
 
-**包**: `dev.ignotus.openbuds.ble`
+**包**: `dev.ignotus.openbuds.ble.sony`
 
 GATT 端点路由和 SPP payload 映射。
 
@@ -207,9 +207,9 @@ GATT 端点路由和 SPP payload 映射。
 
 ---
 
-### `QcyBleClient.kt`
+### `ble/qcy/QcyBleClient.kt`
 
-**包**: `dev.ignotus.openbuds.ble`
+**包**: `dev.ignotus.openbuds.ble.qcy`
 
 QCY 耳机的 BLE GATT 客户端。使用串行化 GATT 操作队列，支持 CCCD 写入、特征读取、MTU 协商、写入操作。
 
@@ -233,9 +233,65 @@ QCY 耳机的 BLE GATT 客户端。使用串行化 GATT 操作队列，支持 CC
 
 ## 3. 协议层 (`protocol/`)
 
-### `SonyTandemConstants.kt`
+### `HeadphoneResponse.kt`
 
 **包**: `dev.ignotus.openbuds.protocol`
+
+所有品牌解析响应的顶层 sealed interface。包含 Sony Tandem 和 QCY 的嵌套 sealed 子树，以及跨品牌包装器。
+
+| 类 | 描述 |
+|----|------|
+| `ParsedHeadphoneResponse` | 顶层 sealed interface，所有品牌响应的父类型 |
+| `ParsedHeadphoneResponse.SonyTandem` | 索尼 Tandem 响应的 sealed interface 子树 |
+| `SonyTandem.DeviceInfo(type, text, raw)` | 设备信息响应 |
+| `SonyTandem.CommonStatus(type, text, values, raw)` | 通用状态响应 |
+| `SonyTandem.Battery(kind, values, raw)` | 电池响应 |
+| `SonyTandem.EqEbb(type, enabled, preset, clearBass, bandSteps, values, raw)` | EQ/EBB 响应 |
+| `SonyTandem.EqBandInfo(type, value)` | EQ 频段信息 |
+| `SonyTandem.EqEbbExtendedInfo(type, bands, values, raw)` | EQ/EBB 扩展信息响应 |
+| `SonyTandem.NoiseControl(type, values, enabled, ambientSoundEnabled, ambientLevel, ambientMode, controlMode, raw)` | 降噪控制响应 |
+| `SonyTandem.PlaybackAck(values, status, isUnsolicited, raw)` | 播放确认响应 |
+| `SonyTandem.LeaStatus(type, values, enabled, streamingStatusL, streamingStatusR, raw)` | LE Audio 状态 |
+| `SonyTandem.LeaPairedHistoryStatus(type, values, pairedHistory, raw)` | LE Audio 配对历史 |
+| `SonyTandem.QuickAccess(key, function, values, raw)` | 快速访问响应 |
+| `SonyTandem.WearingStatus(status, result, values, raw)` | 佩戴状态响应 |
+| `SonyTandem.Unknown(dataType, command, payload, raw)` | 未知命令兜底 |
+| `SonyTandem.Table2Common(family, command, values, raw)` | Table2 通用响应（已知 family） |
+| `SonyTandem.Table2Generic(family, inquiredType, values, raw)` | Table2 泛型响应（含 inquired-type） |
+| `ParsedHeadphoneResponse.Qcy` | QCY 响应的 sealed interface 子树 |
+| `Qcy.Battery(leftLevel, rightLevel, caseLevel, ...)` | QCY 电池响应 |
+| `Qcy.NoiseControl(mode, noiseValue, raw)` | QCY ANC 响应 |
+| `Qcy.EqData(eqType, masterGain, bands, raw)` | QCY EQ 数据 |
+| `Qcy.DeviceInfo(leftFirmware, rightFirmware, raw)` | QCY 设备信息 |
+| `Qcy.Volume(leftVolume, rightVolume, raw)` | QCY 音量 |
+| `Qcy.FunctionStatus(inEarDetectionOn, transparencyOn, raw)` | QCY 功能状态 |
+| `ParsedHeadphoneResponse.Batch(items, raw)` | 批量响应包装器（如 QCY 多 TLV 帧） |
+| `QcyEqBand(frequency, gain, q, bandType)` | QCY EQ 频段数据 |
+| `Byte.unsigned` | 扩展属性：Byte → 无符号 Int |
+| `ByteArray.hexString()` | 扩展函数：字节数组 → 十六进制字符串 |
+| `ByteArray.unsignedList()` | 扩展函数：字节数组 → 无符号 Int 列表 |
+| `Byte.percentageOrNull()` | 扩展函数：字节值在 0..100 内则返回，否则 null |
+
+---
+
+### `HeadphoneEnums.kt`
+
+**包**: `dev.ignotus.openbuds.protocol`
+
+跨品牌的共享枚举定义。
+
+| 枚举 | 描述 |
+|------|------|
+| `EqPresetId` | EQ 预设（含显示名称）：OFF, ROCK, POP, JAZZ, DANCE, EDM, ACOUSTIC, BRIGHT, EXCITED, MELLOW, RELAXED, VOCAL, TREBLE, BASS, SPEECH, HEAVY, CLEAR, HARD, SOFT, CUSTOM(0xA0), USER_SETTING1(0xA1), USER_SETTING2(0xA2), UNSPECIFIED(0xFF) |
+| `AmbientSoundMode` | 环境声模式：NORMAL(0x00), VOICE(0x01) |
+| `NoiseControlMode` | 降噪控制模式：OFF, NOISE_CANCELLING, AMBIENT_SOUND |
+| `PlaybackStatus` | 播放状态：UNKNOWN, PLAYING, PAUSED, STOPPED |
+
+---
+
+### `protocol/sony/SonyTandemConstants.kt`
+
+**包**: `dev.ignotus.openbuds.protocol.sony`
 
 | 常量 | 值 | 描述 |
 |------|-----|------|
@@ -244,11 +300,11 @@ QCY 耳机的 BLE GATT 客户端。使用串行化 GATT 操作队列，支持 CC
 
 ---
 
-### `SonyTandemEnums.kt`
+### `protocol/sony/SonyTandemEnums.kt`
 
-**包**: `dev.ignotus.openbuds.protocol`
+**包**: `dev.ignotus.openbuds.protocol.sony`
 
-所有 Sony Tandem 协议的枚举定义。
+Sony Tandem 协议的枚举定义（仅 Sony 专用枚举，共享枚举见 `HeadphoneEnums.kt`）。
 
 | 枚举 | 描述 |
 |------|------|
@@ -276,52 +332,17 @@ QCY 耳机的 BLE GATT 客户端。使用串行化 GATT 操作队列，支持 CC
 
 ---
 
-### `SonyTandemTypes.kt`
+### `protocol/sony/SonyTandemTypes.kt`
 
-**包**: `dev.ignotus.openbuds.protocol`
+**包**: `dev.ignotus.openbuds.protocol.sony`
 
-协议消息类型和响应 sealed class 层次结构。
-
-| 类 | 描述 |
-|----|------|
-| `TandemMessage(dataType, command, payload)` | Tandem 消息：dataType + command + payload 字节数组，含 `toByteArray()` |
-| `SonyTandemFrame.message(command, payload)` | 工厂方法：用 DATA_MDR 创建 TandemMessage 并序列化 |
-| `ParsedHeadphoneResponse` | 顶层 sealed interface，所有品牌响应的父类型 |
-| `ParsedHeadphoneResponse.SonyTandem` | 索尼 Tandem 响应的 sealed interface 子树 |
-| `SonyTandem.DeviceInfo(type, text, raw)` | 设备信息响应 |
-| `SonyTandem.CommonStatus(type, text, values, raw)` | 通用状态响应 |
-| `SonyTandem.Battery(kind, values, raw)` | 电池响应 |
-| `SonyTandem.EqEbb(type, enabled, preset, clearBass, bandSteps, values, raw)` | EQ/EBB 响应 |
-| `SonyTandem.EqBandInfo(type, value)` | EQ 频段信息 |
-| `SonyTandem.EqEbbExtendedInfo(type, bands, values, raw)` | EQ/EBB 扩展信息响应 |
-| `SonyTandem.NoiseControl(type, values, enabled, ambientSoundEnabled, ambientLevel, ambientMode, controlMode, raw)` | 降噪控制响应 |
-| `SonyTandem.PlaybackAck(values, status, isUnsolicited, raw)` | 播放确认响应 |
-| `SonyTandem.LeaStatus(type, values, enabled, streamingStatusL, streamingStatusR, raw)` | LE Audio 状态 |
-| `SonyTandem.LeaPairedHistoryStatus(type, values, pairedHistory, raw)` | LE Audio 配对历史 |
-| `SonyTandem.QuickAccess(key, function, values, raw)` | 快速访问响应 |
-| `SonyTandem.WearingStatus(status, result, values, raw)` | 佩戴状态响应 |
-| `SonyTandem.Unknown(dataType, command, payload, raw)` | 未知命令兜底 |
-| `SonyTandem.Table2Common(family, command, values, raw)` | Table2 通用响应（已知 family） |
-| `SonyTandem.Table2Generic(family, inquiredType, values, raw)` | Table2 泛型响应（含 inquired-type） |
-| `ParsedHeadphoneResponse.Qcy` | QCY 响应的 sealed interface 子树 |
-| `Qcy.Battery(leftLevel, rightLevel, caseLevel, leftCharging, rightCharging, caseCharging, raw)` | QCY 电池响应 |
-| `Qcy.NoiseControl(mode, noiseValue, raw)` | QCY ANC 响应 |
-| `Qcy.EqData(eqType, masterGain, bands, raw)` | QCY EQ 数据 |
-| `Qcy.DeviceInfo(leftFirmware, rightFirmware, raw)` | QCY 设备信息 |
-| `Qcy.Volume(leftVolume, rightVolume, raw)` | QCY 音量 |
-| `Qcy.FunctionStatus(inEarDetectionOn, transparencyOn, raw)` | QCY 功能状态 |
-| `ParsedHeadphoneResponse.Batch(items, raw)` | 批量响应包装器（如 QCY 多 TLV 帧） |
-| `QcyEqBand(frequency, gain, q, bandType)` | QCY EQ 频段数据 |
-| `Byte.unsigned` | 扩展属性：Byte → 无符号 Int |
-| `ByteArray.hexString()` | 扩展函数：字节数组 → 十六进制字符串 |
-| `ByteArray.unsignedList()` | 扩展函数：字节数组 → 无符号 Int 列表 |
-| `Byte.percentageOrNull()` | 扩展函数：字节值在 0..100 内则返回，否则 null |
+Sony 专有的协议消息类型：TandemMessage 和 SonyTandemFrame。（品牌无关的 ParsedHeadphoneResponse 已移至 `HeadphoneResponse.kt`）
 
 ---
 
-### `SonyGatt.kt`
+### `protocol/sony/SonyGatt.kt`
 
-**包**: `dev.ignotus.openbuds.protocol`
+**包**: `dev.ignotus.openbuds.protocol.sony`
 
 Sony BLE GATT 服务和特征 UUID 定义。所有索尼服务 UUID 格式为 `5b833eXX-6bc7-4802-8e9a-723ceca4bd8f`，特征 UUID 格式为 `5b833cXX-...`。
 
@@ -353,9 +374,9 @@ Sony BLE GATT 服务和特征 UUID 定义。所有索尼服务 UUID 格式为 `5
 
 ---
 
-### `SonyEqEbbPayloadParser.kt`
+### `protocol/sony/SonyEqEbbPayloadParser.kt`
 
-**包**: `dev.ignotus.openbuds.protocol`
+**包**: `dev.ignotus.openbuds.protocol.sony`
 
 V1/V2 共享的 EQ/EBB payload 解析器。统一处理 `RET_STATUS`/`NTFY_STATUS`/`RET_PARAM`/`NTFY_PARAM` 四种命令中的 EQ/EBB 数据。
 
@@ -371,9 +392,9 @@ V1/V2 共享的 EQ/EBB payload 解析器。统一处理 `RET_STATUS`/`NTFY_STATU
 
 ---
 
-### `SonyTandemV2Table1Protocol.kt`
+### `protocol/sony/SonyTandemV2Table1Protocol.kt`
 
-**包**: `dev.ignotus.openbuds.protocol`
+**包**: `dev.ignotus.openbuds.protocol.sony`
 
 Sony Tandem V2 Table1 协议实现（HPC 通道，DataType 0x0E）。提供命令构造和响应解析，覆盖 CONNECT、COMMON、POWER、EQEBB、NCASM、PLAY、LEA、SYSTEM 八个命令族。
 
@@ -407,9 +428,9 @@ Sony Tandem V2 Table1 协议实现（HPC 通道，DataType 0x0E）。提供命�
 
 ---
 
-### `SonyTandemV2Table2Protocol.kt`
+### `protocol/sony/SonyTandemV2Table2Protocol.kt`
 
-**包**: `dev.ignotus.openbuds.protocol`
+**包**: `dev.ignotus.openbuds.protocol.sony`
 
 Sony Tandem V2 Table2 协议实现（MC 通道，DataType 0x0F）。覆盖 CONNECT、POWER、PERIPHERAL、VOICE_GUIDANCE、SAFE_LISTENING、LEA、PARTY、SYSTEM 八个命令族。
 
@@ -435,9 +456,9 @@ Sony Tandem V2 Table2 协议实现（MC 通道，DataType 0x0F）。覆盖 CONNE
 
 ---
 
-### `SonyTandemV1Table1Protocol.kt`
+### `protocol/sony/SonyTandemV1Table1Protocol.kt`
 
-**包**: `dev.ignotus.openbuds.protocol`
+**包**: `dev.ignotus.openbuds.protocol.sony`
 
 Sony Tandem V1 Table1 协议实现。V1 与 V2 的关键差异：电池使用 `COMMON_GET_BATTERY_LEVEL(0x10)`（V2 用 `POWER_GET_STATUS(0x22)`）、NC/ASM 使用 `V1_TABLE_SET1_NC_ASM(0x02)` payload 格式、EQ/EBB 使用不同的 inquired type 字节码。
 
@@ -454,9 +475,9 @@ Sony Tandem V1 Table1 协议实现。V1 与 V2 的关键差异：电池使用 `C
 
 ---
 
-### `SonyTandemV1Table2Protocol.kt`
+### `protocol/sony/SonyTandemV1Table2Protocol.kt`
 
-**包**: `dev.ignotus.openbuds.protocol`
+**包**: `dev.ignotus.openbuds.protocol.sony`
 
 Sony Tandem V1 Table2 协议实现（MC 通道）。覆盖 PERIPHERAL（多点配对）和 VOICE_GUIDANCE（语音提示）两个命令族。
 
@@ -474,9 +495,9 @@ Sony Tandem V1 Table2 协议实现（MC 通道）。覆盖 PERIPHERAL（多点�
 
 ---
 
-### `QcyGatt.kt`
+### `protocol/qcy/QcyGatt.kt`
 
-**包**: `dev.ignotus.openbuds.protocol`
+**包**: `dev.ignotus.openbuds.protocol.qcy`
 
 QCY BLE GATT 服务和特征 UUID 定义。所有 QCY UUID 格式为 `XXXXXXXX-0000-1000-8000-00805F9B34FB`。
 
@@ -494,9 +515,9 @@ QCY BLE GATT 服务和特征 UUID 定义。所有 QCY UUID 格式为 `XXXXXXXX-0
 
 ---
 
-### `QcyProtocol.kt`
+### `protocol/qcy/QcyProtocol.kt`
 
-**包**: `dev.ignotus.openbuds.protocol`
+**包**: `dev.ignotus.openbuds.protocol.qcy`
 
 QCY TLV 帧序列化/反序列化和命令 ID 常量。
 
@@ -701,9 +722,9 @@ QCY 解析响应 → `HeadphoneUiState` 的状态映射器。独立对象，避�
 
 ---
 
-### `EqProtocolEngine.kt`
+### `headphones/sony/EqProtocolEngine.kt`
 
-**包**: `dev.ignotus.openbuds.headphones`
+**包**: `dev.ignotus.openbuds.headphones.sony`
 
 设备无关的 EQ 引擎。消费 `EqDeviceConfig` 输出 `EqUiCapability`，统一 EQ 写入/刷新/解析路径。
 
@@ -729,9 +750,9 @@ QCY 解析响应 → `HeadphoneUiState` 的状态映射器。独立对象，避�
 
 ---
 
-### `TandemCodecRegistry.kt`
+### `headphones/sony/TandemCodecRegistry.kt`
 
-**包**: `dev.ignotus.openbuds.headphones`
+**包**: `dev.ignotus.openbuds.headphones.sony`
 
 TandemCodec 接口和 4 个协议 variant 的实现对象。将原始的 Sony Tandem V1/V2 Table1/Table2 协议对象包装为统一接口。
 
@@ -747,9 +768,9 @@ TandemCodec 接口和 4 个协议 variant 的实现对象。将原始的 Sony Ta
 
 ---
 
-### `SonyTandemHeadphoneAdapter.kt`
+### `headphones/sony/SonyTandemHeadphoneAdapter.kt`
 
-**包**: `dev.ignotus.openbuds.headphones`
+**包**: `dev.ignotus.openbuds.headphones.sony`
 
 Sony Tandem 的 `HeadphoneAdapter` 实现。负责设备匹配、命令构造、响应解析路由。
 
@@ -774,9 +795,9 @@ Sony Tandem 的 `HeadphoneAdapter` 实现。负责设备匹配、命令构造、
 
 ---
 
-### `QcyHeadphoneAdapter.kt`
+### `headphones/qcy/QcyHeadphoneAdapter.kt`
 
-**包**: `dev.ignotus.openbuds.headphones`
+**包**: `dev.ignotus.openbuds.headphones.qcy`
 
 QCY 的 `HeadphoneAdapter` 实现。所有命令通过 `TandemChannel.QCY_SETTING_WRITE` 发送；各特征通知分发到对应的 QCY 通道。
 
@@ -801,7 +822,7 @@ QCY 的 `HeadphoneAdapter` 实现。所有命令通过 `TandemChannel.QCY_SETTIN
 
 ## 6. 设备 Profile
 
-### `sonydevices/Wh1000Xm4Profile.kt`
+### `headphones/sony/devices/Wh1000Xm4Profile.kt`
 
 WH-1000XM4 头戴式降噪耳机 profile。
 
@@ -815,7 +836,7 @@ WH-1000XM4 头戴式降噪耳机 profile。
 | EQ 频段数 | 6（含 Clear Bass） |
 | Clear Bass 模式 | PRESET_EQ_BANDS |
 
-### `sonydevices/LinkBudsSProfile.kt`
+### `headphones/sony/devices/LinkBudsSProfile.kt`
 
 LinkBuds S 真无线降噪耳机 profile。
 
@@ -827,11 +848,11 @@ LinkBuds S 真无线降噪耳机 profile。
 | NC 类型 | MODE_NC_ASM_DUAL_NC_MODE_SWITCH_AND_ASM_SEAMLESS |
 | EQ 同 WH-1000XM4，额外支持 LEA_STATUS, QUICK_ACCESS, WEARING_STATUS |
 
-### `sonydevices/Wf1000Xm5Profile.kt`
+### `headphones/sony/devices/Wf1000Xm5Profile.kt`
 
 WF-1000XM5 真无线降噪耳机 profile。配置与 LinkBuds S 基本一致（V2 TABLE1, 相同功能集），同为 PREMIUM 系列。
 
-### `qcydevices/QcyC30SProfile.kt`
+### `headphones/qcy/devices/QcyC30SProfile.kt`
 
 QCY C30S 真无线耳机 profile。
 
@@ -1052,23 +1073,32 @@ LSPosed 探测结果缓存。内存 + 文件（`/data/local/tmp/lsposed_probe_re
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                  Application Layer                       │
-│  HeadphoneRepository  ←→  HeadphoneUiState      │
-│  MediaPlaybackController    SonyModelImageCatalog        │
+│  HeadphoneRepository  ←→  HeadphoneUiState              │
+│  MediaPlaybackController    data/sony/SonyModelImageCatalog  │
 ├─────────────────────────────────────────────────────────┤
 │              Headphone Adapter Layer                     │
-│  HeadphoneAdapterRegistry  ←→  SonyTandem/Qcy Adapters  │
-│  EqProtocolEngine          ←→  TandemCodecRegistry       │
-│  ProfileTemplates (WH-1000XM4/LinkBuds S/WF-1000XM5/C30S)│
+│  HeadphoneAdapterRegistry                               │
+│  headphones/sony/SonyTandemHeadphoneAdapter              │
+│  headphones/sony/EqProtocolEngine                       │
+│  headphones/sony/TandemCodecRegistry                    │
+│  headphones/qcy/QcyHeadphoneAdapter                     │
+│  ProfileTemplates (sony/devices/* / qcy/devices/*)      │
 ├─────────────────────────────────────────────────────────┤
 │              Protocol / Codec Layer                      │
-│  SonyTandemV1Table1/2Protocol    QcyProtocol             │
-│  SonyTandemV2Table1/2Protocol    SonyEqEbbPayloadParser  │
-│  ParsedHeadphoneResponse (sealed hierarchy)              │
+│  protocol/HeadphoneResponse (sealed hierarchy)           │
+│  protocol/HeadphoneEnums (shared enums)                  │
+│  protocol/sony/SonyTandemV1/2Table1/2Protocol           │
+│  protocol/sony/SonyEqEbbPayloadParser                   │
+│  protocol/sony/SonyGatt / SonyTandemConstants            │
+│  protocol/qcy/QcyProtocol / QcyGatt                     │
 ├─────────────────────────────────────────────────────────┤
 │              Transport / BLE Layer                       │
-│  HeadphoneTransportSelector  →  HeadphoneTransportClient │
-│  SonyBleClient (GATT+SPP)    QcyBleClient (GATT only)    │
-│  SonySppTransport  TandemTransportRouting                │
+│  ble/HeadphoneTransportSelector                         │
+│  ble/HeadphoneTransportClient (interface)                │
+│  ble/sony/SonyBleClient (GATT+SPP)                      │
+│  ble/sony/SonySppTransport                              │
+│  ble/sony/TandemTransportRouting                        │
+│  ble/qcy/QcyBleClient (GATT only)                       │
 ├─────────────────────────────────────────────────────────┤
 │              LSPosed (Optional)                          │
 │  MiLinkIdentityHook  MiLinkHeadsetCardHook               │

@@ -133,9 +133,9 @@ private val adapters: List<HeadphoneAdapter> = listOf(
 
 | Component | File |
 |-----------|------|
-| Transport client | `ble/QcyBleClient.kt` |
-| Adapter | `headphones/QcyHeadphoneAdapter.kt` |
-| Profile template | `headphones/qcydevices/QcyC30SProfile.kt` |
+| Transport client | `ble/qcy/QcyBleClient.kt` |
+| Adapter | `headphones/qcy/QcyHeadphoneAdapter.kt` |
+| Profile template | `headphones/qcy/devices/QcyC30SProfile.kt` |
 | Response mapper | `data/qcy/QcyResponseMapper.kt` |
-| Protocol constants | `protocol/QcyProtocol.kt`, `protocol/QcyGatt.kt` |
+| Protocol constants | `protocol/qcy/QcyProtocol.kt`, `protocol/qcy/QcyGatt.kt` |
 | Protocol reference | `references/QCY/QCY_C30S_PROTOCOL.md` |
