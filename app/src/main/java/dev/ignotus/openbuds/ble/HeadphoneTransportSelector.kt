@@ -13,7 +13,7 @@ import java.util.concurrent.ConcurrentHashMap
  * ```
  * val selector = HeadphoneTransportSelector(
  *     clients = listOf(sonyClient, qcyClient),
- *     listener = repository,  // implements SonyBleClientListener
+ *     listener = repository,  // implements HeadphoneTransportListener
  * )
  * selector.startScan(strictFilter = false)
  * // selector forwards onDeviceFound to listener with dedup
@@ -47,7 +47,7 @@ class HeadphoneTransportSelector(
 
     /**
      * Start scan on all clients. QCY's startScan is a no-op (shares Sony's
-     * scan results); SonyBleClient drives the actual BLE scan.
+     * scan results); Sony Tandem drives the actual BLE scan.
      */
     fun startScan(strictFilter: Boolean) {
         clients.forEach { it.startScan(strictFilter) }
@@ -60,7 +60,7 @@ class HeadphoneTransportSelector(
     /**
      * Check whether [device] has already been reported recently (by MAC).
      * Callers (i.e. the Sony scan callback) should invoke this before
-     * forwarding to [SonyBleClientListener.onDeviceFound] to avoid duplicates.
+     * forwarding to [HeadphoneTransportListener.onDeviceFound] to avoid duplicates.
      *
      * Returns true if the device should be suppressed (already seen within
      * the dedup window).

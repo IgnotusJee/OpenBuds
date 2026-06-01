@@ -1,101 +1,46 @@
 package dev.ignotus.openbuds.ble.sony
 
-import android.Manifest
 import android.annotation.SuppressLint
-import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
-import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
-import android.bluetooth.BluetoothSocket
 import android.content.Context
-import android.content.pm.PackageManager
 import android.os.Build
-import android.util.Log
-import androidx.core.content.ContextCompat
-import dev.ignotus.openbuds.ble.HeadphoneTransportClient
-import dev.ignotus.openbuds.ble.transport.SppTransport
-import dev.ignotus.openbuds.ble.transport.TransportListener
+import dev.ignotus.openbuds.ble.HeadphoneConnectionInfo
+import dev.ignotus.openbuds.ble.HeadphoneTransportListener
 import dev.ignotus.openbuds.headphones.TandemChannel
 import dev.ignotus.openbuds.protocol.hexString
 import dev.ignotus.openbuds.protocol.sony.SonyGatt
-import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.ConcurrentLinkedQueue
 
-/**
- * BLE GATT + SPP client for Sony Tandem protocol headphones.
- *
- * Responsibilities retained after Phase 3 extraction:
- * - GATT connection, multi-endpoint discovery (HPC + MC)
- * - Tandem handshake (OPTIMAL_MTU, DETERMINE_MTU, WRITABLE_VALUE_LENGTH)
- * - SPP connection and routing
- * - Write queue with channel dispatch
- * - Unsupported endpoint probing
- *
- * Extracted to separate files:
- * - [SonyBleScanner] — BLE scan + known-device enumeration
- * - [SonyAudioAdParser] — Sony Audio AD parsing
- * - [DiscoveredSonyDevice], [SonyBleConnectionInfo], [UnsupportedEndpointDiagnostics]
- * - [SonyBleClientListener]
- */
-class SonyBleClient(
+internal class SonyTandemGattSession(
     private val context: Context,
-    private val listener: SonyBleClientListener,
-) : HeadphoneTransportClient {
-    override val id: String = "sony-tandem"
-
-    override fun matches(device: DiscoveredSonyDevice, reportedModelName: String?): Boolean {
-        val name = (reportedModelName ?: device.name).lowercase()
-        if (name.contains("qcy")) return false
-        val sonyAd = device.sonyAd != null
-        val sonyServices = device.advertisedServices.any { uuidStr ->
-            try {
-                TandemChannel.fromServiceUuid(java.util.UUID.fromString(uuidStr)) != null
-            } catch (_: Exception) {
-                false
-            }
-        }
-        return sonyAd || sonyServices || isHeadphoneCandidate(name)
-    }
-
-    private val bluetoothManager =
-        context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
-    private val adapter: BluetoothAdapter?
-        get() = bluetoothManager.adapter
-
-    // ── Scanning (delegated to SonyBleScanner) ──────────────────
-
-    private val scanner = SonyBleScanner(context, object : ScanListener {
-        override fun onDeviceFound(device: DiscoveredSonyDevice) {
-            listener.onDeviceFound(device)
-        }
-        override fun onScanStateChanged(scanning: Boolean) {
-            listener.onScanStateChanged(scanning)
-        }
-        override fun onBluetoothUnavailable(reason: String) {
-            listener.onBluetoothUnavailable(reason)
-        }
-        override fun onLog(message: String) {
-            log(message)
-        }
-    })
-
-    override fun startScan(strictSonyServiceFilter: Boolean) {
-        scanner.startScan(strictSonyServiceFilter)
-    }
-
-    override fun stopScan() {
-        scanner.stopScan()
-    }
-
-    // ── Connection state ────────────────────────────────────────
+    private val remote: BluetoothDevice,
+    discoveredDevice: DiscoveredSonyDevice,
+    private val listener: HeadphoneTransportListener,
+    private val log: (String) -> Unit,
+    private val safeDeviceName: (BluetoothDevice) -> String?,
+) : SonyTandemSession {
+    override var connectedDevice: DiscoveredSonyDevice? = discoveredDevice.copy(
+        name = if (discoveredDevice.name == "Unknown BLE device") {
+            safeDeviceName(remote) ?: "Sony audio device"
+        } else {
+            discoveredDevice.name
+        },
+        address = remote.address,
+        bluetoothType = if (remote.type != BluetoothDevice.DEVICE_TYPE_UNKNOWN) {
+            remote.type
+        } else {
+            discoveredDevice.bluetoothType
+        },
+    )
+        private set
 
     private var gatt: BluetoothGatt? = null
-    private var connectedDevice: DiscoveredSonyDevice? = null
     private var toAcc: BluetoothGattCharacteristic? = null
     private var fromAcc: BluetoothGattCharacteristic? = null
     private val gattEndpoints: MutableMap<TandemChannel, GattTandemEndpoint> = mutableMapOf()
@@ -105,12 +50,9 @@ class SonyBleClient(
     private var handshakeStep: HandshakeStep = HandshakeStep.Idle
     private var determineMtuNotificationEnabled = false
     private var unsupportedProbe: UnsupportedEndpointProbe? = null
-    private var sppTransport: SppTransport? = null
     private val writeQueue = ConcurrentLinkedQueue<PendingTandemWrite>()
     private val pendingNotifyEndpoints = ArrayDeque<GattTandemEndpoint>()
     @Volatile private var writing = false
-
-    // ── GATT callback ───────────────────────────────────────────
 
     private val gattCallback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
@@ -120,14 +62,7 @@ class SonyBleClient(
                 gatt.discoverServices()
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 log("GATT disconnected: status=$status")
-                writeQueue.clear()
-                pendingNotifyEndpoints.clear()
-                writing = false
-                toAcc = null
-                fromAcc = null
-                gattEndpoints.clear()
-                handshakeStep = HandshakeStep.Idle
-                determineMtuNotificationEnabled = false
+                clearGattState()
                 listener.onConnectionStateChanged(false, connectedDevice)
             }
         }
@@ -159,7 +94,7 @@ class SonyBleClient(
             discoverMcEndpoints(gatt)
             if (gattEndpoints.isEmpty()) {
                 val labels = services.joinToString { SonyGatt.serviceLabel(it) }
-                val reason = unsupportedTandemEndpointReason(services)
+                val reason = SonyTandemEndpointSupport.unsupportedReason(services)
                 log("No usable Tandem GATT endpoint. Available services=[$labels]")
                 beginUnsupportedEndpointProbe(gatt, services, reason)
                 return
@@ -176,16 +111,29 @@ class SonyBleClient(
             }
         }
 
-        override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray, status: Int) {
+        override fun onCharacteristicRead(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            value: ByteArray,
+            status: Int,
+        ) {
             handleCharacteristicRead(gatt, characteristic.uuid, value, status)
         }
 
         @Deprecated("Used below Android 13")
-        override fun onCharacteristicRead(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
+        override fun onCharacteristicRead(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            status: Int,
+        ) {
             handleCharacteristicRead(gatt, characteristic.uuid, characteristic.value ?: byteArrayOf(), status)
         }
 
-        override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
+        override fun onCharacteristicChanged(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            value: ByteArray,
+        ) {
             handleCharacteristicChanged(characteristic, value)
         }
 
@@ -194,7 +142,11 @@ class SonyBleClient(
             handleCharacteristicChanged(characteristic, characteristic.value ?: byteArrayOf())
         }
 
-        override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
+        override fun onCharacteristicWrite(
+            gatt: BluetoothGatt,
+            characteristic: BluetoothGattCharacteristic,
+            status: Int,
+        ) {
             log("Write ${characteristic.uuid}: status=$status")
             writing = false
             drainWriteQueue()
@@ -233,38 +185,10 @@ class SonyBleClient(
         }
     }
 
-    // ── Connect / Disconnect ───────────────────────────────────
-
-    fun connect(address: String) {
-        connect(DiscoveredSonyDevice(name = "Sony audio device", address = address, rssi = 0, source = "manual-connect"))
-    }
-
-    override fun connect(device: DiscoveredSonyDevice) {
-        if (!hasConnectPermission()) {
-            listener.onBluetoothUnavailable("Bluetooth connect permission is missing")
-            return
-        }
-        stopScan()
-        val remote = adapter?.getRemoteDevice(device.address)
-        if (remote == null) {
-            listener.onBluetoothUnavailable("Cannot resolve remote device ${device.address}")
-            return
-        }
-        if (shouldUseSpp(device, remote)) {
-            connectSpp(device, remote)
-            return
-        }
-        connectedDevice = device.copy(
-            name = if (device.name == "Unknown BLE device") {
-                safeDeviceName(remote) ?: "Sony audio device"
-            } else { device.name },
-            address = remote.address,
-            bluetoothType = if (remote.type != BluetoothDevice.DEVICE_TYPE_UNKNOWN) remote.type else device.bluetoothType,
-        )
-        disconnect()
-        connectedDevice = connectedDevice?.copy(address = remote.address)
-        val transport = preferredTransport(remote, device)
-        log("Connecting to ${device.address} type=${remote.type} transport=${transportLabel(transport)} source=${device.source} sonyAd=${device.sonyAd?.summary.orEmpty()}")
+    @SuppressLint("MissingPermission")
+    override fun connect() {
+        val transport = preferredTransport(remote, connectedDevice ?: return)
+        log("Connecting to ${remote.address} type=${remote.type} transport=${transportLabel(transport)} source=${connectedDevice?.source.orEmpty()} sonyAd=${connectedDevice?.sonyAd?.summary.orEmpty()}")
         gatt = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             remote.connectGatt(context, false, gattCallback, transport)
         } else {
@@ -272,21 +196,9 @@ class SonyBleClient(
         }
     }
 
-    override fun disconnect() {
-        closeGatt(notify = true)
-    }
-
-    private fun closeGatt(notify: Boolean) {
-        closeSpp(notify = false)
-        writeQueue.clear()
-        pendingNotifyEndpoints.clear()
-        writing = false
-        toAcc = null
-        fromAcc = null
-        gattEndpoints.clear()
-        handshakeStep = HandshakeStep.Idle
-        determineMtuNotificationEnabled = false
-        unsupportedProbe = null
+    @SuppressLint("MissingPermission")
+    override fun disconnect(notify: Boolean) {
+        clearGattState()
         gatt?.disconnect()
         gatt?.close()
         gatt = null
@@ -302,38 +214,34 @@ class SonyBleClient(
             return
         }
         val services = activeGatt.services.map { it.uuid }
-        if (services.any { it in supportedGattControlServices } && gattEndpoints.isNotEmpty()) {
+        if (services.any { it in SonyTandemEndpointSupport.supportedControlServices } && gattEndpoints.isNotEmpty()) {
             beginTandemHandshake(activeGatt)
         } else {
-            beginUnsupportedEndpointProbe(activeGatt, services, unsupportedTandemEndpointReason(services))
+            beginUnsupportedEndpointProbe(activeGatt, services, SonyTandemEndpointSupport.unsupportedReason(services))
         }
-    }
-
-    // ── Send / channels ────────────────────────────────────────
-
-    fun send(bytes: ByteArray) {
-        log("TX ${bytes.hexString()}")
-        val transport = sppTransport
-        if (transport != null) { transport.send(bytes); return }
-        writeToChannel(defaultGattWriteChannel(), bytes)
     }
 
     override fun sendToChannel(channel: TandemChannel, bytes: ByteArray) {
         log("TX $channel ${bytes.hexString()}")
-        val transport = sppTransport
-        if (transport != null) { transport.send(bytes); return }
         writeToChannel(channel, bytes)
     }
 
-    override fun availableChannels(): Set<TandemChannel> {
-        val channels = mutableSetOf<TandemChannel>()
-        if (sppTransport != null) channels.add(TandemChannel.SPP_MDR)
-        channels.addAll(gattEndpoints.keys)
-        return channels
+    override fun availableChannels(): Set<TandemChannel> = gattEndpoints.keys.toSet()
+
+    private fun clearGattState() {
+        writeQueue.clear()
+        pendingNotifyEndpoints.clear()
+        writing = false
+        toAcc = null
+        fromAcc = null
+        gattEndpoints.clear()
+        handshakeStep = HandshakeStep.Idle
+        determineMtuNotificationEnabled = false
+        unsupportedProbe = null
     }
 
     private fun writeToChannel(channel: TandemChannel, bytes: ByteArray) {
-        if (channel !in gattEndpoints && sppTransport == null) {
+        if (channel !in gattEndpoints) {
             listener.onBluetoothUnavailable("Channel $channel is not available (available: ${availableChannels()})")
             return
         }
@@ -341,123 +249,10 @@ class SonyBleClient(
         drainWriteQueue()
     }
 
-    // ── SPP connection ─────────────────────────────────────────
-
-    @SuppressLint("MissingPermission")
-    private fun shouldUseSpp(device: DiscoveredSonyDevice, remote: BluetoothDevice): Boolean {
-        if (device.sonyAd?.leGattControlFlag == true) return false
-        val hasMdrSppUuid = remote.uuids.orEmpty().any { it.uuid == MDR_SPP_MARKER_UUID }
-        val classicCandidate = remote.type == BluetoothDevice.DEVICE_TYPE_CLASSIC ||
-            remote.type == BluetoothDevice.DEVICE_TYPE_DUAL ||
-            device.source.startsWith("connected-a2dp") ||
-            device.source.startsWith("connected-headset")
-        return hasMdrSppUuid || classicCandidate || device.sonyAd?.androidLine?.contains("SPP") == true
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun connectSpp(selected: DiscoveredSonyDevice, selectedRemote: BluetoothDevice) {
-        val classicRemote = resolveSppRemoteDevice(selected, selectedRemote)
-        if (classicRemote == null) {
-            listener.onBluetoothUnavailable("No paired classic Sony SPP device matches ${selected.name}")
-            return
-        }
-        connectedDevice = selected.copy(
-            name = safeDeviceName(classicRemote) ?: selected.name.removePrefix("LE_"),
-            address = classicRemote.address,
-            source = "${selected.source}/spp",
-            bluetoothType = classicRemote.type,
-            isLikelyControlEndpoint = true,
-        )
-        disconnect()
-        connectedDevice = connectedDevice?.copy(address = classicRemote.address)
-        Thread {
-            try {
-                adapter?.cancelDiscovery()
-                log("Connecting SPP to ${classicRemote.address} name=${safeDeviceName(classicRemote).orEmpty()} uuids=${classicRemote.uuids?.joinToString { it.uuid.toString() }.orEmpty()}")
-                val socket = createSppSocket(classicRemote)
-                socket.connect()
-                val transport = SppTransport(
-                    socket = socket,
-                    listener = object : TransportListener {
-                        override fun onReady(info: dev.ignotus.openbuds.ble.transport.TransportInfo) {
-                            log("SPP connected")
-                            listener.onConnectionStateChanged(true, connectedDevice)
-                            listener.onReady(SonyBleConnectionInfo(mtu = info.mtu, transport = "SPP"))
-                        }
-                        override fun onMessage(bytes: ByteArray) {
-                            listener.onMessage(TandemChannel.SPP_MDR, bytes)
-                        }
-                        override fun onDisconnected(reason: String?) {
-                            log(reason ?: "SPP transport disconnected unexpectedly")
-                            sppTransport = null
-                            listener.onConnectionStateChanged(false, connectedDevice)
-                        }
-                        override fun onLog(message: String) {
-                            log(message)
-                        }
-                    },
-                    payloadMapper = SonySppPayloadMapper,
-                )
-                sppTransport = transport
-                transport.start()
-            } catch (e: IOException) {
-                log("SPP connection failed: ${e.message}")
-                closeSpp(notify = true)
-                listener.onBluetoothUnavailable("SPP connection failed: ${e.message}")
-            } catch (e: SecurityException) {
-                log("SPP permission failure: ${e.message}")
-                closeSpp(notify = true)
-                listener.onBluetoothUnavailable("Bluetooth connect permission failed for SPP")
-            }
-        }.start()
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun resolveSppRemoteDevice(selected: DiscoveredSonyDevice, selectedRemote: BluetoothDevice): BluetoothDevice? {
-        if (selectedRemote.type == BluetoothDevice.DEVICE_TYPE_CLASSIC || selectedRemote.type == BluetoothDevice.DEVICE_TYPE_DUAL) {
-            return selectedRemote
-        }
-        val targetName = selected.name.removePrefix("LE_")
-        return adapter?.bondedDevices.orEmpty().firstOrNull { device ->
-            val name = safeDeviceName(device).orEmpty()
-            device.type != BluetoothDevice.DEVICE_TYPE_LE &&
-                (name.equals(targetName, ignoreCase = true) || isHeadphoneCandidate(name))
-        }
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun createSppSocket(device: BluetoothDevice): BluetoothSocket {
-        val advertised = device.uuids.orEmpty().map { it.uuid }.toSet()
-        val candidates = OFFICIAL_SPP_UUIDS.filter { it in advertised } + OFFICIAL_SPP_UUIDS.filter { it !in advertised }
-        var lastError: IOException? = null
-        for (uuid in candidates.distinct()) {
-            try {
-                log("SPP create socket uuid=$uuid")
-                return device.createRfcommSocketToServiceRecord(uuid)
-            } catch (e: IOException) {
-                lastError = e
-                log("SPP create socket failed uuid=$uuid error=${e.message}")
-            }
-        }
-        throw lastError ?: IOException("No SPP UUID could create a socket")
-    }
-
-    private fun closeSpp(notify: Boolean) {
-        val transport = sppTransport
-        sppTransport = null
-        if (transport == null) {
-            if (notify) listener.onConnectionStateChanged(false, connectedDevice)
-            return
-        }
-        transport.close()
-        if (notify) listener.onConnectionStateChanged(false, connectedDevice)
-    }
-
-    // ── Tandem handshake ───────────────────────────────────────
-
     private fun beginTandemHandshake(gatt: BluetoothGatt) {
         handshakeStep = HandshakeStep.ReadOptimalMtu
-        val characteristic = gatt.getService(SonyGatt.TANDEM_V2_HPC_SERVICE)?.getCharacteristic(SonyGatt.OPTIMAL_MTU)
+        val characteristic = gatt.getService(SonyGatt.TANDEM_V2_HPC_SERVICE)
+            ?.getCharacteristic(SonyGatt.OPTIMAL_MTU)
         if (characteristic == null) {
             log("OPTIMAL_MTU missing; requesting default large MTU")
             requestLargeMtu(gatt)
@@ -478,17 +273,26 @@ class SonyBleClient(
             listener.onBluetoothUnavailable("Read $uuid failed: $status")
             return
         }
-        val parsed = value.fold(0) { acc, byte -> (acc shl 8) or (byte.toInt() and 0xFF) }
         when (uuid) {
             SonyGatt.OPTIMAL_MTU -> {
-                optimalMtu = parsed
-                log("Read $uuid = ${value.hexString()} parsed=$parsed")
+                optimalMtu = if (value.size >= 2) {
+                    ((value[0].toInt() and 0xFF) shl 8) or (value[1].toInt() and 0xFF)
+                } else {
+                    null
+                }
+                log("Read OPTIMAL_MTU=$optimalMtu raw=${value.hexString()}")
                 requestLargeMtu(gatt)
+                return
             }
             SonyGatt.WRITABLE_VALUE_LENGTH -> {
-                writableValueLength = parsed
-                log("Read $uuid = ${value.hexString()} parsed=$parsed")
+                writableValueLength = if (value.size >= 2) {
+                    ((value[0].toInt() and 0xFF) shl 8) or (value[1].toInt() and 0xFF)
+                } else {
+                    null
+                }
+                log("Read WRITABLE_VALUE_LENGTH=$writableValueLength raw=${value.hexString()}")
                 enableTandemNotifications(gatt)
+                return
             }
             else -> log("Read $uuid = ${value.hexString()}")
         }
@@ -503,7 +307,11 @@ class SonyBleClient(
             }
             return
         }
-        val channel = TandemGattRouting.fromAccChannel(endpoints = gattEndpoints, serviceUuid = characteristic.service?.uuid, characteristicUuid = uuid)
+        val channel = TandemGattRouting.fromAccChannel(
+            endpoints = gattEndpoints,
+            serviceUuid = characteristic.service?.uuid,
+            characteristicUuid = uuid,
+        )
             ?: TandemGattRouting.fromAccChannelFor(characteristic.service?.uuid, uuid)
             ?: gattEndpoints.keys.singleOrNull()
             ?: defaultGattWriteChannel()
@@ -525,7 +333,8 @@ class SonyBleClient(
     }
 
     private fun enableDetermineMtuNotifications(gatt: BluetoothGatt) {
-        val characteristic = gatt.getService(SonyGatt.TANDEM_V2_HPC_SERVICE)?.getCharacteristic(SonyGatt.DETERMINE_MTU)
+        val characteristic = gatt.getService(SonyGatt.TANDEM_V2_HPC_SERVICE)
+            ?.getCharacteristic(SonyGatt.DETERMINE_MTU)
         if (characteristic == null) {
             log("DETERMINE_MTU missing; reading WRITABLE_VALUE_LENGTH directly")
             readWritableValueLength(gatt)
@@ -538,7 +347,8 @@ class SonyBleClient(
 
     private fun readWritableValueLength(gatt: BluetoothGatt) {
         if (determineMtuNotificationEnabled) {
-            val determine = gatt.getService(SonyGatt.TANDEM_V2_HPC_SERVICE)?.getCharacteristic(SonyGatt.DETERMINE_MTU)
+            val determine = gatt.getService(SonyGatt.TANDEM_V2_HPC_SERVICE)
+                ?.getCharacteristic(SonyGatt.DETERMINE_MTU)
             if (determine != null) {
                 handshakeStep = HandshakeStep.DisableDetermineMtu
                 determineMtuNotificationEnabled = false
@@ -548,7 +358,8 @@ class SonyBleClient(
             }
         }
         handshakeStep = HandshakeStep.ReadWritableValueLength
-        val characteristic = gatt.getService(SonyGatt.TANDEM_V2_HPC_SERVICE)?.getCharacteristic(SonyGatt.WRITABLE_VALUE_LENGTH)
+        val characteristic = gatt.getService(SonyGatt.TANDEM_V2_HPC_SERVICE)
+            ?.getCharacteristic(SonyGatt.WRITABLE_VALUE_LENGTH)
         if (characteristic == null) {
             log("WRITABLE_VALUE_LENGTH missing; enabling Tandem notifications")
             enableTandemNotifications(gatt)
@@ -573,14 +384,24 @@ class SonyBleClient(
         val endpoint = pendingNotifyEndpoints.removeFirstOrNull()
         if (endpoint == null) {
             handshakeStep = HandshakeStep.Ready
-            listener.onReady(SonyBleConnectionInfo(mtu = negotiatedMtu, writableValueLength = writableValueLength, optimalMtu = optimalMtu, transport = gattTransportLabel()))
+            listener.onReady(
+                HeadphoneConnectionInfo(
+                    mtu = negotiatedMtu,
+                    writableValueLength = writableValueLength,
+                    optimalMtu = optimalMtu,
+                    transport = gattTransportLabel(),
+                )
+            )
             return
         }
         val characteristic = endpoint.fromAcc
         log("Handshake: enable ${endpoint.channel} ${SonyGatt.characteristicLabel(characteristic.uuid)} notification")
         gatt.setCharacteristicNotification(characteristic, true)
         val descriptor = characteristic.getDescriptor(CLIENT_CHARACTERISTIC_CONFIG)
-        if (descriptor == null) { enableNextTandemNotification(gatt); return }
+        if (descriptor == null) {
+            enableNextTandemNotification(gatt)
+            return
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
         } else {
@@ -591,11 +412,22 @@ class SonyBleClient(
         }
     }
 
-    private fun writeNotificationState(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, enabled: Boolean) {
+    private fun writeNotificationState(
+        gatt: BluetoothGatt,
+        characteristic: BluetoothGattCharacteristic,
+        enabled: Boolean,
+    ) {
         gatt.setCharacteristicNotification(characteristic, enabled)
         val descriptor = characteristic.getDescriptor(CLIENT_CHARACTERISTIC_CONFIG)
-        if (descriptor == null) { readWritableValueLength(gatt); return }
-        val value = if (enabled) BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE else BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE
+        if (descriptor == null) {
+            readWritableValueLength(gatt)
+            return
+        }
+        val value = if (enabled) {
+            BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+        } else {
+            BluetoothGattDescriptor.DISABLE_NOTIFICATION_VALUE
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             gatt.writeDescriptor(descriptor, value)
         } else {
@@ -605,8 +437,6 @@ class SonyBleClient(
             gatt.writeDescriptor(descriptor)
         }
     }
-
-    // ── Write queue ────────────────────────────────────────────
 
     private fun drainWriteQueue() {
         val gatt = gatt ?: return
@@ -621,7 +451,11 @@ class SonyBleClient(
         val characteristic = endpoint.toAcc
         writing = true
         val accepted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            gatt.writeCharacteristic(characteristic, pending.bytes, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT) == BluetoothGatt.GATT_SUCCESS
+            gatt.writeCharacteristic(
+                characteristic,
+                pending.bytes,
+                BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT,
+            ) == BluetoothGatt.GATT_SUCCESS
         } else {
             @Suppress("DEPRECATION")
             characteristic.value = pending.bytes
@@ -645,23 +479,26 @@ class SonyBleClient(
     private fun gattTransportLabel(): String =
         if (TandemChannel.GATT_V2_HPC in gattEndpoints) "GATT_HPC" else "GATT_MC"
 
-    private fun unsupportedTandemEndpointReason(services: Collection<UUID>): String =
-        dev.ignotus.openbuds.ble.sony.unsupportedTandemEndpointReason(services)
-
-    // ── Unsupported endpoint probe ─────────────────────────────
-
     private fun beginUnsupportedEndpointProbe(gatt: BluetoothGatt, services: List<UUID>, reason: String) {
         val serviceLabels = services.map { SonyGatt.serviceLabel(it) }
         unsupportedProbe = UnsupportedEndpointProbe(reason, serviceLabels)
         log("Unsupported endpoint probe starting. reason=$reason")
         gatt.services.forEach { service ->
-            val chars = service.characteristics.joinToString { "${SonyGatt.characteristicLabel(it.uuid)} props=0x${it.properties.toString(16)}" }
+            val chars = service.characteristics.joinToString {
+                "${SonyGatt.characteristicLabel(it.uuid)} props=0x${it.properties.toString(16)}"
+            }
             log("Probe service ${SonyGatt.serviceLabel(service.uuid)} chars=[$chars]")
         }
         if (!readNextUnsupportedProbeCharacteristic(gatt)) finishUnsupportedEndpointProbe()
     }
 
-    private fun handleUnsupportedProbeRead(gatt: BluetoothGatt, probe: UnsupportedEndpointProbe, uuid: UUID, value: ByteArray, status: Int) {
+    private fun handleUnsupportedProbeRead(
+        gatt: BluetoothGatt,
+        probe: UnsupportedEndpointProbe,
+        uuid: UUID,
+        value: ByteArray,
+        status: Int,
+    ) {
         val label = SonyGatt.characteristicLabel(uuid)
         if (status == BluetoothGatt.GATT_SUCCESS) {
             val hex = value.hexString()
@@ -694,7 +531,10 @@ class SonyBleClient(
             val uuid = UNSUPPORTED_PROBE_CHARACTERISTICS[probe.nextIndex++]
             val label = SonyGatt.characteristicLabel(uuid)
             val characteristic = findReadableCharacteristic(gatt, uuid)
-            if (characteristic == null) { probe.rawReads[label] = "missing or not readable"; continue }
+            if (characteristic == null) {
+                probe.rawReads[label] = "missing or not readable"
+                continue
+            }
             log("Probe read $label")
             if (gatt.readCharacteristic(characteristic)) return true
             probe.rawReads[label] = "read rejected"
@@ -736,17 +576,25 @@ class SonyBleClient(
         }
     }
 
-    // ── Transport helpers ──────────────────────────────────────
-
     private fun preferredTransport(device: BluetoothDevice, discovered: DiscoveredSonyDevice): Int =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             when (device.type) {
                 BluetoothDevice.DEVICE_TYPE_LE -> BluetoothDevice.TRANSPORT_LE
-                BluetoothDevice.DEVICE_TYPE_CLASSIC, BluetoothDevice.DEVICE_TYPE_DUAL -> BluetoothDevice.TRANSPORT_AUTO
-                else -> if (discovered.source == "ble-scan" || discovered.sonyAd?.androidGattCapable == true || discovered.sonyAd?.leGattControlFlag == true)
-                    BluetoothDevice.TRANSPORT_LE else BluetoothDevice.TRANSPORT_AUTO
+                BluetoothDevice.DEVICE_TYPE_CLASSIC,
+                BluetoothDevice.DEVICE_TYPE_DUAL -> BluetoothDevice.TRANSPORT_AUTO
+                else -> if (
+                    discovered.source == "ble-scan" ||
+                    discovered.sonyAd?.androidGattCapable == true ||
+                    discovered.sonyAd?.leGattControlFlag == true
+                ) {
+                    BluetoothDevice.TRANSPORT_LE
+                } else {
+                    BluetoothDevice.TRANSPORT_AUTO
+                }
             }
-        } else 0
+        } else {
+            0
+        }
 
     private fun transportLabel(transport: Int): String =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -756,34 +604,14 @@ class SonyBleClient(
                 BluetoothDevice.TRANSPORT_AUTO -> "AUTO"
                 else -> transport.toString()
             }
-        } else "DEFAULT"
+        } else {
+            "DEFAULT"
+        }
 
     private fun parseFriendlyName(value: ByteArray): String? {
         if (value.size < 3) return null
         return value.copyOfRange(2, value.size).toString(Charsets.UTF_8).trim('\u0000').ifBlank { null }
     }
-
-    private fun isHeadphoneCandidate(name: String?): Boolean {
-        val normalized = name?.trim()?.lowercase().orEmpty()
-        return normalized.contains("sony") || normalized.contains("linkbuds") || normalized.contains("qcy") ||
-            normalized.startsWith("wf-") || normalized.startsWith("wh-") || normalized.startsWith("wi-") ||
-            normalized.startsWith("xba-") || normalized.startsWith("mdr-")
-    }
-
-    @SuppressLint("MissingPermission")
-    private fun safeDeviceName(device: BluetoothDevice): String? =
-        if (hasConnectPermission()) device.name else null
-
-    private fun hasConnectPermission(): Boolean =
-        Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
-            ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
-
-    private fun log(message: String) {
-        Log.i(LOG_TAG, message)
-        listener.onLog(message)
-    }
-
-    // ── Internal types ─────────────────────────────────────────
 
     private enum class HandshakeStep {
         Idle, ReadOptimalMtu, RequestMtu, EnableDetermineMtu, DisableDetermineMtu,
@@ -801,43 +629,21 @@ class SonyBleClient(
     )
 
     private companion object {
-        const val LOG_TAG = "OpenBuds"
-        val MDR_SPP_MARKER_UUID: UUID = UUID.fromString("443cce33-e85d-4b85-8d53-6e319ede53ae")
-        val OFFICIAL_SPP_UUIDS = listOf(
-            UUID.fromString("956c7b26-d49a-4ba8-b03f-b17d393cb6e2"),
-            UUID.fromString("96cc203e-5068-46ad-b32d-e316f5e069ba"),
-        )
-        val CLIENT_CHARACTERISTIC_CONFIG: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
-        val UNSUPPORTED_PROBE_CHARACTERISTICS = listOf(
+        val CLIENT_CHARACTERISTIC_CONFIG: UUID =
+            UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+        val UNSUPPORTED_PROBE_CHARACTERISTICS: List<UUID> = listOf(
             SonyGatt.LE_AUDIO_SWITCH_SUPPORTED_COMPATIBILITY,
-            SonyGatt.BLUETOOTH_CONNECTION, SonyGatt.BLUETOOTH_MODE,
-            SonyGatt.BLUETOOTH_CONNECTION_STATUS, SonyGatt.BLUETOOTH_MODE_STATUS,
-            SonyGatt.COMPLETE_BLUETOOTH_FRIENDLY_NAME, SonyGatt.SYNC_BLUETOOTH_FRIENDLY_NAME_INDEX,
-            SonyGatt.BLUETOOTH_PUBLIC_ADDRESS, SonyGatt.LE_AD_PACKET_IDENTIFIER,
-            SonyGatt.LE_AD_PACKET_IDENTIFIER_LEFT, SonyGatt.LE_AD_PACKET_IDENTIFIER_RIGHT,
+            SonyGatt.BLUETOOTH_CONNECTION,
+            SonyGatt.BLUETOOTH_MODE,
+            SonyGatt.BLUETOOTH_CONNECTION_STATUS,
+            SonyGatt.BLUETOOTH_MODE_STATUS,
+            SonyGatt.COMPLETE_BLUETOOTH_FRIENDLY_NAME,
+            SonyGatt.SYNC_BLUETOOTH_FRIENDLY_NAME_INDEX,
+            SonyGatt.BLUETOOTH_PUBLIC_ADDRESS,
+            SonyGatt.LE_AD_PACKET_IDENTIFIER,
+            SonyGatt.LE_AD_PACKET_IDENTIFIER_LEFT,
+            SonyGatt.LE_AD_PACKET_IDENTIFIER_RIGHT,
             SonyGatt.TARGET_ANNOUNCEMENT_LE_AD,
         )
-        val supportedGattControlServices = setOf(SonyGatt.TANDEM_V2_HPC_SERVICE, SonyGatt.TANDEM_V1_MC_SERVICE)
     }
 }
-
-internal fun tandemEndpointSupportState(services: Collection<UUID>): String? =
-    if (services.any { it in supportedGattControlServices }) null else unsupportedTandemEndpointReason(services)
-
-internal fun unsupportedTandemEndpointReason(services: Collection<UUID>): String {
-    val labels = services.map { SonyGatt.serviceLabel(it) }
-    return when {
-        SonyGatt.TANDEM_V1_MC_SERVICE in services ->
-            "Tandem V1 MC service was found, but no usable MC control endpoint could be registered. Services: ${labels.joinToString()}"
-        SonyGatt.LE_AUDIO_CAPABILITY_FOR_HPC in services ->
-            "This LE endpoint exposes LE Audio capability, not Tandem V2 HPC control. Try disabling LE Audio / using classic-only mode, then rescan."
-        SonyGatt.BLUETOOTH_PAIRING_COMPLETE_NAME_SERVICE in services ->
-            "This LE endpoint is a pairing/name endpoint, not Tandem V2 HPC control. Services: ${labels.joinToString()}"
-        else -> "Tandem control service was not found. Services: ${labels.joinToString()}"
-    }
-}
-
-private val supportedGattControlServices = setOf(
-    SonyGatt.TANDEM_V2_HPC_SERVICE,
-    SonyGatt.TANDEM_V1_MC_SERVICE,
-)

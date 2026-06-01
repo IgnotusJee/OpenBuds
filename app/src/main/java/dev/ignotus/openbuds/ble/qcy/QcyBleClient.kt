@@ -6,10 +6,10 @@ import android.bluetooth.BluetoothManager
 import android.content.Context
 import android.os.Build
 import android.util.Log
+import dev.ignotus.openbuds.ble.HeadphoneConnectionInfo
 import dev.ignotus.openbuds.ble.HeadphoneTransportClient
+import dev.ignotus.openbuds.ble.HeadphoneTransportListener
 import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
-import dev.ignotus.openbuds.ble.sony.SonyBleClientListener
-import dev.ignotus.openbuds.ble.sony.SonyBleConnectionInfo
 import dev.ignotus.openbuds.ble.transport.GattTransport
 import dev.ignotus.openbuds.ble.transport.GattTransportConfig
 import dev.ignotus.openbuds.ble.transport.GattTransportListener
@@ -27,7 +27,7 @@ import java.util.UUID
  *   3. enable notify characteristics, read battery/version, request MTU
  *   4. serialize CCCD, read, and command writes through one GATT operation queue
  *
- * Unlike SonyBleClient there is no SPP path, no multi-step handshake, and no
+ * Unlike Sony Tandem there is no SPP path, no multi-step handshake, and no
  * heartbeat. CCCD writes and command writes share a single FIFO so we never
  * issue two GATT operations concurrently (Android only permits one).
  *
@@ -35,7 +35,7 @@ import java.util.UUID
  */
 class QcyBleClient(
     private val context: Context,
-    private val listener: SonyBleClientListener,
+    private val listener: HeadphoneTransportListener,
 ) : HeadphoneTransportClient {
     override val id: String = "qcy-gatt"
 
@@ -99,7 +99,7 @@ class QcyBleClient(
 
                 override fun onReady(info: TransportInfo) {
                     effectiveMtu = info.mtu
-                    listener.onReady(SonyBleConnectionInfo(mtu = info.mtu, transport = info.kind))
+                    listener.onReady(HeadphoneConnectionInfo(mtu = info.mtu, transport = info.kind))
                 }
 
                 override fun onMessage(characteristicUuid: UUID, bytes: ByteArray) {
@@ -197,7 +197,7 @@ class QcyBleClient(
     /**
      * Send raw bytes to the QCY command characteristic (0x1001).
      * All QCY writes ultimately go through the same write characteristic; the
-     * `channel` argument is preserved for symmetry with SonyBleClient.
+     * `channel` argument is preserved for symmetry with Sony Tandem.
      */
     override fun sendToChannel(channel: TandemChannel, bytes: ByteArray) {
         val activeTransport = transport

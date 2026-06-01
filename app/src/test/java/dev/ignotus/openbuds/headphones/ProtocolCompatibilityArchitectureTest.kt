@@ -101,6 +101,22 @@ class ProtocolCompatibilityArchitectureTest {
         assertTrue(source.contains("sendToChannel(command.channel, command.bytes)"))
     }
 
+    @Test
+    fun sonyBleClientClassWasDismantled() {
+        val sources = listOf(
+            "ble/sony/SonyTandemTransportClient.kt",
+            "ble/sony/SonyTandemGattSession.kt",
+            "ble/sony/SonyTandemSppSession.kt",
+            "ble/HeadphoneTransportClient.kt",
+            "data/HeadphoneRepository.kt",
+        ).joinToString("\n") { mainSource(it) }
+
+        assertFalse(sources.contains("class SonyBleClient"))
+        assertFalse(sources.contains("SonyBleClientListener"))
+        assertTrue(mainSource("headphones/sony/SonyTandemHeadphoneAdapter.kt").contains("createTransportClient"))
+        assertTrue(mainSource("data/HeadphoneRepository.kt").contains("SonyTandemHeadphoneAdapter.createTransportClient"))
+    }
+
     private fun mainSource(path: String): String {
         val relativePath = "src/main/java/dev/ignotus/openbuds/$path"
         val userDir = requireNotNull(System.getProperty("user.dir"))

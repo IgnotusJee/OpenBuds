@@ -1,6 +1,10 @@
 package dev.ignotus.openbuds.headphones.sony
 
+import android.content.Context
+import dev.ignotus.openbuds.ble.HeadphoneTransportClient
+import dev.ignotus.openbuds.ble.HeadphoneTransportListener
 import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
+import dev.ignotus.openbuds.ble.sony.SonyTandemTransportClient
 import dev.ignotus.openbuds.headphones.ClearBassWriteMode
 import dev.ignotus.openbuds.headphones.ConnectedHeadphoneProfile
 import dev.ignotus.openbuds.headphones.EqDeviceConfig
@@ -63,6 +67,9 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
     val legacyIds: Set<String> = setOf("sony-tandem-v2")
 
     private val templates = listOf(Wh1000Xm4Profile.template, LinkBudsSProfile.template, Wf1000Xm5Profile.template)
+
+    fun createTransportClient(context: Context, listener: HeadphoneTransportListener): HeadphoneTransportClient =
+        SonyTandemTransportClient(context, listener)
 
     private fun command(
         profile: ConnectedHeadphoneProfile,

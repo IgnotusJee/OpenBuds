@@ -1,7 +1,7 @@
 package dev.ignotus.openbuds.ble
 
 import dev.ignotus.openbuds.ble.sony.TandemGattRouting
-import dev.ignotus.openbuds.ble.sony.tandemEndpointSupportState
+import dev.ignotus.openbuds.ble.sony.SonyTandemEndpointSupport
 import dev.ignotus.openbuds.headphones.TandemChannel
 import dev.ignotus.openbuds.protocol.sony.SonyGatt
 import org.junit.Assert.assertEquals
@@ -18,11 +18,11 @@ import java.util.UUID
  * the TandemChannel routing helpers distinguish V2 HPC, V2 MC, V1 MC, and SPP
  * channels.
  *
- * Note: SonyBleClient itself is Android-dependent (BluetoothGatt, Context) and
- * cannot be unit-tested directly. These tests validate the UUID constants and
- * the channel routing logic used by SonyBleClient.
+ * Note: Sony Tandem GATT sessions are Android-dependent (BluetoothGatt, Context)
+ * and cannot be unit-tested directly. These tests validate the UUID constants
+ * and the channel routing logic used by the session.
  */
-class SonyBleClientChannelTest {
+class SonyTandemChannelTest {
 
     // ── SonyGatt service UUID correctness ────────────────────────────────────
 
@@ -112,13 +112,25 @@ class SonyBleClientChannelTest {
     }
 
     @Test
-    fun tandemEndpointSupportState_v2HpcIsSupported() {
-        assertNull(tandemEndpointSupportState(listOf(SonyGatt.TANDEM_V2_HPC_SERVICE)))
+    fun tandemEndpointSupport_v2HpcIsSupported() {
+        assertNull(SonyTandemEndpointSupport.supportState(listOf(SonyGatt.TANDEM_V2_HPC_SERVICE)))
     }
 
     @Test
-    fun tandemEndpointSupportState_v1McOnlyIsSupported() {
-        assertNull(tandemEndpointSupportState(listOf(SonyGatt.TANDEM_V1_MC_SERVICE)))
+    fun tandemEndpointSupport_v1McOnlyIsSupported() {
+        assertNull(SonyTandemEndpointSupport.supportState(listOf(SonyGatt.TANDEM_V1_MC_SERVICE)))
+    }
+
+    @Test
+    fun tandemEndpointSupport_leAudioEndpointIsUnsupported() {
+        val reason = SonyTandemEndpointSupport.supportState(listOf(SonyGatt.LE_AUDIO_CAPABILITY_FOR_HPC))
+        assertTrue(reason.orEmpty().contains("LE Audio capability"))
+    }
+
+    @Test
+    fun tandemEndpointSupport_pairingNameEndpointIsUnsupported() {
+        val reason = SonyTandemEndpointSupport.supportState(listOf(SonyGatt.BLUETOOTH_PAIRING_COMPLETE_NAME_SERVICE))
+        assertTrue(reason.orEmpty().contains("pairing/name endpoint"))
     }
 
     // ── Channel characteristic resolution ────────────────────────────────────
@@ -213,7 +225,7 @@ class SonyBleClientChannelTest {
 
 /**
  * Describes the GATT characteristic pair for a Tandem channel.
- * Phase 5: absorbed into SonyBleClient's endpoint management.
+ * Test-only mirror of Sony Tandem endpoint management.
  */
 data class GattEndpoint(
     val serviceUuid: UUID,

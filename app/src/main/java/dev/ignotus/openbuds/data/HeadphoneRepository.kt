@@ -11,12 +11,11 @@ import android.os.Looper
 import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
+import dev.ignotus.openbuds.ble.HeadphoneConnectionInfo
 import dev.ignotus.openbuds.ble.HeadphoneTransportSelector
+import dev.ignotus.openbuds.ble.HeadphoneTransportListener
 import dev.ignotus.openbuds.ble.qcy.QcyBleClient
 import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
-import dev.ignotus.openbuds.ble.sony.SonyBleClient
-import dev.ignotus.openbuds.ble.sony.SonyBleClientListener
-import dev.ignotus.openbuds.ble.sony.SonyBleConnectionInfo
 import dev.ignotus.openbuds.ble.sony.UnsupportedEndpointDiagnostics
 import dev.ignotus.openbuds.headphones.ConnectedHeadphoneProfile
 import dev.ignotus.openbuds.headphones.EqUiCapability
@@ -29,6 +28,7 @@ import dev.ignotus.openbuds.headphones.HeadphoneFormFactor
 import dev.ignotus.openbuds.headphones.HeadphoneTransport
 import dev.ignotus.openbuds.headphones.PlaybackDispatchStrategy
 import dev.ignotus.openbuds.headphones.TandemChannel
+import dev.ignotus.openbuds.headphones.sony.SonyTandemHeadphoneAdapter
 import dev.ignotus.openbuds.media.MediaPlaybackController
 import dev.ignotus.openbuds.data.sony.SonyModelImageCatalog
 import dev.ignotus.openbuds.protocol.AmbientSoundMode
@@ -159,7 +159,7 @@ data class HeadphoneUiState(
     val discoveredDevices: List<DiscoveredSonyDevice> = emptyList(),
     val knownDevices: List<DiscoveredSonyDevice> = emptyList(),
     val connectedDevice: DiscoveredSonyDevice? = null,
-    val connectionInfo: SonyBleConnectionInfo? = null,
+    val connectionInfo: HeadphoneConnectionInfo? = null,
     val connectedProfile: ConnectedHeadphoneProfile? = null,
     val deviceInfo: DeviceInfoState = DeviceInfoState(),
     val batteryState: BatteryState = BatteryState(),
@@ -180,9 +180,9 @@ data class HeadphoneUiState(
     val preferredProtocol: String = "Sony Tandem",
 )
 
-class HeadphoneRepository private constructor(context: Context) : SonyBleClientListener {
+class HeadphoneRepository private constructor(context: Context) : HeadphoneTransportListener {
     private val appContext = context.applicationContext
-    private val sonyClient = SonyBleClient(appContext, this)
+    private val sonyClient = SonyTandemHeadphoneAdapter.createTransportClient(appContext, this)
     private val qcyClient = QcyBleClient(appContext, this)
     private val transport = HeadphoneTransportSelector(
         clients = listOf(sonyClient, qcyClient),
@@ -640,7 +640,7 @@ class HeadphoneRepository private constructor(context: Context) : SonyBleClientL
         }
     }
 
-    override fun onReady(info: SonyBleConnectionInfo) {
+    override fun onReady(info: HeadphoneConnectionInfo) {
         _state.update {
             val profile = (it.connectedProfile ?: it.connectedDevice?.let { device ->
                 HeadphoneAdapterRegistry.resolve(device, it.deviceInfo.modelName)

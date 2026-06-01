@@ -121,7 +121,7 @@ class SonyControlService : Service() {
             // Do a brief BLE scan to get proper SonyAd discovery data, then auto-connect.
             // Direct connect(address, name) without scan data picks wrong SPP UUIDs for
             // some devices; scanning first provides the full advertisement data that
-            // SonyBleClient needs for correct SPP path selection.
+            // Sony Tandem transport needs for correct SPP path selection.
             repository.startScan()
             handler.postDelayed({
                 repository.stopScan()

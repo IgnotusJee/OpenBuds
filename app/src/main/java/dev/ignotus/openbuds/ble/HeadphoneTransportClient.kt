@@ -1,7 +1,7 @@
 package dev.ignotus.openbuds.ble
 
 import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
-import dev.ignotus.openbuds.ble.sony.SonyBleClientListener
+import dev.ignotus.openbuds.ble.sony.UnsupportedEndpointDiagnostics
 import dev.ignotus.openbuds.headphones.TandemChannel
 
 /**
@@ -52,14 +52,27 @@ interface HeadphoneTransportClient {
 }
 
 /**
+ * Connection metadata reported when a transport is protocol-ready.
+ */
+data class HeadphoneConnectionInfo(
+    val mtu: Int = 23,
+    val writableValueLength: Int? = null,
+    val optimalMtu: Int? = null,
+    val transport: String = "GATT_HPC",
+)
+
+/**
  * Callback interface shared by all [HeadphoneTransportClient] implementations.
  * The repository implements this to receive scan results, connection events,
- * and incoming messages.
- *
- * For backward compatibility this is a typealias to [SonyBleClientListener].
- * Sony-specific callbacks (onUnsupportedEndpoint, onScanStateChanged) are
- * no-op for non-Sony clients (QCY) but remain available to avoid a sweeping
- * rename across the repository code. A follow-up PR-3 can split this if
- * brand-neutral callbacks become necessary.
+ * diagnostics, and incoming protocol messages.
  */
-typealias HeadphoneTransportListener = SonyBleClientListener
+interface HeadphoneTransportListener {
+    fun onBluetoothUnavailable(reason: String)
+    fun onUnsupportedEndpoint(diagnostics: UnsupportedEndpointDiagnostics)
+    fun onDeviceFound(device: DiscoveredSonyDevice)
+    fun onScanStateChanged(scanning: Boolean)
+    fun onConnectionStateChanged(connected: Boolean, device: DiscoveredSonyDevice?)
+    fun onReady(info: HeadphoneConnectionInfo)
+    fun onMessage(channel: TandemChannel, raw: ByteArray)
+    fun onLog(message: String)
+}

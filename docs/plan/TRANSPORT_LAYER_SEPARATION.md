@@ -12,12 +12,12 @@
 
 | 问题 | 位置 | 影响 |
 |------|------|------|
-| `SonyBleClient` (1342行) 包含扫描、GATT、SPP、Tandem握手、Sony AD解析 | `ble/sony/SonyBleClient.kt` | 新增品牌无法复用 |
+| `SonyBleClient` (已移除) 曾包含扫描、GATT、SPP、Tandem握手、Sony AD解析 | 已拆分到 `ble/sony/SonyTandemTransportClient.kt`、`SonyTandemGattSession.kt`、`SonyTandemSppSession.kt`、`SonyBleScanner.kt`、`SonyAudioAdParser.kt` | Phase 3 已解决 |
 | `TandemChannel` enum 混合 Sony GATT 通道、SPP、QCY 通道 | `headphones/HeadphoneAdapter.kt` | 品牌耦合 |
-| `SonyBleClientListener` typealias 给 QCY 用 | `ble/HeadphoneTransportClient.kt` | 概念混淆 |
-| `SonySppTransport` 生命周期嵌入 `SonyBleClient` | `ble/sony/SonyBleClient.kt` | SPP 不能独立复用 |
+| `SonyBleClientListener` typealias 给 QCY 用 | `ble/HeadphoneTransportClient.kt` | Phase 3 已替换为 `HeadphoneTransportListener` |
+| `SonySppTransport` 生命周期嵌入 `SonyBleClient` | 已拆分到 `ble/sony/SonyTandemSppSession.kt` + `ble/transport/SppTransport.kt` | Phase 3 已解决 |
 | `QcyBleClient.startScan()` no-op，依赖 Sony 扫描 | `ble/qcy/QcyBleClient.kt` | 扫描耦合 |
-| 传输通道选择 (`shouldUseSpp`) 硬编码在 `SonyBleClient` | `ble/sony/SonyBleClient.kt:538` | 品牌决策混入传输 |
+| 传输通道选择 (`shouldUseSpp`) 硬编码在 `SonyBleClient` | 已迁移到 `ble/sony/SonyTandemTransportClient.kt` | Phase 3 已解决 |
 
 ## 目标架构
 
@@ -103,39 +103,55 @@ interface GattTransportListener : TransportListener {
    - 移除 `Sony` 前缀（`SonySppFrameType` → `SppFrameType`）
    - 帧类型映射（`SonySppPayloadMapper`）作为可注入策略
    - 实现 `BluetoothTransport` 接口
-4. `SonyBleClient` 改用新的 `SppTransport`
+4. Sony Tandem path 改用新的 `SppTransport`
 
 **风险**：低。SPP 已经是独立类，主要是包移动+接口化。
 
 **完成状态：**
 - `ble/transport/SppTransport.kt` 负责 SPP 帧、ACK、转义和校验。
 - `ble/sony/SonySppPayloadMapper.kt` 作为可注入策略处理 Sony Tandem app data type (`0x0E/0x0F`) 与 SPP frame type (`0x0C/0x0E`) 的双向映射。
-- `SonyBleClient` 改为注入 `SonySppPayloadMapper`，并保持对外连接状态回调不重复。
+- Sony SPP path 注入 `SonySppPayloadMapper`，并保持对外连接状态回调不重复。
 
 ### Phase 2 — GATT 传输通用化（本次）
 
-**目标**：从 `SonyBleClient` 和 `QcyBleClient` 提取公共 GATT 逻辑。
+**目标**：从 Sony Tandem 和 `QcyBleClient` 提取公共 GATT 逻辑。
 
 **变更：**
 1. 实现 `GattTransport`，参数化 service UUID、write characteristic UUID、notify/read characteristic UUIDs
 2. 通用 GATT 连接流程：connect → discoverServices → enableNotify/read → requestMtu → ready
 3. 通用写入队列、CCCD 串行化、MTU 协商和 ready deadline
 4. QCY `QcyBleClient` 改用 `GattTransport`，只保留品牌匹配、channel 分发和 repository 回调适配
-5. Sony GATT path 暂不强迁：OPTIMAL_MTU、DETERMINE_MTU、WRITABLE_VALUE_LENGTH、V2 HPC/V2 MC/V1 MC endpoint 注册仍在 `SonyBleClient` 状态机中，迁移点留到 Phase 3/4
+5. Sony GATT path 暂不强迁：OPTIMAL_MTU、DETERMINE_MTU、WRITABLE_VALUE_LENGTH、V2 HPC/V2 MC/V1 MC endpoint 注册仍在 Sony 状态机中，迁移点留到 Phase 3/4
 
 **风险**：中。Sony 和 QCY 的 GATT 流程差异大（握手步骤、CCCD 并行度）。本阶段先迁移 QCY 标准 GATT-TLV path，Sony 维持现有已验证路径。
 
-### Phase 3 — SonyBleClient 解体
+### Phase 3 — SonyBleClient 解体（已完成）
 
 **目标**：`SonyBleClient` 不再存在，职责分散。
 
 **变更：**
 1. Sony 扫描逻辑 → 独立的 `SonyBleScanner` 组件
-2. Sony Tandem 握手逻辑 → `SonyTandemHeadphoneAdapter` 的 transport 初始化代码
-3. Sony AD 解析 → 独立工具类（已有部分在 `SonyBleClient` 的 companion 方法里）
-4. `HeadphoneTransportSelector` 可能不再需要（Adapter 直接管理 Transport）
+2. Sony transport 创建入口 → `SonyTandemHeadphoneAdapter.createTransportClient(context, listener)`
+3. Sony transport 编排 → `SonyTandemTransportClient`
+4. Sony GATT 握手与 endpoint probe → `SonyTandemGattSession`
+5. Sony SPP socket 与 `SppTransport` 生命周期 → `SonyTandemSppSession`
+6. Sony AD 解析 → `SonyAudioAdParser`
+7. Sony endpoint support 判断 → `SonyTandemEndpointSupport`
+8. `SonyBleClientListener` typealias → `HeadphoneTransportListener`
 
-**风险**：中。`SonyBleClient` 是当前系统核心，解体需要仔细测试。
+**完成状态：**
+- `SonyBleClient.kt`、`SonyBleClientListener.kt`、`SonyBleConnectionInfo.kt` 已移除。
+- Sony GATT 特殊握手仍保持专用 session，未强行复用通用 `GattTransport`，避免破坏多 endpoint 和 MTU handshake。
+- `HeadphoneTransportSelector` 仍保留到 Phase 5/6；它仍负责多品牌 transport client 路由。
+- `HeadphoneTransportClient.kt` 现在定义品牌无关的 `HeadphoneTransportListener` 与 `HeadphoneConnectionInfo`，QCY 与 Sony 共用同一回调类型。
+- `HeadphoneRepository` 通过 `SonyTandemHeadphoneAdapter.createTransportClient(appContext, this)` 创建 Sony transport，不再直接依赖 Sony BLE 客户端类。
+- `SonyDeviceMatcher` 统一 Sony/QCY 名称排除、Sony AD 和 Tandem service 匹配逻辑，`SonyBleScanner` 与 `SonyTandemTransportClient` 共用该判断。
+- 新增测试覆盖：
+  - `SonyAudioAdParserTest`：direct manufacturer payload、split raw scan record、非法/截断 payload。
+  - `SonyDeviceMatcherTest`：QCY 排除、Sony 名称、Sony AD、Tandem UUID/label 匹配。
+  - `SonyBleClientChannelTest`：改为使用 `SonyTandemEndpointSupport`，覆盖 V2 HPC、V1 MC、LE Audio endpoint、pairing/name endpoint。
+  - `ProtocolCompatibilityArchitectureTest`：确认主源码不再包含 `class SonyBleClient` / `SonyBleClientListener`，并确认 Repository 走 adapter factory。
+- Phase 3 验证命令：`.\gradlew.bat testDebugUnitTest assembleDebug`。
 
 ### Phase 4 — TandemChannel 品牌解耦
 
@@ -166,9 +182,8 @@ interface GattTransportListener : TransportListener {
 
 **变更：**
 1. 移除 `HeadphoneTransportSelector`（如果不再需要）
-2. 移除 `SonyBleClientListener` typealias
-3. `DiscoveredSonyDevice` → `DiscoveredDevice`
-4. 文档更新
+2. `DiscoveredSonyDevice` → `DiscoveredDevice`
+3. 文档更新
 
 **风险**：低。
 

@@ -88,7 +88,7 @@ class SonyBleScanner(
                     "rssi=${found.rssi} services=[$serviceUuids] manufacturer=[$manufacturerData] " +
                     "serviceData=[$serviceData] sonyAd=${sonyAd?.summary.orEmpty()} raw=${sonyAd?.raw.orEmpty()}"
             )
-            if (isHeadphoneCandidate(name) || found.isLikelyControlEndpoint || sonyAd != null) {
+            if (SonyDeviceMatcher.isHeadphoneCandidate(name) || found.isLikelyControlEndpoint || sonyAd != null) {
                 listener.onDeviceFound(found)
             }
         }
@@ -203,7 +203,7 @@ class SonyBleScanner(
             "Known device source=$source name=${name ?: "<unknown>"} address=${device.address} " +
                 "type=${device.type} bond=${device.bondState} uuids=[$uuids]"
         )
-        if (!isHeadphoneCandidate(name)) return
+        if (!SonyDeviceMatcher.isHeadphoneCandidate(name)) return
 
         listener.onDeviceFound(
             DiscoveredSonyDevice(
@@ -221,18 +221,6 @@ class SonyBleScanner(
     }
 
     // ── Helpers ────────────────────────────────────────────────
-
-    private fun isHeadphoneCandidate(name: String?): Boolean {
-        val normalized = name?.trim()?.lowercase().orEmpty()
-        return normalized.contains("sony") ||
-            normalized.contains("linkbuds") ||
-            normalized.contains("qcy") ||
-            normalized.startsWith("wf-") ||
-            normalized.startsWith("wh-") ||
-            normalized.startsWith("wi-") ||
-            normalized.startsWith("xba-") ||
-            normalized.startsWith("mdr-")
-    }
 
     @SuppressLint("MissingPermission")
     private fun safeDeviceName(device: BluetoothDevice): String? =

@@ -12,7 +12,7 @@ import java.util.UUID
  *
  * These are brand-agnostic helpers for characteristic read/write, CCCD
  * notification setup, and descriptor writes. Higher-level transports
- * ([GattTransport]) and brand adapters (SonyBleClient) compose these
+ * ([GattTransport]) and brand adapters compose these
  * instead of duplicating Android-version-specific GATT calls.
  */
 object GattHelpers {
