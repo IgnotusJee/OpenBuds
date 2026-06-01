@@ -10,7 +10,7 @@
 
 | 层次 | 文档位置 | 实现文件 | 对齐 |
 |------|---------|---------|------|
-| BLE GATT 传输层 | `SonyBleClient.kt` + `SonySppTransport.kt` | `ble/` | ✅ |
+| BLE GATT/SPP 传输层 | `SonyBleClient.kt` + `SppTransport.kt` / `GattTransport.kt` | `ble/` | ✅ |
 | Tandem 协议消息层 | `SonyTandemV2Table1Protocol.kt` / `V1` / `V2Table2` | `protocol/` | ✅ |
 | 应用层 | `HeadphoneRepository.kt` + `headphones/` adapter | `data/` + `headphones/` | ✅ |
 
@@ -67,7 +67,7 @@ EQ_FIRST_FREQUENCY_RAW_INDEX = 1  // 400Hz 起点
 
 ### 2.5 SPP 帧格式 (通过)
 
-`SonySppTransport` 的帧格式实现与 PROTOCOL_GUIDE.md 完全一致：
+`SppTransport` 的帧格式实现与 PROTOCOL_GUIDE.md 完全一致：
 
 ```
 FRAME_START(0x3E) + escaped(body) + FRAME_END(0x3C)
@@ -106,7 +106,7 @@ fun playbackPlayPause() {
 **严重程度：中**
 
 ```kotlin
-// SonySppTransport.kt scheduleAckTimeout()
+// SppTransport.kt scheduleAckTimeout()
 Thread({
     try { Thread.sleep(ACK_TIMEOUT_MS) } catch (_: InterruptedException) { return@Thread }
     // ...
@@ -208,7 +208,7 @@ DEVELOPMENT.md 的代码结构图中列出了 `protocol/SonyTandemFrame.kt`，�
 
 | 缺失项 | 优先级 |
 |--------|--------|
-| `SonySppTransport` 帧编码/解码、转义、校验和、ACK 重试 | 高 |
+| `SppTransport` 帧编码/解码、转义、校验和、ACK 重试 | 高 |
 | `SonyBleClient` Sony Audio AD 解析（V1/V2 组合 payload） | 高 |
 | `HeadphoneRepository` 状态管理（onMessage → state 更新链） | 中 |
 | XM4 Clear Bass 路径的端到端测试 | 中 |

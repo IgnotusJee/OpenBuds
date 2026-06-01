@@ -58,10 +58,14 @@ app/src/main/java/dev/ignotus/openbuds/
 │   ├── HeadphoneTransportSelector.kt# 多品牌客户端路由
 │   ├── sony/
 │   │   ├── SonyBleClient.kt        # 设备发现、GATT 握手、SPP 选择、诊断
-│   │   ├── SonySppTransport.kt     # Sony SPP 帧、ACK、转义、校验和
-│   │   └── TandemTransportRouting.kt# GATT endpoint spec、SPP payload 映射、channel 路由
+│   │   ├── SonySppPayloadMapper.kt # Sony Tandem app data type 与 SPP frame type 映射
+│   │   └── TandemTransportRouting.kt# GATT endpoint spec、通知顺序、channel 路由
+│   ├── transport/
+│   │   ├── BluetoothTransport.kt   # 通用传输接口和回调
+│   │   ├── SppTransport.kt         # SPP 帧、ACK、转义、校验和
+│   │   └── GattTransport.kt        # 通用 GATT connect/discover/notify/read/write/MTU
 │   └── qcy/
-│       └── QcyBleClient.kt         # QCY GATT 客户端
+│       └── QcyBleClient.kt         # QCY GATT 客户端（委托 GattTransport）
 ├── data/
 │   ├── HeadphoneRepository.kt
 │   ├── sony/
@@ -121,9 +125,10 @@ app/src/main/java/dev/ignotus/openbuds/
 
 职责边界：
 
-- `SonyBleClient` 只负责传输层、设备发现、连接生命周期和底层日志，不直接理解 UI 业务。GATT 写入必须通过 `HeadphoneCommand.channel` 路由到对应 Tandem endpoint。
-- `SonySppTransport` 只负责 SPP 帧封装和拆包。传给上层的是带 app data type 的规范化 Tandem payload；Table1 为 `DATA_MDR (0x0E)`，Table2 为 `DATA_MDR_NO2 (0x0F)`。
-- `TandemTransportRouting` 提供 GATT endpoint spec（service/to-acc/from-acc UUID 三元组）、SPP payload 双向映射、通知订阅顺序和 channel 路由逻辑。
+- `SonyBleClient` 只负责 Sony 设备发现、连接生命周期、GATT Tandem 握手/SPP 选择和底层日志，不直接理解 UI 业务。GATT 写入必须通过 `HeadphoneCommand.channel` 路由到对应 Tandem endpoint。
+- `SppTransport` 只负责 SPP 帧封装和拆包。Sony Tandem 的 app data type 映射由 `SonySppPayloadMapper` 注入；Table1 为 `DATA_MDR (0x0E)`，Table2 为 `DATA_MDR_NO2 (0x0F)`。
+- `GattTransport` 负责通用 BLE GATT connect/discover/notify/read/write/MTU 和串行化 GATT 操作队列；QCY 已委托它，Sony GATT 仍保留专用 Tandem 握手状态机。
+- `TandemTransportRouting` 提供 Sony GATT endpoint spec（service/to-acc/from-acc UUID 三元组）、通知订阅顺序和 channel 路由逻辑。
 - `protocol/sony/` 中的 Sony Tandem codec 只负责命令构造和响应解析，不持有 Android Context 和 UI 状态。`SonyEqEbbPayloadParser` 供 V1/V2 codec 共享 EQ/EBB payload 解析。
 - `headphones/` 负责按品牌/型号选择 adapter、声明能力、绑定 feature 到 protocol variant/channel、生成刷新命令和判断写入是否安全。`EqProtocolEngine` 是 EQ 写入/刷新/解析的单一入口，消费 `EqDeviceConfig` 输出 `EqUiCapability`，消除跨 adapter/codec/repository 的 EQ 条件分支。
 - Repository 只发起领域操作，不按型号直接构造协议字节。
@@ -189,7 +194,7 @@ rg --files references/SonyConnect/sources | rg "table1|table2|j2objc"
 - WH-1000XM4 EQ 按 V1 `PRESET_EQ=0x01` 处理：刷新 `0E 52/56/5A 01`，自定义/手动 band 写入 `0E 58 01 FF ...`，Clear Bass 是 raw band 0，通过 `PRESET_EQ_BANDS` 模式随全 band 数组写入。
 - LinkBuds S 和 WF-1000XM5 走 Sony Tandem V2 TableSet1，全部 feature 绑定 `GATT_V2_HPC`。
 - V1 TableSet2 和 V2 TableSet2 已有 codec、parser、registry、MC/SPP data type 路径，默认通道分别为 `GATT_V1_MC` 和 `GATT_V2_MC`；当前只用于只读解析和诊断，没有真实响应前不要加写入 UI。
-- 当前 GATT 握手仍以 V2 HPC service 为入口。V2 MC/V1 MC 会在 HPC 握手成功后注册并订阅通知；V1 MC-only GATT 连接/控制路径尚未实现。
+- Sony GATT 握手仍以 V2 HPC service 为入口。V2 MC/V1 MC 会在 HPC 握手成功后注册并订阅通知；V1 MC-only GATT 连接/控制路径尚未实现。QCY 标准 GATT-TLV path 已走 `GattTransport`。
 - `featureStatusesFor()` 在 Repository 底部声明每个设备的特性实现状态，供 UI 查询。
 
 ## 连接和扫描注意事项

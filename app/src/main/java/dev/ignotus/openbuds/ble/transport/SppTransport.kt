@@ -1,4 +1,4 @@
-package dev.ignotus.openbuds.ble.sony
+package dev.ignotus.openbuds.ble.transport
 
 import android.bluetooth.BluetoothSocket
 import dev.ignotus.openbuds.protocol.hexString
@@ -6,12 +6,34 @@ import java.io.IOException
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
 
-internal class SonySppTransport(
+/**
+ * SPP (RFCOMM) transport implementing the shared SPP wire protocol.
+ *
+ * Wire format per frame:
+ * ```
+ * [0x3E] [escaped-body] [0x3C]
+ * body = [type:1] [seq:1] [length:4 BE] [payload:N] [checksum:1]
+ * ```
+ *
+ * Special bytes (0x3C, 0x3D, 0x3E) in the body are escaped with 0x3D prefix
+ * followed by (byte | 0x10).
+ *
+ * The send/receive API works with protocol bytes. The transport handles:
+ * - Sequence numbers and ACK retransmission
+ * - Escape encoding and checksumming
+ *
+ * The caller receives protocol bytes with the type prefix intact via
+ * [TransportListener.onMessage], and sends protocol bytes with the prefix
+ * via [send].
+ */
+class SppTransport(
     private val socket: BluetoothSocket,
-    private val onPayload: (ByteArray) -> Unit,
-    private val onClosed: (String?) -> Unit,
-    private val log: (String) -> Unit,
-) {
+    private val listener: TransportListener,
+    private val payloadMapper: SppPayloadMapper,
+) : BluetoothTransport {
+    override val name: String = "SPP"
+    override val info: TransportInfo = TransportInfo(mtu = WRITABLE_VALUE_LENGTH, kind = "SPP")
+
     private val input = socket.inputStream
     private val output = socket.outputStream
     private val closed = AtomicBoolean(false)
@@ -25,17 +47,15 @@ internal class SonySppTransport(
     private var awaitingRetries: Int = 0
     private var ackGeneration: Int = 0
 
+    // ── Lifecycle ──────────────────────────────────────────────
+
+    /** Start the reader thread. Must be called after construction. */
     fun start() {
         readerThread = Thread(::readLoop, "OpenBuds-SppTransport").also { it.start() }
+        listener.onReady(info)
     }
 
-    fun send(tandemBytes: ByteArray) {
-        val frame = SonySppPayloadMapper.outboundFromTandemBytes(tandemBytes)
-        pendingWrites.add(frame)
-        drainWrites()
-    }
-
-    fun close() {
+    override fun close() {
         if (!closed.getAndSet(true)) {
             pendingWrites.clear()
             awaitingAck = null
@@ -44,6 +64,16 @@ internal class SonySppTransport(
             runCatching { socket.close() }
         }
     }
+
+    // ── Send ───────────────────────────────────────────────────
+
+    override fun send(bytes: ByteArray) {
+        val frame = payloadMapper.outbound(bytes)
+        pendingWrites.add(frame)
+        drainWrites()
+    }
+
+    // ── Read loop ──────────────────────────────────────────────
 
     private fun readLoop() {
         val frame = mutableListOf<Byte>()
@@ -70,17 +100,17 @@ internal class SonySppTransport(
                     }
                 }
             }
-            notifyClosed(null)
+            shutdown(null)
         } catch (e: IOException) {
             if (!closed.get()) {
-                notifyClosed(e.message)
+                shutdown(e.message)
             }
         }
     }
 
     private fun handleFrame(escapedBody: ByteArray) {
-        val body = unescape(escapedBody)
-        if (body.size < HEADER_SIZE + CHECKSUM_SIZE) {
+        val body = SppFraming.unescape(escapedBody)
+        if (body.size < SppFraming.HEADER_SIZE + SppFraming.CHECKSUM_SIZE) {
             log("SPP RX short frame ${body.hexString()}")
             return
         }
@@ -94,7 +124,7 @@ internal class SonySppTransport(
             return
         }
 
-        val type = SonySppFrameType.fromByte(body[0])
+        val type = SppFrameType.fromByte(body[0])
         val sequence = body[1]
         val length = body.int32be(2)
         if (length < 0 || body.size != HEADER_SIZE + length + CHECKSUM_SIZE) {
@@ -105,7 +135,7 @@ internal class SonySppTransport(
         log("SPP RX type=${type.name} seq=${sequence.u} payload=${payload.hexString()}")
 
         when (type) {
-            SonySppFrameType.ACK -> {
+            SppFrameType.ACK -> {
                 synchronized(lock) {
                     if (awaitingAck == sequence) {
                         nextTxSequence = sequence
@@ -118,19 +148,21 @@ internal class SonySppTransport(
                 }
                 drainWrites()
             }
-            SonySppFrameType.DATA_MDR,
-            SonySppFrameType.DATA_MDR_NO2,
-            SonySppFrameType.LARGE_DATA_MDR -> {
+            SppFrameType.DATA_MDR,
+            SppFrameType.DATA_MDR_NO2,
+            SppFrameType.LARGE_DATA_MDR -> {
                 sendAck(sequence)
-                SonySppPayloadMapper.inboundToTandemBytes(type, payload)?.let(onPayload)
+                payloadMapper.inbound(type, payload)?.let { listener.onMessage(it) }
             }
-            SonySppFrameType.SHOT_MDR,
-            SonySppFrameType.SHOT_MDR_NO2 -> {
-                SonySppPayloadMapper.inboundToTandemBytes(type, payload)?.let(onPayload)
+            SppFrameType.SHOT_MDR,
+            SppFrameType.SHOT_MDR_NO2 -> {
+                payloadMapper.inbound(type, payload)?.let { listener.onMessage(it) }
             }
-            SonySppFrameType.UNKNOWN -> log("SPP RX unsupported data type=0x${body[0].u.toString(16)}")
+            SppFrameType.UNKNOWN -> log("SPP RX unsupported data type=0x${body[0].u.toString(16)}")
         }
     }
+
+    // ── Write queue ────────────────────────────────────────────
 
     private fun drainWrites() {
         synchronized(lock) {
@@ -159,7 +191,7 @@ internal class SonySppTransport(
                 }
             } catch (e: IOException) {
                 awaitingAck = null
-                notifyClosed("SPP write failed: ${e.message}")
+                shutdown("SPP write failed: ${e.message}")
             }
         }
     }
@@ -188,7 +220,7 @@ internal class SonySppTransport(
                     } catch (e: IOException) {
                         awaitingAck = null
                         awaitingFrame = null
-                        notifyClosed("SPP retry failed: ${e.message}")
+                        shutdown("SPP retry failed: ${e.message}")
                         return@synchronized
                     }
                     scheduleAckTimeout(expectedAck, retryGeneration)
@@ -198,7 +230,7 @@ internal class SonySppTransport(
                 log("SPP ACK timeout expected=${expectedAck.u}; closing transport")
                 awaitingAck = null
                 awaitingFrame = null
-                notifyClosed("SPP remote endpoint did not ACK seq=${inverseSequence(expectedAck).u}")
+                shutdown("SPP remote endpoint did not ACK seq=${inverseSequence(expectedAck).u}")
             }
             if (retryScheduled) return@Thread
         }, "OpenBuds-SppAckTimeout").start()
@@ -206,90 +238,47 @@ internal class SonySppTransport(
 
     private fun sendAck(sequence: Byte) {
         val ackSequence = inverseSequence(sequence)
-        val encoded = encodeFrame(SonySppFrameType.ACK, ackSequence, byteArrayOf())
+        val encoded = encodeFrame(SppFrameType.ACK, ackSequence, byteArrayOf())
         log("SPP TX ACK seq=${ackSequence.u} frame=${encoded.hexString()}")
         try {
             output.write(encoded)
             output.flush()
         } catch (e: IOException) {
-            notifyClosed("SPP ACK failed: ${e.message}")
+            shutdown("SPP ACK failed: ${e.message}")
         }
     }
 
-    private fun notifyClosed(reason: String?) {
+    private fun shutdown(reason: String?) {
         if (!closed.getAndSet(true)) {
             pendingWrites.clear()
             awaitingAck = null
             runCatching { socket.close() }
-            onClosed(reason)
+            listener.onDisconnected(reason)
         }
     }
+
+    // ── Logging ────────────────────────────────────────────────
+
+    private fun log(message: String) {
+        listener.onLog(message)
+    }
+
+    // ── Companion: constants + delegation to SppFraming ─────────
 
     private companion object {
         const val WRITABLE_VALUE_LENGTH = 1024
         private const val ACK_TIMEOUT_MS = 1_200L
         private const val MAX_ACK_RETRIES = 1
-        private const val HEADER_SIZE = 6
-        private const val CHECKSUM_SIZE = 1
-        private const val FRAME_START: Byte = 0x3E
-        private const val FRAME_END: Byte = 0x3C
-        private const val ESCAPE: Byte = 0x3D
 
-        fun encodeFrame(type: SonySppFrameType, sequence: Byte, payload: ByteArray): ByteArray {
-            val body = ByteArray(HEADER_SIZE + payload.size + CHECKSUM_SIZE)
-            body[0] = type.code
-            body[1] = sequence
-            body[2] = ((payload.size ushr 24) and 0xFF).toByte()
-            body[3] = ((payload.size ushr 16) and 0xFF).toByte()
-            body[4] = ((payload.size ushr 8) and 0xFF).toByte()
-            body[5] = (payload.size and 0xFF).toByte()
-            payload.copyInto(body, HEADER_SIZE)
-            body[body.lastIndex] = checksum(body, body.size - CHECKSUM_SIZE).toByte()
-            return byteArrayOf(FRAME_START) + escape(body) + byteArrayOf(FRAME_END)
-        }
+        fun encodeFrame(type: SppFrameType, sequence: Byte, payload: ByteArray) =
+            SppFraming.encodeFrame(type, sequence, payload)
 
-        fun escape(bytes: ByteArray): ByteArray {
-            val escaped = ArrayList<Byte>(bytes.size)
-            bytes.forEach { byte ->
-                when (byte) {
-                    FRAME_END -> {
-                        escaped += ESCAPE
-                        escaped += 0x2C.toByte()
-                    }
-                    ESCAPE -> {
-                        escaped += ESCAPE
-                        escaped += 0x2D.toByte()
-                    }
-                    FRAME_START -> {
-                        escaped += ESCAPE
-                        escaped += 0x2E.toByte()
-                    }
-                    else -> escaped += byte
-                }
-            }
-            return escaped.toByteArray()
-        }
+        fun escape(bytes: ByteArray) = SppFraming.escape(bytes)
+        fun unescape(bytes: ByteArray) = SppFraming.unescape(bytes)
+        fun checksum(bytes: ByteArray, length: Int) = SppFraming.checksum(bytes, length)
+        fun inverseSequence(sequence: Byte) = SppFraming.inverseSequence(sequence)
 
-        fun unescape(bytes: ByteArray): ByteArray {
-            val unescaped = ArrayList<Byte>(bytes.size)
-            var index = 0
-            while (index < bytes.size) {
-                val byte = bytes[index]
-                if (byte == ESCAPE && index + 1 < bytes.size) {
-                    index++
-                    unescaped += (bytes[index].toInt() or 0x10).toByte()
-                } else {
-                    unescaped += byte
-                }
-                index++
-            }
-            return unescaped.toByteArray()
-        }
-
-        fun checksum(bytes: ByteArray, length: Int): Int =
-            (0 until length).fold(0) { acc, index -> (acc + bytes[index].u) and 0xFF }
-
-        fun inverseSequence(sequence: Byte): Byte = (1 - sequence).toByte()
+        val Byte.u: Int get() = toInt() and 0xFF
 
         fun ByteArray.int32be(offset: Int): Int =
             ((this[offset].u) shl 24) or
@@ -297,7 +286,53 @@ internal class SonySppTransport(
                 ((this[offset + 2].u) shl 8) or
                 this[offset + 3].u
 
-        val Byte.u: Int
-            get() = toInt() and 0xFF
+        const val HEADER_SIZE = SppFraming.HEADER_SIZE
+        const val CHECKSUM_SIZE = SppFraming.CHECKSUM_SIZE
+        const val FRAME_START: Byte = SppFraming.FRAME_START
+        const val FRAME_END: Byte = SppFraming.FRAME_END
+        const val ESCAPE: Byte = SppFraming.ESCAPE
     }
+}
+
+// ── SPP frame types ───────────────────────────────────────────
+
+/**
+ * SPP frame type on the wire.
+ *
+ * Each frame type has a one-byte code and a flag indicating whether the
+ * sender expects an ACK response.
+ */
+enum class SppFrameType(val code: Byte, val ackRequired: Boolean) {
+    DATA_MDR(0x0C, true),
+    DATA_MDR_NO2(0x0E, true),
+    ACK(0x01, false),
+    SHOT_MDR(0x1C, false),
+    SHOT_MDR_NO2(0x1E, false),
+    LARGE_DATA_MDR(0x2C, true),
+    UNKNOWN(0xFF.toByte(), true);
+
+    companion object {
+        fun fromByte(code: Byte): SppFrameType = entries.firstOrNull { it.code == code } ?: UNKNOWN
+    }
+}
+
+/**
+ * Internal pairing of frame type + payload queued for transmission.
+ */
+data class SppPayloadMapping(
+    val frameType: SppFrameType,
+    val payload: ByteArray,
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is SppPayloadMapping) return false
+        return frameType == other.frameType && payload.contentEquals(other.payload)
+    }
+
+    override fun hashCode(): Int = 31 * frameType.hashCode() + payload.contentHashCode()
+}
+
+interface SppPayloadMapper {
+    fun outbound(bytes: ByteArray): SppPayloadMapping
+    fun inbound(type: SppFrameType, payload: ByteArray): ByteArray?
 }

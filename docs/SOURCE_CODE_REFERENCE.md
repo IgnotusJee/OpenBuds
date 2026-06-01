@@ -144,24 +144,24 @@ Sony Tandem 的 BLE 客户端实现。包含设备发现（BLE 扫描 + Sony Aud
 | GATT 连接 | `gattCallback.onConnectionStateChange()` | 连接成功 → `discoverServices()`，断开 → 清理状态 |
 | 服务发现 | `gattCallback.onServicesDiscovered()` | 定位 Tandem V2 HPC/V2 MC/V1 MC 服务，注册 GATT 端点 |
 | 握手 | `beginTandemHandshake()` → `requestLargeMtu()` → `enableDetermineMtuNotifications()` → `readWritableValueLength()` → `enableTandemNotifications()` | 完整 GATT 握手流程：读 OPTIMAL_MTU → 请求 MTU → 启用 DETERMINE_MTU 通知 → 读 WRITABLE_VALUE_LENGTH → 禁用 MTU 通知 → 启用所有 Tandem fromAcc 通知 |
-| SPP 连接 | `connectSpp()` | 新建线程：创建 RFCOMM socket → 连接 → 创建 `SonySppTransport` → 启动读循环 |
+| SPP 连接 | `connectSpp()` | 新建线程：创建 RFCOMM socket → 连接 → 创建 `SppTransport` 并注入 `SonySppPayloadMapper` → 启动读循环 |
 | 写入队列 | `drainWriteQueue()` | 从 `ConcurrentLinkedQueue` 取出待发送帧，通过 GATT `writeCharacteristic` 发送，串行化写入避免并发冲突 |
 | Sony Audio AD 解析 | `parseSonyAudioV2Advertisement()` | 解析 V2 格式的 Sony Audio 制造商数据：分块类型 0x00（基本信息/型号 ID）、0x03（Tandem 传输线路）、0x05（经典蓝牙哈希） |
 
 ---
 
-### `ble/sony/SonySppTransport.kt`
+### `ble/transport/SppTransport.kt`
 
-**包**: `dev.ignotus.openbuds.ble.sony`
+**包**: `dev.ignotus.openbuds.ble.transport`
 
-Sony SPP (RFCOMM) 传输层实现。处理帧封装/拆包、转义、校验和、ACK 重试。
+SPP (RFCOMM) 传输层实现。处理帧封装/拆包、转义、校验和、ACK 重试。品牌协议到 SPP frame type 的映射通过 `SppPayloadMapper` 注入。
 
 | 类/函数 | 描述 |
 |---------|------|
-| `SonySppTransport(socket, onPayload, onClosed, log)` | 构造函数，接收 BluetoothSocket、payload 回调、关闭回调、日志函数 |
+| `SppTransport(socket, listener, payloadMapper)` | 构造函数，接收 BluetoothSocket、通用 transport listener、SPP payload mapper |
 | `start()` | 启动读线程 `readLoop()` |
-| `send(tandemBytes)` | 将 Tandem 字节通过 `SonySppPayloadMapper.outboundFromTandemBytes` 转为 SPP payload 并入队 |
-| `close()` | 关闭 input/output stream 和 socket，标记已关闭 |
+| `send(bytes)` | 将协议字节通过注入的 `SppPayloadMapper.outbound()` 转为 SPP payload 并入队 |
+| `close()` | 关闭 input/output stream 和 socket，标记已关闭。不触发 `onDisconnected`（调用方自行处理通知） |
 | `readLoop()` | 主读循环：按 `FRAME_START(0x3E)` / `FRAME_END(0x3C)` 分帧，调用 `handleFrame()` |
 | `handleFrame(escapedBody)` | 帧处理：unescape → 校验 checksum → 解析 header（type/sequence/length）→ 按帧类型分发：ACK 帧解锁等待、DATA 帧 ack 并回调 payload |
 | `drainWrites()` | 从写入队列取帧：编码 → 写入 output stream → 如果需要 ACK，调度超时重试 |
@@ -182,13 +182,24 @@ Sony SPP (RFCOMM) 传输层实现。处理帧封装/拆包、转义、校验和�
 | `MAX_ACK_RETRIES` | `1` | 最大 ACK 重试次数 |
 | `HEADER_SIZE` | `6` | 帧头长度（type + seq + length(4)） |
 
+### `ble/sony/SonySppPayloadMapper.kt`
+
+**包**: `dev.ignotus.openbuds.ble.sony`
+
+Sony Tandem over SPP 的 payload 映射策略。app 内部 data type 为 `DATA_MDR=0x0E` / `DATA_MDR_NO2=0x0F`，SPP frame type 为 `DATA_MDR=0x0C` / `DATA_MDR_NO2=0x0E`。
+
+| 类/函数 | 描述 |
+|---------|------|
+| `SonySppPayloadMapper.outboundFromTandemBytes(bytes)` | Tandem 字节 → SPP 出站映射：按第一字节类型剥离 app data type 前缀 |
+| `SonySppPayloadMapper.inboundToTandemBytes(type, payload)` | SPP 入站 → Tandem 字节映射：恢复 app data type 前缀（0x0E 或 0x0F） |
+
 ---
 
 ### `ble/sony/TandemTransportRouting.kt`
 
 **包**: `dev.ignotus.openbuds.ble.sony`
 
-GATT 端点路由和 SPP payload 映射。
+Sony GATT 端点路由。
 
 | 类/数据类 | 描述 |
 |-----------|------|
@@ -200,10 +211,6 @@ GATT 端点路由和 SPP payload 映射。
 | `notificationOrder(channels)` | 返回按优先级排序的通知启用顺序（HPC 先于 MC） |
 | `fromAccChannelFor(serviceUuid, characteristicUuid)` | 根据服务 UUID 和特征 UUID 反向查找通道类型 |
 | `fromAccChannel(endpoints, serviceUuid, characteristicUuid)` | 在已注册端点中查找匹配的通道 |
-| `SppPayloadMapping` | SPP payload 映射：帧类型 + payload 字节 |
-| `SonySppFrameType` | SPP 帧类型枚举：DATA_MDR(0x0C), DATA_MDR_NO2(0x0E), ACK(0x01), SHOT_MDR(0x1C), SHOT_MDR_NO2(0x1E), LARGE_DATA_MDR(0x2C)；含 `ackRequired` 属性 |
-| `SonySppPayloadMapper.outboundFromTandemBytes(bytes)` | Tandem 字节 → SPP 出站映射：按第一字节类型剥离 dataType 前缀 |
-| `SonySppPayloadMapper.inboundToTandemBytes(type, payload)` | SPP 入站 → Tandem 字节映射：恢复 dataType 前缀（0x0E 或 0x0F） |
 
 ---
 
@@ -211,23 +218,37 @@ GATT 端点路由和 SPP payload 映射。
 
 **包**: `dev.ignotus.openbuds.ble.qcy`
 
-QCY 耳机的 BLE GATT 客户端。使用串行化 GATT 操作队列，支持 CCCD 写入、特征读取、MTU 协商、写入操作。
+QCY 耳机的 BLE GATT 客户端。Android GATT 连接、CCCD 写入、特征读取、MTU 协商和写入队列委托给 `ble/transport/GattTransport.kt`；本类保留品牌匹配、UUID 到 `TandemChannel` 的分发和 repository 回调适配。
 
 | 类/函数 | 描述 |
 |---------|------|
 | `QcyBleClient(context, listener)` | 构造函数 |
 | `matches(device, reportedModelName)` | 匹配 QCY 设备：名称含 "qcy" 或广告含 QCY 服务 UUID |
 | `startScan(strictFilter)` | no-op：扫描由 Sony 客户端代理 |
-| `connect(device)` / `connect(mac, deviceName)` | 连接：`connectGatt(mac, TRANSPORT_LE)` |
-| `disconnect()` | 断开 GATT 连接，清理操作队列 |
+| `connect(device)` / `connect(mac, deviceName)` | 创建 `GattTransport` 并以 `TRANSPORT_LE` 连接 |
+| `disconnect()` | 关闭 `GattTransport` 并清理连接状态 |
 | `sendToChannel(channel, bytes)` | 发送字节到 QCY 命令特征 (0x1001)；所有 QCY 通道的写入都路由到此特征 |
 | `availableChannels()` | 返回 6 个 QCY 通道 |
 | `getEffectiveMtu()` | 返回协商后 MTU（减 3 字节 ATT 开销） |
-| `isConnected()` | 返回 GATT 连接和命令特征是否就绪 |
-| `gattCallback` | GATT 回调：连接/断开、服务发现（定位 0xA001 服务、入队 CCCD + 读操作 + MTU 请求）、特征读/写/通知处理 |
-| `GattOp` (sealed) | 串行化 GATT 操作：`EnableNotify`, `ReadChar`, `WriteChar` |
-| `pumpQueue()` | 从 FIFO 队列取操作执行，一次一个，前一个回调触发下一个 |
-| `maybeFireReady()` | 所有 CCCD 完成后 + MTU 协商完成（或超时回退）时触发 `onReady` |
+| `isConnected()` | 返回 `GattTransport` 是否 ready |
+| `createTransport()` | 配置 QCY service、write characteristic、notify/read characteristics、MTU 和 UUID 标签 |
+| `handleCharacteristicChanged(uuid, value)` | 将 QCY characteristic UUID 分发为 `TandemChannel` |
+
+### `ble/transport/GattTransport.kt`
+
+**包**: `dev.ignotus.openbuds.ble.transport`
+
+品牌无关的 BLE GATT 传输实现。负责 Android GATT 连接、服务发现、通知启用、初始读取、MTU 协商、ready deadline 和串行化 GATT 操作队列。
+
+| 类/函数 | 描述 |
+|---------|------|
+| `GattTransportConfig` | 配置 service UUID、write characteristic、notify/read characteristics、CCCD UUID、请求 MTU、Android transport 和日志标签 |
+| `GattTransportListener` | GATT 专用 listener（独立接口，不继承 TransportListener）：`onConnected()`, `onReady(info)`, `onMessage(uuid, bytes)`, `onDisconnected(reason)`, `onSetupFailed(msg)`, `onLog(msg)` |
+| `connect(device)` | 建立 Android GATT 连接；QCY 使用 `TRANSPORT_LE` |
+| `send(bytes)` | 写入配置的 write characteristic |
+| `close()` | 关闭 GATT 连接，不触发 `onDisconnected`。只有意外断连（IO 错误、远程断开）才触发 listener |
+| `pumpQueue()` | 串行执行 CCCD write、characteristic read、characteristic write |
+| `maybeFireReady()` | CCCD 和 MTU 完成后触发 `onReady`；deadline 到达时按当前状态继续 |
 
 ---
 
@@ -1051,7 +1072,7 @@ M1 临时目标匹配器。用 MAC allowlist 模拟未来 M3 bridge 的授权设
 │  ble/HeadphoneTransportSelector                         │
 │  ble/HeadphoneTransportClient (interface)                │
 │  ble/sony/SonyBleClient (GATT+SPP)                      │
-│  ble/sony/SonySppTransport                              │
+│  ble/transport/SppTransport / GattTransport              │
 │  ble/sony/TandemTransportRouting                        │
 │  ble/qcy/QcyBleClient (GATT only)                       │
 ├─────────────────────────────────────────────────────────┤

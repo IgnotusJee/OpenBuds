@@ -55,7 +55,7 @@ send Tandem commands
 
 ### SPP
 
-LinkBuds S 当前主要依赖 `SonySppTransport`。SPP 帧不是裸 Tandem payload，格式为：
+LinkBuds S 当前主要依赖 `SppTransport` + `SonySppPayloadMapper`。SPP 帧不是裸 Tandem payload，格式为：
 
 ```text
 0x3E

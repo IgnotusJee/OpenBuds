@@ -2,7 +2,6 @@ package dev.ignotus.openbuds.ble.sony
 
 import dev.ignotus.openbuds.headphones.TandemChannel
 import dev.ignotus.openbuds.protocol.sony.SonyGatt
-import dev.ignotus.openbuds.protocol.sony.SonyTandemConstants
 import java.util.UUID
 
 data class PendingTandemWrite(
@@ -95,57 +94,4 @@ object TandemGattRouting {
                 .filter { it.fromAcc.uuid == characteristicUuid }
                 .singleOrNull()
                 ?.channel
-}
-
-data class SppPayloadMapping(
-    val frameType: SonySppFrameType,
-    val payload: ByteArray,
-) {
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        if (other !is SppPayloadMapping) return false
-        return frameType == other.frameType && payload.contentEquals(other.payload)
-    }
-
-    override fun hashCode(): Int = 31 * frameType.hashCode() + payload.contentHashCode()
-}
-
-enum class SonySppFrameType(val code: Byte, val ackRequired: Boolean) {
-    DATA_MDR(0x0C, true),
-    DATA_MDR_NO2(0x0E, true),
-    ACK(0x01, false),
-    SHOT_MDR(0x1C, false),
-    SHOT_MDR_NO2(0x1E, false),
-    LARGE_DATA_MDR(0x2C, true),
-    UNKNOWN(0xFF.toByte(), true);
-
-    companion object {
-        fun fromByte(code: Byte): SonySppFrameType = entries.firstOrNull { it.code == code } ?: UNKNOWN
-    }
-}
-
-object SonySppPayloadMapper {
-    fun outboundFromTandemBytes(bytes: ByteArray): SppPayloadMapping {
-        if (bytes.isEmpty()) return SppPayloadMapping(SonySppFrameType.DATA_MDR, bytes)
-        return when (bytes[0]) {
-            SonyTandemConstants.DATA_MDR ->
-                SppPayloadMapping(SonySppFrameType.DATA_MDR, bytes.drop(1).toByteArray())
-            SonyTandemConstants.DATA_MDR_NO2 ->
-                SppPayloadMapping(SonySppFrameType.DATA_MDR_NO2, bytes.drop(1).toByteArray())
-            else -> SppPayloadMapping(SonySppFrameType.DATA_MDR, bytes)
-        }
-    }
-
-    fun inboundToTandemBytes(type: SonySppFrameType, payload: ByteArray): ByteArray? =
-        when (type) {
-            SonySppFrameType.DATA_MDR,
-            SonySppFrameType.SHOT_MDR,
-            SonySppFrameType.LARGE_DATA_MDR ->
-                byteArrayOf(SonyTandemConstants.DATA_MDR) + payload
-            SonySppFrameType.DATA_MDR_NO2,
-            SonySppFrameType.SHOT_MDR_NO2 ->
-                byteArrayOf(SonyTandemConstants.DATA_MDR_NO2) + payload
-            SonySppFrameType.ACK,
-            SonySppFrameType.UNKNOWN -> null
-        }
 }

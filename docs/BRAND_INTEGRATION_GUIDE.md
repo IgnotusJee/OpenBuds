@@ -56,7 +56,8 @@ object MyModelProfile {
 
 ## 2. Implement `HeadphoneTransportClient`
 
-Create a BLE transport client that implements `dev.ignotus.openbuds.ble.HeadphoneTransportClient`:
+Create a brand transport client that implements `dev.ignotus.openbuds.ble.HeadphoneTransportClient`.
+For standard BLE GATT protocols, prefer delegating Android GATT work to `dev.ignotus.openbuds.ble.transport.GattTransport` and keep the client focused on brand matching plus characteristic-to-channel routing:
 
 ```kotlin
 class MyBrandBleClient(context: Context, listener: SonyBleClientListener) : HeadphoneTransportClient {
@@ -71,6 +72,14 @@ class MyBrandBleClient(context: Context, listener: SonyBleClientListener) : Head
     override fun availableChannels(): Set<TandemChannel>
 }
 ```
+
+`GattTransport` handles:
+
+- `connectGatt`, service discovery, notification CCCD writes, initial characteristic reads, MTU request, and ready timeout.
+- A single serialized GATT operation queue for reads, CCCD writes, and command writes.
+- Raw bytes in/out. The brand client maps characteristic UUIDs to `TandemChannel` and forwards bytes to the repository listener.
+
+Use a custom transport only when the brand needs a special handshake or non-GATT framing. Sony Tandem GATT still has a custom state machine because OPTIMAL_MTU, DETERMINE_MTU, WRITABLE_VALUE_LENGTH, and multi-endpoint channel registration are Sony-specific.
 
 ## 3. Add protocol response types
 
@@ -134,6 +143,8 @@ private val adapters: List<HeadphoneAdapter> = listOf(
 | Component | File |
 |-----------|------|
 | Transport client | `ble/qcy/QcyBleClient.kt` |
+| Generic GATT transport | `ble/transport/GattTransport.kt` |
+| Generic SPP transport | `ble/transport/SppTransport.kt` |
 | Adapter | `headphones/qcy/QcyHeadphoneAdapter.kt` |
 | Profile template | `headphones/qcy/devices/QcyC30SProfile.kt` |
 | Response mapper | `data/qcy/QcyResponseMapper.kt` |

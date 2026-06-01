@@ -25,6 +25,8 @@ import androidx.core.content.ContextCompat
 import dev.ignotus.openbuds.ble.HeadphoneTransportClient
 import dev.ignotus.openbuds.ble.sony.SonyBleClientListener
 import dev.ignotus.openbuds.ble.sony.SonyBleConnectionInfo
+import dev.ignotus.openbuds.ble.transport.SppTransport
+import dev.ignotus.openbuds.ble.transport.TransportListener
 import dev.ignotus.openbuds.headphones.TandemChannel
 import dev.ignotus.openbuds.protocol.qcy.QcyGatt
 import dev.ignotus.openbuds.protocol.sony.SonyGatt
@@ -159,7 +161,7 @@ class SonyBleClient(
     private var handshakeStep: HandshakeStep = HandshakeStep.Idle
     private var determineMtuNotificationEnabled = false
     private var unsupportedProbe: UnsupportedEndpointProbe? = null
-    private var sppTransport: SonySppTransport? = null
+    private var sppTransport: SppTransport? = null
     private val writeQueue = ConcurrentLinkedQueue<PendingTandemWrite>()
     private val pendingNotifyEndpoints = ArrayDeque<GattTandemEndpoint>()
     @Volatile private var writing = false
@@ -570,19 +572,30 @@ class SonyBleClient(
                 )
                 val socket = createSppSocket(classicRemote)
                 socket.connect()
-                sppTransport = SonySppTransport(
+                val transport = SppTransport(
                     socket = socket,
-                    onPayload = { payload -> listener.onMessage(TandemChannel.SPP_MDR, payload) },
-                    onClosed = { reason ->
-                        log(reason ?: "SPP transport closed")
-                        sppTransport = null
-                        listener.onConnectionStateChanged(false, connectedDevice)
+                    listener = object : TransportListener {
+                        override fun onReady(info: dev.ignotus.openbuds.ble.transport.TransportInfo) {
+                            log("SPP connected")
+                            listener.onConnectionStateChanged(true, connectedDevice)
+                            listener.onReady(SonyBleConnectionInfo(mtu = info.mtu, transport = "SPP"))
+                        }
+                        override fun onMessage(bytes: ByteArray) {
+                            listener.onMessage(TandemChannel.SPP_MDR, bytes)
+                        }
+                        override fun onDisconnected(reason: String?) {
+                            log(reason ?: "SPP transport disconnected unexpectedly")
+                            sppTransport = null
+                            listener.onConnectionStateChanged(false, connectedDevice)
+                        }
+                        override fun onLog(message: String) {
+                            log(message)
+                        }
                     },
-                    log = ::log,
-                ).also { it.start() }
-                log("SPP connected")
-                listener.onConnectionStateChanged(true, connectedDevice)
-                listener.onReady(SonyBleConnectionInfo(mtu = SPP_WRITABLE_VALUE_LENGTH, transport = "SPP"))
+                    payloadMapper = SonySppPayloadMapper,
+                )
+                sppTransport = transport
+                transport.start()
             } catch (e: IOException) {
                 log("SPP connection failed: ${e.message}")
                 closeSpp(notify = true)
@@ -635,7 +648,14 @@ class SonyBleClient(
     private fun closeSpp(notify: Boolean) {
         val transport = sppTransport
         sppTransport = null
-        transport?.close()
+        if (transport == null) {
+            if (notify) {
+                listener.onConnectionStateChanged(false, connectedDevice)
+            }
+            return
+        }
+        transport.close()
+        // close() does not fire onDisconnected; caller handles notification.
         if (notify) {
             listener.onConnectionStateChanged(false, connectedDevice)
         }
@@ -1315,7 +1335,6 @@ class SonyBleClient(
         private const val SONY_CHUNK_BASIC_INFORMATION = 0x00
         private const val SONY_CHUNK_TANDEM_TRANSMITTING_LINE = 0x03
         private const val SONY_CHUNK_CLASSIC_BLUETOOTH_HASH = 0x05
-        private const val SPP_WRITABLE_VALUE_LENGTH = 1024
         private val MDR_SPP_MARKER_UUID: UUID =
             UUID.fromString("443cce33-e85d-4b85-8d53-6e319ede53ae")
         private val OFFICIAL_SPP_UUIDS = listOf(
