@@ -35,6 +35,9 @@ object QcyResponseMapper {
             left = response.leftLevel,
             right = response.rightLevel,
             cradle = response.caseLevel,
+            leftCharging = response.leftCharging,
+            rightCharging = response.rightCharging,
+            cradleCharging = response.caseCharging,
             raw = listOf(response.leftLevel, response.rightLevel, response.caseLevel),
         )
     )

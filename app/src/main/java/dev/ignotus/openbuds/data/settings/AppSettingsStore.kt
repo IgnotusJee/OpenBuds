@@ -14,6 +14,7 @@ data class AppSettings(
     val notificationPersistent: Boolean = true,
     val notificationLockscreen: Boolean = true,
     val connectionPopup: Boolean = false,
+    val milinkAdapterEnabled: Boolean = true,
 )
 
 class AppSettingsStore(private val context: Context) {
@@ -23,6 +24,7 @@ class AppSettingsStore(private val context: Context) {
             notificationPersistent = prefs[NotificationPersistentKey] ?: true,
             notificationLockscreen = prefs[NotificationLockscreenKey] ?: true,
             connectionPopup = prefs[ConnectionPopupKey] ?: false,
+            milinkAdapterEnabled = prefs[MilinkAdapterEnabledKey] ?: false,
         )
     }
 
@@ -50,10 +52,17 @@ class AppSettingsStore(private val context: Context) {
         }
     }
 
+    suspend fun setMilinkAdapterEnabled(enabled: Boolean) {
+        context.openbudsUiSettingsDataStore.edit { prefs ->
+            prefs[MilinkAdapterEnabledKey] = enabled
+        }
+    }
+
     private companion object {
         val ServiceBackgroundRunKey = booleanPreferencesKey("service_background_run")
         val NotificationPersistentKey = booleanPreferencesKey("notification_persistent")
         val NotificationLockscreenKey = booleanPreferencesKey("notification_lockscreen")
         val ConnectionPopupKey = booleanPreferencesKey("connection_popup")
+        val MilinkAdapterEnabledKey = booleanPreferencesKey("milink_adapter_enabled")
     }
 }

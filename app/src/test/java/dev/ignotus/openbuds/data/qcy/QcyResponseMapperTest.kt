@@ -14,12 +14,15 @@ class QcyResponseMapperTest {
     private val initial = HeadphoneUiState()
 
     @Test
-    fun applyBattery_setsAllLevelsExceptCharging() {
-        val r = ParsedHeadphoneResponse.Qcy.Battery(80, 90, 50, true, false, false, byteArrayOf())
+    fun applyBattery_setsAllLevelsAndChargingFlags() {
+        val r = ParsedHeadphoneResponse.Qcy.Battery(80, 90, 50, true, false, true, byteArrayOf())
         val s = QcyResponseMapper.applyBattery(initial, r)
         assertEquals(80, s.batteryState.left)
         assertEquals(90, s.batteryState.right)
         assertEquals(50, s.batteryState.cradle)
+        assertEquals(true, s.batteryState.leftCharging)
+        assertEquals(false, s.batteryState.rightCharging)
+        assertEquals(true, s.batteryState.cradleCharging)
     }
 
     @Test

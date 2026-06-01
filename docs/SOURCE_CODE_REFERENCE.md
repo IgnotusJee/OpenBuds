@@ -938,7 +938,7 @@ Android 前台 Service。持有 `HeadphoneRepository` 单例，提供 `LocalBind
 
 **包**: `dev.ignotus.openbuds.lsposed`
 
-LSPosed 模块入口。在 `com.milink.service` 进程中加载 MiLink 第一方适配主线。M0 已移除旧 MiTWS 身份伪装、卡片重定向和名称修复 hook；M1 接入 AirPods 识别链路验证 hook。
+LSPosed 模块入口。在 `com.milink.service` 进程中加载 MiLink 第一方适配主线。M0 已移除旧 MiTWS 身份伪装、卡片重定向和名称修复 hook；M1 接入 AirPods 识别链路验证 hook；M2 接入固定 AirPods 状态字段。
 
 | 函数 | 描述 |
 |------|------|
@@ -950,25 +950,49 @@ LSPosed 模块入口。在 `com.milink.service` 进程中加载 MiLink 第一方
 
 **包**: `dev.ignotus.openbuds.lsposed.milink`
 
-MiLink AirPods adapter 主线入口。M1 阶段安装只读识别验证 hook，不实现 `getAirPodsState` 或 `/airpodsstate` 状态代理。
+MiLink AirPods adapter 主线入口。M1/M2 阶段安装 AirPods 识别链路 hook、固定 `getAirPodsState` 状态数组和 `/airpodsstate` Bundle 代理。
 
 | 函数 | 描述 |
 |------|------|
-| `install()` | 创建 `MilinkAirpodsM1Hook` 并安装 AirPods 识别链路验证 hook |
+| `install()` | 创建 `MilinkAirpodsM1Hook` 并安装 AirPods 识别链路与固定状态 hook |
 
 ### `milink/MilinkAirpodsM1Hook.kt`
 
 **包**: `dev.ignotus.openbuds.lsposed.milink`
 
-M1 可行性验证 hook。只影响 `com.milink.service` 进程内米链客户端方法，不启动 OpenBuds 协议栈，不 hook `isMiHeadset` / `checkIsMiTWS`。
+M1/M2 可行性验证 hook。只影响 `com.milink.service` 进程内米链客户端方法，不启动 OpenBuds 协议栈，不 hook `isMiHeadset` / `checkIsMiTWS`。
 
 | 函数 | 描述 |
 |------|------|
-| `install()` | 安装 `MxBluetoothManager` 主 hook 和 `BluetoothServiceClient` 兜底/trace hook |
-| `hookMxBluetoothManager()` | hook `checkIsAirPods(String)`：真实 AirPods 原结果透传；M1 allowlist MAC 覆盖为 true |
+| `install()` | 安装 `MxBluetoothManager` 主 hook、`BluetoothServiceClient` 兜底/trace hook 和 ContentResolver 状态 hook |
+| `hookMxBluetoothManager()` | hook `checkIsAirPods(String)` 和 `getAirPodsState(String)`：真实 AirPods 原结果透传；allowlist MAC 在 intercept 模式下返回固定 9 元素状态 |
 | `hookBluetoothServiceIsAirPods()` | hook `BluetoothServiceClient.isAirPods(BluetoothDevice)`，在 AirPods manager 不可用时按同一 allowlist 兜底 |
 | `hookAirpodsDeviceIdTrace()` | 仅记录 `getAirpodsDeviceId` / `getDeviceIdForAirpods` 调用，不伪造 state |
 | `hookAirpodsHeadsetTypeTrace()` | 仅记录 `getAirpodsHeadsetType(String)` 调用和返回值 |
+
+### `milink/AirpodsStateMapper.kt`
+
+**包**: `dev.ignotus.openbuds.lsposed.milink`
+
+M2 固定状态映射器。M3 接入 bridge 后继续复用该类，将真实 snapshot 转换为 MiLink 需要的两种 AirPods 数据形状。
+
+| 函数/类型 | 描述 |
+|-----------|------|
+| `placeholder(mac)` | 构造 M2 固定状态：左 75、右 80、盒 90、佩戴 true、充电 false、deviceId=`01010101` |
+| `toStateArray(snapshot)` | 输出 `MxBluetoothManager.getAirPodsState(String)` 需要的 9 元素 `String[]` |
+| `toBundleFields(snapshot)` | 输出 `/airpodsstate` Bundle 的 11 个 string 字段 |
+
+### `milink/DeviceIdRegistry.kt`
+
+**包**: `dev.ignotus.openbuds.lsposed.milink`
+
+M2 deviceId 模板注册表。默认使用 `01010101`，在米链 `AbstractC14649a.m51162b()` 中解析为 type=0 普通耳塞，避免真实 AirPods type=5/6 分支。
+
+| 函数/常量 | 描述 |
+|-----------|------|
+| `GENERIC_EARBUD_DEVICE_ID` | `01010101`，M2 默认普通耳塞模板 |
+| `OPEN_WEAR_DEVICE_ID` | `01013400`，预留开放式耳机模板，预期 type=4 |
+| `deviceIdForMac(mac)` | 当前返回普通耳塞模板；M7 多品牌时可按品牌/MAC 选择 |
 
 ### `milink/MilinkAirpodsTargetMatcher.kt`
 
@@ -1033,6 +1057,6 @@ M1 临时目标匹配器。用 MAC allowlist 模拟未来 M3 bridge 的授权设
 ├─────────────────────────────────────────────────────────┤
 │              LSPosed (Optional)                          │
 │  ModuleMain -> milink/MilinkAirpodsAdapterEntry          │
-│  M1: AirPods classification hook + MAC allowlist         │
+│  M1/M2: AirPods classification + fixed state hooks       │
 └─────────────────────────────────────────────────────────┘
 ```

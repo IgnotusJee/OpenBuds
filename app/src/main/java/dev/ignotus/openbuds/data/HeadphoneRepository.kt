@@ -78,6 +78,10 @@ data class BatteryState(
     val left: Int? = null,
     val right: Int? = null,
     val cradle: Int? = null,
+    val singleCharging: Boolean? = null,
+    val leftCharging: Boolean? = null,
+    val rightCharging: Boolean? = null,
+    val cradleCharging: Boolean? = null,
     val raw: List<Int> = emptyList(),
 )
 
@@ -119,6 +123,8 @@ data class QuickAccessState(
 data class WearingState(
     val status: String? = null,
     val result: String? = null,
+    val leftWearing: Boolean? = null,
+    val rightWearing: Boolean? = null,
     val raw: List<Int> = emptyList(),
 )
 

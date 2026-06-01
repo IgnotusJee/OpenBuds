@@ -1,7 +1,9 @@
 package dev.ignotus.openbuds.lsposed.milink
 
+import dev.ignotus.openbuds.integration.milink.MilinkDeviceSnapshot
+
 /**
- * Converts OpenBuds/M2 placeholder state into MiLink's AirPods state formats.
+ * Converts OpenBuds bridge snapshots into MiLink's AirPods state formats.
  *
  * MiLink consumes two related but not identical shapes:
  * - `MxBluetoothManager.getAirPodsState(mac)` returns a 9-element `String[]`.
@@ -10,21 +12,25 @@ package dev.ignotus.openbuds.lsposed.milink
  */
 object AirpodsStateMapper {
     const val CONNECTED_STATE = "2"
+    const val DISCONNECTED_STATE = "0"
 
-    fun placeholder(mac: String?): AirpodsStateSnapshot =
-        AirpodsStateSnapshot(
-            mac = MilinkAirpodsTargetMatcher.normalizeMac(mac) ?: mac.orEmpty(),
-            deviceId = DeviceIdRegistry.deviceIdForMac(mac),
-            isLeftWearing = "true",
-            leftBattery = "75",
-            isRightWearing = "true",
-            rightBattery = "80",
-            boxBattery = "90",
-            isLeftCharging = "false",
-            isRightCharging = "false",
-            isBoxCharging = "false",
-            connectState = CONNECTED_STATE,
+    fun fromMilinkSnapshot(snapshot: MilinkDeviceSnapshot): AirpodsStateSnapshot {
+        val leftBattery = snapshot.leftBattery ?: snapshot.singleBattery
+        val rightBattery = snapshot.rightBattery ?: snapshot.singleBattery
+        return AirpodsStateSnapshot(
+            mac = MilinkAirpodsTargetMatcher.normalizeMac(snapshot.mac) ?: snapshot.mac,
+            deviceId = snapshot.deviceId.ifBlank { DeviceIdRegistry.deviceIdForMac(snapshot.mac) },
+            isLeftWearing = snapshot.leftWearing.toMilinkOptionalBoolean(),
+            leftBattery = leftBattery.toMilinkBattery(),
+            isRightWearing = snapshot.rightWearing.toMilinkOptionalBoolean(),
+            rightBattery = rightBattery.toMilinkBattery(),
+            boxBattery = snapshot.caseBattery.toMilinkBattery(),
+            isLeftCharging = snapshot.leftCharging.toMilinkChargingBoolean(),
+            isRightCharging = snapshot.rightCharging.toMilinkChargingBoolean(),
+            isBoxCharging = snapshot.caseCharging.toMilinkChargingBoolean(),
+            connectState = if (snapshot.connected) CONNECTED_STATE else DISCONNECTED_STATE,
         )
+    }
 
     fun toStateArray(snapshot: AirpodsStateSnapshot): Array<String> =
         arrayOf(
@@ -53,6 +59,15 @@ object AirpodsStateMapper {
             "isBoxCharging" to snapshot.isBoxCharging,
             "modelName" to snapshot.deviceId,
         )
+
+    private fun Int?.toMilinkBattery(): String =
+        this?.coerceIn(0, 100)?.toString() ?: "-"
+
+    private fun Boolean?.toMilinkOptionalBoolean(): String =
+        this?.toString() ?: "-"
+
+    private fun Boolean?.toMilinkChargingBoolean(): String =
+        this?.toString() ?: "false"
 }
 
 data class AirpodsStateSnapshot(

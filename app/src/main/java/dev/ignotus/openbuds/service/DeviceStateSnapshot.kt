@@ -12,6 +12,12 @@ data class DeviceStateSnapshot(
     val batteryLeft: Int?,
     val batteryRight: Int?,
     val batteryCradle: Int?,
+    val batterySingleCharging: Boolean?,
+    val batteryLeftCharging: Boolean?,
+    val batteryRightCharging: Boolean?,
+    val batteryCradleCharging: Boolean?,
+    val leftWearing: Boolean?,
+    val rightWearing: Boolean?,
     val noiseControlMode: NoiseControlMode?,
     val noiseCancellingEnabled: Boolean?,
     val ambientSoundEnabled: Boolean?,
@@ -30,6 +36,12 @@ data class DeviceStateSnapshot(
         batteryLeft?.let { putInt(KEY_BATTERY_LEFT, it) }
         batteryRight?.let { putInt(KEY_BATTERY_RIGHT, it) }
         batteryCradle?.let { putInt(KEY_BATTERY_CRADLE, it) }
+        batterySingleCharging?.let { putBoolean(KEY_BATTERY_SINGLE_CHARGING, it) }
+        batteryLeftCharging?.let { putBoolean(KEY_BATTERY_LEFT_CHARGING, it) }
+        batteryRightCharging?.let { putBoolean(KEY_BATTERY_RIGHT_CHARGING, it) }
+        batteryCradleCharging?.let { putBoolean(KEY_BATTERY_CRADLE_CHARGING, it) }
+        leftWearing?.let { putBoolean(KEY_LEFT_WEARING, it) }
+        rightWearing?.let { putBoolean(KEY_RIGHT_WEARING, it) }
         noiseControlMode?.let { putString(KEY_NC_MODE, it.name) }
         noiseCancellingEnabled?.let { putBoolean(KEY_NC_ENABLED, it) }
         ambientSoundEnabled?.let { putBoolean(KEY_ASM_ENABLED, it) }
@@ -49,6 +61,12 @@ data class DeviceStateSnapshot(
         private const val KEY_BATTERY_LEFT = "battery_left"
         private const val KEY_BATTERY_RIGHT = "battery_right"
         private const val KEY_BATTERY_CRADLE = "battery_cradle"
+        private const val KEY_BATTERY_SINGLE_CHARGING = "battery_single_charging"
+        private const val KEY_BATTERY_LEFT_CHARGING = "battery_left_charging"
+        private const val KEY_BATTERY_RIGHT_CHARGING = "battery_right_charging"
+        private const val KEY_BATTERY_CRADLE_CHARGING = "battery_cradle_charging"
+        private const val KEY_LEFT_WEARING = "left_wearing"
+        private const val KEY_RIGHT_WEARING = "right_wearing"
         private const val KEY_NC_MODE = "nc_mode"
         private const val KEY_NC_ENABLED = "nc_enabled"
         private const val KEY_ASM_ENABLED = "asm_enabled"
@@ -63,6 +81,9 @@ data class DeviceStateSnapshot(
         val EMPTY = DeviceStateSnapshot(
             deviceName = null, deviceMac = null,
             batterySingle = null, batteryLeft = null, batteryRight = null, batteryCradle = null,
+            batterySingleCharging = null, batteryLeftCharging = null,
+            batteryRightCharging = null, batteryCradleCharging = null,
+            leftWearing = null, rightWearing = null,
             noiseControlMode = null, noiseCancellingEnabled = null, ambientSoundEnabled = null,
             ambientLevel = null, ambientVoiceMode = false,
             eqPresetName = null, eqClearBass = null,
@@ -77,6 +98,12 @@ data class DeviceStateSnapshot(
             batteryLeft = if (bundle.containsKey(KEY_BATTERY_LEFT)) bundle.getInt(KEY_BATTERY_LEFT) else null,
             batteryRight = if (bundle.containsKey(KEY_BATTERY_RIGHT)) bundle.getInt(KEY_BATTERY_RIGHT) else null,
             batteryCradle = if (bundle.containsKey(KEY_BATTERY_CRADLE)) bundle.getInt(KEY_BATTERY_CRADLE) else null,
+            batterySingleCharging = if (bundle.containsKey(KEY_BATTERY_SINGLE_CHARGING)) bundle.getBoolean(KEY_BATTERY_SINGLE_CHARGING) else null,
+            batteryLeftCharging = if (bundle.containsKey(KEY_BATTERY_LEFT_CHARGING)) bundle.getBoolean(KEY_BATTERY_LEFT_CHARGING) else null,
+            batteryRightCharging = if (bundle.containsKey(KEY_BATTERY_RIGHT_CHARGING)) bundle.getBoolean(KEY_BATTERY_RIGHT_CHARGING) else null,
+            batteryCradleCharging = if (bundle.containsKey(KEY_BATTERY_CRADLE_CHARGING)) bundle.getBoolean(KEY_BATTERY_CRADLE_CHARGING) else null,
+            leftWearing = if (bundle.containsKey(KEY_LEFT_WEARING)) bundle.getBoolean(KEY_LEFT_WEARING) else null,
+            rightWearing = if (bundle.containsKey(KEY_RIGHT_WEARING)) bundle.getBoolean(KEY_RIGHT_WEARING) else null,
             noiseControlMode = bundle.getString(KEY_NC_MODE)?.let { runCatching { NoiseControlMode.valueOf(it) }.getOrNull() },
             noiseCancellingEnabled = if (bundle.containsKey(KEY_NC_ENABLED)) bundle.getBoolean(KEY_NC_ENABLED) else null,
             ambientSoundEnabled = if (bundle.containsKey(KEY_ASM_ENABLED)) bundle.getBoolean(KEY_ASM_ENABLED) else null,
@@ -96,6 +123,12 @@ data class DeviceStateSnapshot(
             batteryLeft = state.batteryState.left,
             batteryRight = state.batteryState.right,
             batteryCradle = state.batteryState.cradle,
+            batterySingleCharging = state.batteryState.singleCharging,
+            batteryLeftCharging = state.batteryState.leftCharging,
+            batteryRightCharging = state.batteryState.rightCharging,
+            batteryCradleCharging = state.batteryState.cradleCharging,
+            leftWearing = state.wearingState.leftWearing,
+            rightWearing = state.wearingState.rightWearing,
             noiseControlMode = state.noiseControlState.controlMode,
             noiseCancellingEnabled = state.noiseControlState.noiseCancellingEnabled,
             ambientSoundEnabled = state.noiseControlState.ambientSoundEnabled,

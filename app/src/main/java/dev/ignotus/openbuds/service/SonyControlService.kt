@@ -5,15 +5,20 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothDevice
 import android.content.Intent
 import android.os.Binder
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.util.Log
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import dev.ignotus.openbuds.MainActivity
 import dev.ignotus.openbuds.data.HeadphoneRepository
+import dev.ignotus.openbuds.lsposed.milink.MilinkAirpodsTargetMatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -26,6 +31,7 @@ class SonyControlService : Service() {
     private val binder = LocalBinder()
     private val stateLiveData = MutableLiveData(DeviceStateSnapshot.EMPTY)
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    private val handler = Handler(Looper.getMainLooper())
 
     inner class LocalBinder : Binder() {
         val state: LiveData<DeviceStateSnapshot> get() = stateLiveData
@@ -83,8 +89,61 @@ class SonyControlService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_DISCONNECT -> repository.disconnect()
+            ACTION_AUTO_CONNECT -> autoConnect()
         }
         return START_STICKY
+    }
+
+    /**
+     * Scans bonded Bluetooth devices and auto-connects to the first
+     * known-profile headphone (Sony BLE, QCY, etc.) that is currently
+     * connected at the ACL level.
+     *
+     * Called when [MilinkBridgeService] starts (triggered by milink binding)
+     * so that real protocol data is available before milink queries.
+     */
+    private fun autoConnect() {
+        if (repository.state.value.connectedDevice != null) return
+        try {
+            val adapter = BluetoothAdapter.getDefaultAdapter() ?: return
+            @Suppress("DEPRECATION")
+            val bonded = try {
+                adapter.bondedDevices
+            } catch (_: SecurityException) {
+                return
+            }
+
+            val target = bonded.firstOrNull { device ->
+                isKnownHeadphone(device.name ?: "")
+            } ?: return
+
+            Log.i(TAG, "Auto-connecting via BLE scan to: ${target.name} (${target.address})")
+            // Do a brief BLE scan to get proper SonyAd discovery data, then auto-connect.
+            // Direct connect(address, name) without scan data picks wrong SPP UUIDs for
+            // some devices; scanning first provides the full advertisement data that
+            // SonyBleClient needs for correct SPP path selection.
+            repository.startScan()
+            handler.postDelayed({
+                repository.stopScan()
+                if (repository.state.value.connectedDevice == null
+                    && repository.state.value.discoveredDevices.isNotEmpty()
+                ) {
+                    val discovered = repository.state.value.discoveredDevices
+                        .firstOrNull { d -> MilinkAirpodsTargetMatcher.normalizeMac(d.address) != null }
+                    if (discovered != null) {
+                        Log.i(TAG, "Auto-connecting discovered: ${discovered.name} (${discovered.address})")
+                        repository.connect(discovered)
+                    }
+                }
+            }, AUTO_CONNECT_SCAN_MS)
+        } catch (e: Exception) {
+            Log.w(TAG, "Auto-connect failed", e)
+        }
+    }
+
+    private fun isKnownHeadphone(name: String): Boolean {
+        val n = name.lowercase()
+        return KNOWN_PATTERNS.any { n.contains(it) }
     }
 
     override fun onDestroy() {
@@ -157,6 +216,14 @@ class SonyControlService : Service() {
         private const val CHANNEL_ID = "sony_control_service"
         private const val NOTIFICATION_ID = 2001
         const val ACTION_DISCONNECT = "dev.ignotus.openbuds.action.DISCONNECT"
+        const val ACTION_AUTO_CONNECT = "dev.ignotus.openbuds.action.AUTO_CONNECT"
+
+        /** Known headphone name patterns that OpenBuds has transport support for. */
+        private val KNOWN_PATTERNS = setOf(
+            "linkbuds", "wh-", "wf-", "wi-", "mdr-",  // Sony BLE/Tandem
+            "qcy",                                         // QCY BLE
+        )
+        private const val AUTO_CONNECT_SCAN_MS = 4_000L
 
         @Volatile
         var currentDeviceMac: String? = null

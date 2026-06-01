@@ -18,6 +18,7 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -27,8 +28,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import dev.ignotus.openbuds.data.HeadphoneRepository
 import dev.ignotus.openbuds.data.HeadphoneUiState
-import dev.ignotus.openbuds.service.ControlCommand
-import dev.ignotus.openbuds.service.DeviceStateSnapshot
+import dev.ignotus.openbuds.data.settings.AppSettingsStore
 import dev.ignotus.openbuds.service.SonyControlService
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -36,8 +36,10 @@ import kotlinx.coroutines.launch
 class MainActivity : ComponentActivity() {
 
     private lateinit var repository: HeadphoneRepository
+    private lateinit var settingsStore: AppSettingsStore
     private var serviceBinder: SonyControlService.LocalBinder? = null
     private var bound = false
+    private var milinkAdapterEnabled = false
     private val handler = Handler(Looper.getMainLooper())
 
     // UI elements
@@ -45,6 +47,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var scanStateText: TextView
     private lateinit var scanBtn: Button
     private lateinit var disconnectBtn: Button
+    private lateinit var milinkAdapterCheck: CheckBox
+    private lateinit var milinkStatusText: TextView
     private lateinit var deviceListContainer: LinearLayout
 
     private val connection = object : ServiceConnection {
@@ -63,6 +67,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         repository = HeadphoneRepository.getInstance(applicationContext)
+        settingsStore = AppSettingsStore(applicationContext)
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -101,6 +106,24 @@ class MainActivity : ComponentActivity() {
             visibility = View.GONE
             setOnClickListener { repository.disconnect() }
         }
+        milinkAdapterCheck = CheckBox(this).apply {
+            text = "MiLink adapter"
+            textSize = 12f
+            setTextColor(Color.parseColor("#CCCCCC"))
+            setPadding(8, 4, 8, 4)
+            setOnCheckedChangeListener { _, checked ->
+                lifecycleScope.launch {
+                    settingsStore.setMilinkAdapterEnabled(checked)
+                }
+            }
+        }
+        milinkStatusText = TextView(this).apply {
+            textSize = 11f
+            setTextColor(Color.parseColor("#888888"))
+            setPadding(12, 0, 8, 4)
+            text = ""
+            visibility = View.GONE
+        }
         buttonRow.addView(scanBtn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = 8 })
         buttonRow.addView(disconnectBtn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = 8 })
 
@@ -125,6 +148,8 @@ class MainActivity : ComponentActivity() {
                 addView(statusText)
                 addView(scanStateText)
                 addView(buttonRow)
+                addView(milinkAdapterCheck)
+                addView(milinkStatusText)
                 addView(deviceHeader)
                 addView(deviceListContainer)
             }
@@ -143,6 +168,17 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             repository.state.collectLatest { state ->
                 updateUi(state)
+                updateMilinkStatus(milinkAdapterEnabled, state)
+            }
+        }
+
+        lifecycleScope.launch {
+            settingsStore.settings.collectLatest { settings ->
+                if (milinkAdapterCheck.isChecked != settings.milinkAdapterEnabled) {
+                    milinkAdapterCheck.isChecked = settings.milinkAdapterEnabled
+                }
+                milinkAdapterEnabled = settings.milinkAdapterEnabled
+                updateMilinkStatus(settings.milinkAdapterEnabled, repository.state.value)
             }
         }
 
@@ -292,6 +328,38 @@ class MainActivity : ComponentActivity() {
         if (!action.isNullOrBlank() && repository.state.value.deviceInfo.protocolReady) {
             repository.runDebugAction(action, intent.getStringExtra(EXTRA_DEBUG_RAW_HEX))
         }
+    }
+
+    private fun updateMilinkStatus(enabled: Boolean, state: HeadphoneUiState) {
+        if (!enabled) {
+            milinkStatusText.visibility = View.GONE
+            return
+        }
+        milinkStatusText.visibility = View.VISIBLE
+        val dev = state.connectedDevice
+        val mac = dev?.address
+        val lines = buildList {
+            if (mac != null) {
+                add("Device: ${state.connectedDevice?.name ?: mac}")
+                add("MAC: $mac")
+                add("Protocol: ${if (state.deviceInfo.protocolReady) "Ready" else "Initializing"}")
+                val battery = state.batteryState
+                val batParts = buildList {
+                    battery.left?.let { add("L:${it}%") }
+                    battery.right?.let { add("R:${it}%") }
+                    battery.cradle?.let { add("C:${it}%") }
+                }
+                if (batParts.isNotEmpty()) add("Battery: ${batParts.joinToString(" ")}")
+                val wearParts = buildList {
+                    state.wearingState.leftWearing?.let { add("L:wear=${it}") }
+                    state.wearingState.rightWearing?.let { add("R:wear=${it}") }
+                }
+                if (wearParts.isNotEmpty()) add("Wearing: ${wearParts.joinToString(" ")}")
+            } else {
+                add("Bridge: waiting for device...")
+            }
+        }
+        milinkStatusText.text = lines.joinToString("\n")
     }
 
     override fun onDestroy() {

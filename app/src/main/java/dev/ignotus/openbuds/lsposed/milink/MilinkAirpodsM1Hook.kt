@@ -10,52 +10,16 @@ import io.github.libxposed.api.XposedInterface
 import java.lang.reflect.Method
 
 /**
- * M1/M2 AirPods adapter hooks for `com.milink.service`.
+ * MiLink AirPods-path hooks for `com.milink.service`.
  *
- * ## Hooks installed
- *
- * | Hook target | Type | Effect |
- * |------------|------|--------|
- * | `MxBluetoothManager.checkIsAirPods(String)` | Intercept | Returns `true` for allowlisted MACs |
- * | `MxBluetoothManager.getAirPodsState(String)` | Intercept | Returns a 9-element fixed state array for allowlisted MACs |
- * | `BluetoothServiceClient.isAirPods(BluetoothDevice)` | Intercept | Fallback if MxBluetoothManager signature changes |
- * | `BluetoothServiceClient.getAirpodsDeviceId(...)` | Trace | Logs deviceId resolution (no modification) |
- * | `BluetoothServiceClient.getAirpodsHeadsetType(...)` | Trace | Logs headset type mapping (no modification) |
- * | `ContentResolver.call(getAirpodsState, mac)` | Intercept | Returns fake 11-field Bundle so the HEADSET card renders |
- *
- * ## Safety
- *
- * - All hooks use `ExceptionMode.PROTECTIVE` — any hook exception falls through
- *   to the original method, preventing milink crashes.
- * - Original results of `true` (genuine AirPods) are always transparently preserved
- *   via [MilinkAirpodsTargetMatcher.airpodsDecision].
- * - The ContentResolver hook only intercepts the specific URI/method/MAC combination;
- *   all other ContentResolver calls are passed through unchanged.
- *
- * ## ContentResolver hook rationale
- *
- * When `checkIsAirPods` returns `true`, milink classifies the device as `HEADSET`
- * and expects state data via:
- * ```
- * ContentResolver.call(
- *     content://com.android.bluetooth.ble.app.headsetdata.provider/airpodsstate,
- *     "getAirpodsState",
- *     "XX:XX:XX:XX:XX:XX",
- *     null
- * )
- * ```
- *
- * Without this data, the HEADSET rendering path fails silently and the device
- * card disappears from the control center. This hook supplies a minimal 11-field
- * Bundle so the card renders with placeholder values until real state (M3) is
- * provided by the App bridge.
- *
- * @see MilinkAirpodsAdapterEntry
- * @see MilinkAirpodsTargetMatcher
- * @see docs/plan/MILINK_FIRST_PARTY_ADAPTER_PLAN.md
+ * The hooks preserve genuine AirPods results and only synthesize OpenBuds
+ * responses when the app-side bridge has an authorized, connected snapshot in
+ * memory. With no bridge snapshot, every hook falls through to MiLink's original
+ * behavior.
  */
 class MilinkAirpodsM1Hook(
     private val classLoader: ClassLoader,
+    private val bridgeClient: MilinkBridgeClientFacade,
 ) {
     /**
      * Installs all hooks. Called once per milink sub-process load.
@@ -68,23 +32,6 @@ class MilinkAirpodsM1Hook(
 
     // ── MxBluetoothManager hooks ────────────────────────────────────────
 
-    /**
-     * Hooks `MxBluetoothManager.checkIsAirPods(String mac): boolean` and
-     * `MxBluetoothManager.getAirPodsState(String mac): String[]`.
-     *
-     * This is the primary entry point for AirPods classification. Milink calls
-     * this to determine if a MAC belongs to an AirPods device.
-     *
-     * ## Operating modes
-     *
-     * | `debug.openbuds.milink_m1_intercept` | Behavior |
-     * |---|---|
-     * | `"false"` or unset (default) | **Trace-only**: logs the decision that *would* be made, returns original result. Safe — card rendering unaffected. |
-     * | `"true"` | **Intercept**: applies [MilinkAirpodsTargetMatcher.airpodsDecision] and returns the overridden result. Requires ContentProvider data hooks (from M2) to render. |
-     *
-     * When trace-only (default), genuine AirPods still pass through unchanged
-     * (their original result is already `true`).
-     */
     private fun hookMxBluetoothManager() {
         val clazz = loadClass(MX_BLUETOOTH_MANAGER) ?: return
         hookMxBluetoothManagerCheckIsAirPods(clazz)
@@ -104,16 +51,11 @@ class MilinkAirpodsM1Hook(
                 override fun intercept(chain: XposedInterface.Chain): Any? {
                     val mac = chain.args.getOrNull(0) as? String
                     val original = chain.proceed() as? Boolean ?: false
-                    val macListValue = readDebugMacProperty()
-                    val target = MilinkAirpodsTargetMatcher.isTargetMac(mac, macListValue)
-                    val overridden = MilinkAirpodsTargetMatcher.airpodsDecision(
-                        original, mac, macListValue
-                    )
-                    val mode = if (shouldIntercept()) "INTERCEPT" else "TRACE"
-                    val result = if (shouldIntercept()) overridden else original
+                    val target = bridgeClient.isAuthorized(mac)
+                    val result = original || target
                     log(
-                        "[$mode] MxBluetoothManager.checkIsAirPods mac=${safeMac(mac)} " +
-                            "original=$original target=$target overridden=$overridden result=$result"
+                        "[BRIDGE] MxBluetoothManager.checkIsAirPods mac=${safeMac(mac)} " +
+                            "original=$original target=$target result=$result"
                     )
                     return result
                 }
@@ -125,9 +67,9 @@ class MilinkAirpodsM1Hook(
      * Hooks `MxBluetoothManager.getAirPodsState(String mac): String[]`.
      *
      * This is the read path used by `BluetoothServiceClient.getAirpodsDeviceId`
-     * and `AncBatteryController.getAirpodsStatus`. M2 supplies fixed state for
-     * allowlisted MACs only when the original method did not already return a
-     * valid 9-element AirPods state, preserving genuine AirPods behavior.
+     * and `AncBatteryController.getAirpodsStatus`. Bridge snapshots are used
+     * only when the original method did not already return a valid 9-element
+     * AirPods state, preserving genuine AirPods behavior.
      */
     private fun hookMxBluetoothManagerGetAirPodsState(clazz: Class<*>) {
         val method = findMethod(clazz, "getAirPodsState", String::class.java)
@@ -142,19 +84,16 @@ class MilinkAirpodsM1Hook(
                 override fun intercept(chain: XposedInterface.Chain): Any? {
                     val mac = chain.args.getOrNull(0) as? String
                     val original = chain.proceed()
-                    val macListValue = readDebugMacProperty()
-                    val target = MilinkAirpodsTargetMatcher.isTargetMac(mac, macListValue)
-                    val intercept = shouldIntercept()
                     val originalValid = isValidAirpodsStateArray(original)
-                    val result = if (intercept && target && !originalValid) {
-                        AirpodsStateMapper.toStateArray(AirpodsStateMapper.placeholder(mac))
-                    } else {
-                        original
+                    val snapshot = bridgeClient.snapshotFor(mac)
+                    val result = when {
+                        originalValid -> original
+                        snapshot != null -> AirpodsStateMapper.toStateArray(AirpodsStateMapper.fromMilinkSnapshot(snapshot))
+                        else -> original
                     }
-                    val mode = if (intercept) "INTERCEPT" else "TRACE"
                     log(
-                        "[$mode] MxBluetoothManager.getAirPodsState mac=${safeMac(mac)} " +
-                            "target=$target originalValid=$originalValid result=${stateArraySummary(result)}"
+                        "[BRIDGE] MxBluetoothManager.getAirPodsState mac=${safeMac(mac)} " +
+                            "snapshot=${snapshot != null} originalValid=$originalValid result=${stateArraySummary(result)}"
                     )
                     return result
                 }
@@ -180,8 +119,7 @@ class MilinkAirpodsM1Hook(
      * Fallback hook for `BluetoothServiceClient.isAirPods(BluetoothDevice): boolean`.
      *
      * Guards against [MxBluetoothManager] signature changes between HyperOS
-     * versions. Uses the same trace/intercept gating and
-     * [MilinkAirpodsTargetMatcher.airpodsDecision] logic as the primary hook.
+     * versions. Uses the same bridge-cache gating as the primary hook.
      */
     private fun hookBluetoothServiceIsAirPods(clazz: Class<*>) {
         val method = findMethod(clazz, "isAirPods", BluetoothDevice::class.java)
@@ -197,16 +135,11 @@ class MilinkAirpodsM1Hook(
                     val device = chain.args.getOrNull(0) as? BluetoothDevice
                     val mac = device?.address
                     val original = chain.proceed() as? Boolean ?: false
-                    val macListValue = readDebugMacProperty()
-                    val target = MilinkAirpodsTargetMatcher.isTargetMac(mac, macListValue)
-                    val overridden = MilinkAirpodsTargetMatcher.airpodsDecision(
-                        original, mac, macListValue
-                    )
-                    val mode = if (shouldIntercept()) "INTERCEPT" else "TRACE"
-                    val result = if (shouldIntercept()) overridden else original
+                    val target = bridgeClient.isAuthorized(mac)
+                    val result = original || target
                     log(
-                        "[$mode] BluetoothServiceClient.isAirPods fallback mac=${safeMac(mac)} " +
-                            "name=${safeName(device)} original=$original target=$target overridden=$overridden result=$result"
+                        "[BRIDGE] BluetoothServiceClient.isAirPods fallback mac=${safeMac(mac)} " +
+                            "name=${safeName(device)} original=$original target=$target result=$result"
                     )
                     return result
                 }
@@ -300,7 +233,7 @@ class MilinkAirpodsM1Hook(
      * but milink may also use `query()` for `/deviceinfo` or other paths.
      * Until we confirm which path milink actually hits, both are hooked.
      *
-     * - `call()`: intercepted for `getAirpodsState` → returns fake Bundle
+     * - `call()`: intercepted for `getAirpodsState` → returns bridge Bundle
      * - `query()`: **trace-only** — logs all headsetdata provider queries
      *   so we discover the actual URI/columns milink expects
      *
@@ -321,8 +254,8 @@ class MilinkAirpodsM1Hook(
     /**
      * Intercepts `ContentResolver.call(Uri, String, String, Bundle)`.
      *
-     * Returns a synthetic 11-field [Bundle] when milink queries
-     * `getAirpodsState` for an allowlisted MAC. All other calls fall through.
+     * Returns a bridge-backed 11-field [Bundle] when milink queries
+     * `getAirpodsState` for an authorized MAC. All other calls fall through.
      */
     private fun hookContentResolverCallMethod(crClazz: Class<*>) {
         val method = findMethod(crClazz, "call", Uri::class.java, String::class.java, String::class.java, Bundle::class.java)
@@ -339,8 +272,7 @@ class MilinkAirpodsM1Hook(
                     val callMethod = chain.args.getOrNull(1) as? String
                     val arg = chain.args.getOrNull(2) as? String
 
-                    if (!shouldIntercept()
-                        || callMethod != "getAirpodsState"
+                    if (callMethod != "getAirpodsState"
                         || uri == null
                         || uri.authority != AIRPODS_PROVIDER_AUTHORITY
                         || uri.path != AIRPODS_STATE_PATH
@@ -348,19 +280,13 @@ class MilinkAirpodsM1Hook(
                         return chain.proceed()
                     }
 
-                    val propertyValue = readDebugMacProperty()
-                    if (!MilinkAirpodsTargetMatcher.isTargetMac(arg, propertyValue)) {
+                    val snapshot = bridgeClient.snapshotFor(arg)
+                    if (snapshot == null) {
                         return chain.proceed()
                     }
 
-                    val original = chain.proceed()
-                    if (original is Bundle) {
-                        log("ContentResolver.call getAirpodsState mac=$arg -> original Bundle")
-                        return original
-                    }
-
-                    val bundle = createFakeAirpodsStateBundle(arg)
-                    log("ContentResolver.call getAirpodsState mac=$arg -> fake Bundle")
+                    val bundle = createAirpodsStateBundle(snapshot)
+                    log("ContentResolver.call getAirpodsState mac=$arg -> bridge Bundle")
                     return bundle
                 }
             })
@@ -424,28 +350,12 @@ class MilinkAirpodsM1Hook(
     }
 
     /**
-     * Creates a minimal 11-field Bundle matching the AirPods state format
+     * Creates an 11-field Bundle matching the AirPods state format
      * expected by milink's `AncBatteryController.registerAirpodsStateCallback`.
-     *
-     * Field mapping per the decompiled `airpodsBatteryParse` (line 919-963):
-     *
-     * | Key | Purpose | Placeholder | Real source (M3) |
-     * |-----|---------|------------|------------------|
-     * | device | MAC address | query arg | Bridge MAC |
-     * | connectState | Connection flag ("2" = connected) | "2" | Bridge state |
-     * | isLeftWearing | Left ear wearing status | "true" | Snapshot |
-     * | leftBattery | Left battery 0–100 | "75" | Snapshot |
-     * | isRightWearing | Right ear wearing status | "true" | Snapshot |
-     * | rightBattery | Right battery 0–100 | "80" | Snapshot |
-     * | boxBattery | Case battery 0–100 | "90" | Snapshot |
-     * | isLeftCharging | Left ear in case/charging | "false" | Snapshot |
-     * | isRightCharging | Right ear in case/charging | "false" | Snapshot |
-     * | isBoxCharging | Case on charger | "false" | Snapshot |
-     * | modelName | Device ID for icon selection | "01010101" | DeviceIdRegistry |
      */
-    private fun createFakeAirpodsStateBundle(mac: String?): Bundle =
+    private fun createAirpodsStateBundle(snapshot: dev.ignotus.openbuds.integration.milink.MilinkDeviceSnapshot): Bundle =
         Bundle().apply {
-            AirpodsStateMapper.toBundleFields(AirpodsStateMapper.placeholder(mac)).forEach { (key, value) ->
+            AirpodsStateMapper.toBundleFields(AirpodsStateMapper.fromMilinkSnapshot(snapshot)).forEach { (key, value) ->
                 putString(key, value)
             }
         }
@@ -516,36 +426,6 @@ class MilinkAirpodsM1Hook(
         return "len=${array.size} deviceId=${array.getOrNull(8)?.toString().orEmpty()}"
     }
 
-    // ── Debug utilities ─────────────────────────────────────────────────
-
-    /**
-     * Reads the intercept mode flag from `SystemProperties`.
-     *
-     * When `"true"`: hooks change return values (device becomes HEADSET).
-     * When `"false"` or unset (default): trace-only, return original results.
-     */
-    private fun shouldIntercept(): Boolean =
-        runCatching {
-            val clazz = Class.forName("android.os.SystemProperties")
-            val method = clazz.getDeclaredMethod("get", String::class.java, String::class.java)
-            (method.invoke(null, INTERCEPT_PROPERTY, "false") as? String) == "true"
-        }.getOrDefault(false)
-
-    /**
-     * Reads the M1 debug MAC override via `SystemProperties.get()`.
-     *
-     * Uses reflection to access `android.os.SystemProperties` which is a
-     * hidden API. Returns `null` if reflection fails (SELinux denial,
-     * API removed, etc.) — matcher gracefully falls back to [hardcoded
-     * defaults][MilinkAirpodsTargetMatcher.configuredTargets].
-     */
-    private fun readDebugMacProperty(): String? =
-        runCatching {
-            val clazz = Class.forName("android.os.SystemProperties")
-            val method = clazz.getDeclaredMethod("get", String::class.java, String::class.java)
-            method.invoke(null, MilinkAirpodsTargetMatcher.DEBUG_PROPERTY, "") as? String
-        }.getOrNull()?.takeIf { it.isNotBlank() }
-
     /** Normalizes a MAC for safe logging. Returns trimmed uppercase or empty. */
     private fun safeMac(mac: String?): String =
         MilinkAirpodsTargetMatcher.normalizeMac(mac) ?: mac?.trim().orEmpty()
@@ -558,9 +438,6 @@ class MilinkAirpodsM1Hook(
 
     private companion object {
         private const val TAG = "OpenBuds"
-
-        /** System property key for the intercept/trace-only mode toggle. */
-        private const val INTERCEPT_PROPERTY = "debug.openbuds.milink_m1_intercept"
 
         /** Fully-qualified class names as found in HyperOS 3.0 dex. */
         private const val MX_BLUETOOTH_MANAGER =

@@ -43,6 +43,14 @@
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
 
+        <service
+            android:name="dev.ignotus.openbuds.integration.milink.MilinkBridgeService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="dev.ignotus.openbuds.action.BIND_MILINK_BRIDGE" />
+            </intent-filter>
+        </service>
+
         <receiver
             android:name="dev.ignotus.openbuds.receiver.SystemIntegrationReceiver"
             android:exported="true"
@@ -50,6 +58,14 @@
             <intent-filter>
                 <action android:name="dev.ignotus.openbuds.action.QUERY_DEVICE_MAC" />
                 <action android:name="dev.ignotus.openbuds.action.SHOW_QUICK_POPUP" />
+            </intent-filter>
+        </receiver>
+
+        <receiver
+            android:name="dev.ignotus.openbuds.receiver.BluetoothConnectReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.bluetooth.device.action.ACL_CONNECTED" />
             </intent-filter>
         </receiver>
     </application>

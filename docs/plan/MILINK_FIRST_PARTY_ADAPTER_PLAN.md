@@ -1,6 +1,6 @@
 # OpenBuds 米链第一方耳机适配器集成方案（方案 A）
 
-更新日期：2026-05-31
+更新日期：2026-06-01
 
 本文细化"让 OpenBuds 支持的耳机（Sony / QCY / …）被 HyperOS 米链当作第一方设备渲染"的可行方案。
 
@@ -409,7 +409,7 @@ docs/MILINK_BUNDLE_FORMAT.md                   // 11-字段 Bundle 的实际抓�
 - [x] 按 M0 清理策略直接删除旧代码，不再保留默认禁用的旧 MiTWS/卡片重定向实现；同一构建中只保留 AirPods 主线入口。
 - [x] 新建 `lsposed/milink/` 包，AirPods adapter 主线全部放入该包。
 - [x] 从 `SonyControlService` 移除旧 `/sdcard/headset_whitelist.txt` 白名单写入；M3 改由 bridge 返回授权设备集合。
-- [ ] 验收：禁用旧 hook 后，OpenBuds 设备在米链中恢复通用蓝牙/third_headset 表现，无崩溃。
+- [x] 验收：禁用旧 hook 后，OpenBuds 设备在米链中恢复通用蓝牙/third_headset 表现，无崩溃。旧 hook 已从源码删除。
 
 ### 阶段 M1：可行性验证（1 周）
 
@@ -485,11 +485,24 @@ adb shell setprop debug.openbuds.milink_m1_intercept true
 
 ### 阶段 M3：OpenBuds 数据接入（2 周）
 
-- [ ] 新增 `MilinkBridgeService` / AIDL，输出按 MAC 查询的 `MilinkDeviceSnapshot`，并提供授权设备集合。
-- [ ] Bridge 做调用方校验、超时和失败返回；模块端做 TTL 缓存，避免 hook 阻塞米链主线程。
-- [ ] 实现 `AirpodsStateMapper` 纯函数：`MilinkDeviceSnapshot` → `String[]` 和 Bundle。
-- [ ] 接入 `NotifyChangePump`：状态变化时节流触发 `notifyChange`，失败时只更新缓存等待被动查询。
-- [ ] 验收：真机 Sony LinkBuds S，控制中心展示真实电量、佩戴、充电状态
+> **状态：已完成。**
+
+- [x] 新增 `MilinkBridgeService` / AIDL，输出按 MAC 查询的 `MilinkDeviceSnapshot`，并提供授权设备集合。
+- [x] Bridge 做调用方校验、超时和失败返回；模块端做 TTL 缓存，避免 hook 阻塞米链主线程。
+- [x] 实现 `AirpodsStateMapper` 纯函数：`MilinkDeviceSnapshot` → `String[]` 和 Bundle。
+- [x] 接入 `NotifyChangePump`：状态变化时节流触发 `notifyChange`，失败时只更新缓存等待被动查询。
+- [x] 验收：真机 Sony LinkBuds S，控制中心展示真实电量、佩戴、充电状态
+
+#### M3 实现记录
+
+桥梁 IPC (`MilinkBridgeService` → `MilinkBridgeClient` → `MilinkBridgeCache`) 全部打通。关键额外工作：
+
+- **`Application.attach` → `Application.onCreate` hook**：原 `attach` hook 在 LSPosed `onPackageLoaded` 之前已执行，导致 bridge client 从未启动。改为 `onCreate` 后正常。
+- **`milinkAdapterEnabled` 默认 `true`**：模块默认启用，不需要用户每次打开 App 切换开关。bridge 仅在有已连接设备时推送快照，安全无害。
+- **`debug.openbuds.milink_m1_macs` fallback**：当 bridge 无已授权设备时（App 未启动、BLE 协议未建立），`isAuthorized()` 降级检查系统属性白名单，确保 `checkIsAirPods=true` 最快返回。
+- **`SonyControlService.autoConnect()` + `BluetoothConnectReceiver`**：耳机通过系统蓝牙连接时，自动拉起 `SonyControlService`，通过 4 秒 BLE 扫描发现设备后自动 BLE 连接。解决"不打开 App 也能获取真实电量"的核心问题。扫描路径提供完整 SonyAd 广告数据，确保 SPP 通道选择正确——直接 `connect(address,name)` 无广告数据会选错 SPP UUID 导致读失败。
+- **`MilinkAdapterStatus.kt`** + `MainActivity` 中 adapter 状态指示器：开启 `milinkAdapterCheck` 后显示当前设备 MAC、电量、佩戴、协议状态。
+- 测试新增：`AirpodsStateMapperTest.kt`（13 用例）、`DeviceIdRegistryTest.kt`（11 用例）、`MilinkBridgePermissionTest.kt`（14 用例）。
 
 ### 阶段 M4：反向控制可行性评估（1-2 周）
 

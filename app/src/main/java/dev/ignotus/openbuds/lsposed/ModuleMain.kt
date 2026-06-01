@@ -25,11 +25,11 @@ import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
  * ```
  * com.milink.service process
  *   ├── MxBluetoothManager.checkIsAirPods(String)   ← intercepted
- *   ├── MxBluetoothManager.getAirPodsState(String)  ← fake 9-field state
+ *   ├── MxBluetoothManager.getAirPodsState(String)  ← bridge snapshot state
  *   ├── BluetoothServiceClient.isAirPods(BluetoothDevice) ← fallback
  *   ├── BluetoothServiceClient.getAirpodsDeviceId(...)    ← trace-only
  *   ├── BluetoothServiceClient.getAirpodsHeadsetType(...) ← trace-only
- *   └── ContentResolver.call(getAirpodsState)             ← fake Bundle
+ *   └── ContentResolver.call(getAirpodsState)             ← bridge snapshot Bundle
  * ```
  *
  * No hooks target `com.android.bluetooth`, `com.android.systemui`, or any

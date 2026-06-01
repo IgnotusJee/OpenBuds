@@ -4,7 +4,7 @@ package dev.ignotus.openbuds.lsposed.milink
  * Stable MiLink deviceId templates for the AirPods adapter path.
  *
  * MiLink resolves a headset icon/type by passing the deviceId through
- * `p321o9.AbstractC14649a.m51162b(deviceId)`. M2 intentionally uses a Xiaomi
+ * `p321o9.AbstractC14649a.m51162b(deviceId)`. The bridge currently uses a Xiaomi
  * generic earbud id that resolves to type 0, avoiding AirPods-specific type
  * 5/6 branches.
  */

@@ -32,7 +32,7 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     buildFeatures {
-      aidl = false
+      aidl = true
       buildConfig = true
       shaders = false
     }
