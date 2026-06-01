@@ -218,7 +218,7 @@ Sony GATT 端点路由。
 
 **包**: `dev.ignotus.openbuds.ble.qcy`
 
-QCY 耳机的 BLE GATT 客户端。Android GATT 连接、CCCD 写入、特征读取、MTU 协商和写入队列委托给 `ble/transport/GattTransport.kt`；本类保留品牌匹配、UUID 到 `TandemChannel` 的分发和 repository 回调适配。
+QCY 耳机的 BLE GATT 客户端。Android GATT 连接、CCCD 写入、特征读取、MTU 协商和写入队列委托给 `ble/transport/GattTransport.kt`；本类保留品牌匹配、UUID 到 `QcyChannel` 的分发和 repository 回调适配。
 
 | 类/函数 | 描述 |
 |---------|------|
@@ -227,12 +227,11 @@ QCY 耳机的 BLE GATT 客户端。Android GATT 连接、CCCD 写入、特征读
 | `startScan(strictFilter)` | no-op：扫描由 Sony 客户端代理 |
 | `connect(device)` / `connect(mac, deviceName)` | 创建 `GattTransport` 并以 `TRANSPORT_LE` 连接 |
 | `disconnect()` | 关闭 `GattTransport` 并清理连接状态 |
-| `sendToChannel(channel, bytes)` | 发送字节到 QCY 命令特征 (0x1001)；所有 QCY 通道的写入都路由到此特征 |
-| `availableChannels()` | 返回 6 个 QCY 通道 |
+| `send(bytes)` | 发送字节到 QCY 命令特征 (0x1001) |
+| `handleCharacteristicChanged(uuid, value)` | 将 QCY characteristic UUID 分发为 `QcyChannel` |
 | `getEffectiveMtu()` | 返回协商后 MTU（减 3 字节 ATT 开销） |
 | `isConnected()` | 返回 `GattTransport` 是否 ready |
 | `createTransport()` | 配置 QCY service、write characteristic、notify/read characteristics、MTU 和 UUID 标签 |
-| `handleCharacteristicChanged(uuid, value)` | 将 QCY characteristic UUID 分发为 `TandemChannel` |
 
 ### `ble/transport/GattTransport.kt`
 
@@ -718,7 +717,8 @@ QCY 解析响应 → `HeadphoneUiState` 的状态映射器。独立对象，避�
 | `HeadphoneFormFactor` | HEADSET, TRUE_WIRELESS, UNKNOWN |
 | `HeadphoneFeature` | DEVICE_INFO, BATTERY, NOISE_CONTROL, AMBIENT_LEVEL, AMBIENT_VOICE_MODE, PLAYBACK_CONTROL, EQ, CLEAR_BASS, LEA_STATUS, QUICK_ACCESS, WEARING_STATUS, VOLUME |
 | `HeadphoneTransport` | UNKNOWN, SPP, GATT_HPC, GATT_MC, UNSUPPORTED_LE_ENDPOINT |
-| `TandemChannel` | SPP_MDR, GATT_V2_HPC, GATT_V2_MC, GATT_V1_MC, QCY_SETTING_WRITE, QCY_READSET, QCY_BATTERY, QCY_VERSION, QCY_EQ_RAW, QCY_FUNCTION |
+| `SonyChannel`（品牌私有） | SPP_MDR, GATT_V2_HPC, GATT_V2_MC, GATT_V1_MC |
+| `QcyChannel`（品牌私有） | SETTING_WRITE, READSET, BATTERY, VERSION, EQ_RAW, FUNCTION |
 | `PlaybackDispatchStrategy` | TANDEM_FIRST, ANDROID_MEDIA_FALLBACK, TANDEM_ONLY |
 | `InfoLayoutHint` | SONY_SERIES, BRAND_MODEL |
 
@@ -820,7 +820,7 @@ Sony Tandem 的 `HeadphoneAdapter` 实现。负责设备匹配、命令构造、
 
 **包**: `dev.ignotus.openbuds.headphones.qcy`
 
-QCY 的 `HeadphoneAdapter` 实现。所有命令通过 `TandemChannel.QCY_SETTING_WRITE` 发送；各特征通知分发到对应的 QCY 通道。
+QCY 的 `HeadphoneAdapter` 实现。所有命令通过 `QcyChannel.SETTING_WRITE` 发送；各特征通知分发到对应的 `QcyChannel`。
 
 | 函数 | 描述 |
 |------|------|

@@ -153,17 +153,26 @@ interface GattTransportListener : TransportListener {
   - `ProtocolCompatibilityArchitectureTest`：确认主源码不再包含 `class SonyBleClient` / `SonyBleClientListener`，并确认 Repository 走 adapter factory。
 - Phase 3 验证命令：`.\gradlew.bat testDebugUnitTest assembleDebug`。
 
-### Phase 4 — TandemChannel 品牌解耦
+### Phase 4 — TandemChannel 品牌解耦（已完成）
 
 **目标**：`TandemChannel` enum 不再是跨品牌的混装类型。
 
 **变更：**
-1. Sony GATT 通道内化到 Sony adapter
-2. QCY 通道内化到 QCY adapter
+1. Sony GATT 通道内化到 Sony adapter（`SonyChannel` 品牌私有 enum）
+2. QCY 通道内化到 QCY adapter（`QcyChannel` 品牌私有 enum）
 3. Transport 层不再有 "channel" 概念，只有 send/receive bytes
 4. 如果需要多通道（如 HPC + MC 同时），由 adapter 维护多个 Transport 实例
 
 **风险**：中。Channel 概念在整个项目中广泛使用。
+
+**完成状态：**
+- `TandemChannel` enum 已从主源码完全移除。
+- `SonyChannel`（`ble/sony/SonyChannel.kt`）只含 Sony 通道：SPP_MDR、GATT_V2_HPC、GATT_V2_MC、GATT_V1_MC。
+- `QcyChannel`（`ble/qcy/QcyChannel.kt`）只含 QCY 通道：SETTING_WRITE、READSET、BATTERY、VERSION、EQ_RAW、FUNCTION。
+- `BluetoothTransport` 接口只有 `send(bytes)`，无 channel 概念。
+- `HeadphoneTransportClient` 接口只有 `send(bytes: ByteArray)`，无 channel 概念。
+- `IncomingHeadphoneMessage` 使用 opaque `sourceKey`，adapter 通过 `fromSourceKey()` 解析。
+- 架构测试 `ProtocolCompatibilityArchitectureTest` 验证公共 API 无 channel 暴露。
 
 ### Phase 5 — 扫描独立化
 

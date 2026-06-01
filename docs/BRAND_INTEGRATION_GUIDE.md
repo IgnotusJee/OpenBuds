@@ -68,8 +68,7 @@ class MyBrandBleClient(context: Context, listener: SonyBleClientListener) : Head
     override fun stopScan()
     override fun connect(device: DiscoveredSonyDevice)
     override fun disconnect()
-    override fun sendToChannel(channel: TandemChannel, bytes: ByteArray)
-    override fun availableChannels(): Set<TandemChannel>
+    override fun send(bytes: ByteArray)
 }
 ```
 
@@ -77,7 +76,7 @@ class MyBrandBleClient(context: Context, listener: SonyBleClientListener) : Head
 
 - `connectGatt`, service discovery, notification CCCD writes, initial characteristic reads, MTU request, and ready timeout.
 - A single serialized GATT operation queue for reads, CCCD writes, and command writes.
-- Raw bytes in/out. The brand client maps characteristic UUIDs to `TandemChannel` and forwards bytes to the repository listener.
+- Raw bytes in/out. The brand client maps characteristic UUIDs to a brand-private channel enum (e.g. `QcyChannel`) and forwards bytes via `IncomingHeadphoneMessage(adapterId, sourceKey, raw)` to the repository listener.
 
 Use a custom transport only when the brand needs a special handshake or non-GATT framing. Sony Tandem GATT still has a custom state machine because OPTIMAL_MTU, DETERMINE_MTU, WRITABLE_VALUE_LENGTH, and multi-endpoint channel registration are Sony-specific.
 
