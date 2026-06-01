@@ -12,6 +12,7 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.core.content.ContextCompat
 import dev.ignotus.openbuds.ble.HeadphoneConnectionInfo
+import dev.ignotus.openbuds.ble.IncomingHeadphoneMessage
 import dev.ignotus.openbuds.ble.HeadphoneTransportSelector
 import dev.ignotus.openbuds.ble.HeadphoneTransportListener
 import dev.ignotus.openbuds.ble.qcy.QcyBleClient
@@ -27,7 +28,6 @@ import dev.ignotus.openbuds.headphones.HeadphoneFeature
 import dev.ignotus.openbuds.headphones.HeadphoneFormFactor
 import dev.ignotus.openbuds.headphones.HeadphoneTransport
 import dev.ignotus.openbuds.headphones.PlaybackDispatchStrategy
-import dev.ignotus.openbuds.headphones.TandemChannel
 import dev.ignotus.openbuds.headphones.sony.SonyTandemHeadphoneAdapter
 import dev.ignotus.openbuds.media.MediaPlaybackController
 import dev.ignotus.openbuds.data.sony.SonyModelImageCatalog
@@ -443,10 +443,7 @@ class HeadphoneRepository private constructor(context: Context) : HeadphoneTrans
                 ?.let { sendCommandIfReady(it.copy(label = "DEBUG ${it.label}")) }
                 ?: appendLog("Debug battery action ignored: current profile has no battery query")
             "raw" -> rawHex?.hexToByteArrayOrNull()?.let {
-                val channel = _state.value.connectedProfile?.defaultResponseChannel()
-                    ?: transport.availableChannels().firstOrNull()
-                    ?: TandemChannel.SPP_MDR
-                sendCommandIfReady(HeadphoneCommand("DEBUG RAW", it, channel))
+                sendCommandIfReady(HeadphoneCommand("DEBUG RAW", it))
             }
                 ?: appendLog("Debug raw action ignored: invalid hex")
             else -> appendLog("Unknown debug action: $action")
@@ -492,8 +489,8 @@ class HeadphoneRepository private constructor(context: Context) : HeadphoneTrans
     }
 
     private fun sendCommand(command: HeadphoneCommand) {
-        appendLog("${command.label} [${command.channel}] -> ${command.bytes.hexString()}")
-        transport.sendToChannel(command.channel, command.bytes)
+        appendLog("${command.label} -> ${command.bytes.hexString()}")
+        transport.send(command.bytes)
     }
 
     private fun sendCommandIfReady(command: HeadphoneCommand) {
@@ -656,18 +653,18 @@ class HeadphoneRepository private constructor(context: Context) : HeadphoneTrans
                 supportedFeatures = featureStatusesFor(profile),
             )
         }
-        appendLog("Tandem channel ready: transport=${info.transport}, mtu=${info.mtu}, writable=${info.writableValueLength}")
+        appendLog("Transport ready: transport=${info.transport}, mtu=${info.mtu}, writable=${info.writableValueLength}")
         refreshBasics()
     }
 
-    override fun onMessage(channel: TandemChannel, raw: ByteArray) {
-        appendLog("RX [$channel] ${raw.hexString()}")
+    override fun onMessage(message: IncomingHeadphoneMessage) {
+        appendLog("RX [${message.adapterId}:${message.sourceKey}] ${message.raw.hexString()}")
         val profile = _state.value.connectedProfile ?: ensureConnectedProfile()
-        val parsed = HeadphoneAdapterRegistry.parse(profile, channel, raw)
-        dispatchParsed(channel, parsed)
+        val parsed = HeadphoneAdapterRegistry.parse(profile, message)
+        dispatchParsed(message.sourceKey, parsed)
     }
 
-    private fun dispatchParsed(channel: TandemChannel, parsed: ParsedHeadphoneResponse) {
+    private fun dispatchParsed(sourceKey: String, parsed: ParsedHeadphoneResponse) {
         when (parsed) {
             is ParsedHeadphoneResponse.SonyTandem.DeviceInfo -> applyDeviceInfo(parsed)
             is ParsedHeadphoneResponse.SonyTandem.CommonStatus -> applyCommonStatus(parsed)
@@ -681,8 +678,8 @@ class HeadphoneRepository private constructor(context: Context) : HeadphoneTrans
             is ParsedHeadphoneResponse.SonyTandem.QuickAccess -> applyQuickAccess(parsed)
             is ParsedHeadphoneResponse.SonyTandem.WearingStatus -> applyWearingStatus(parsed)
             is ParsedHeadphoneResponse.SonyTandem.Unknown -> applyKnownOrUnknown(parsed)
-            is ParsedHeadphoneResponse.SonyTandem.Table2Common -> applyTable2Diagnostic(channel, parsed)
-            is ParsedHeadphoneResponse.SonyTandem.Table2Generic -> applyTable2Diagnostic(channel, parsed)
+            is ParsedHeadphoneResponse.SonyTandem.Table2Common -> applyTable2Diagnostic(sourceKey, parsed)
+            is ParsedHeadphoneResponse.SonyTandem.Table2Generic -> applyTable2Diagnostic(sourceKey, parsed)
             is ParsedHeadphoneResponse.Qcy.Battery,
             is ParsedHeadphoneResponse.Qcy.NoiseControl,
             is ParsedHeadphoneResponse.Qcy.EqData,
@@ -692,7 +689,7 @@ class HeadphoneRepository private constructor(context: Context) : HeadphoneTrans
                 appendLog("QCY ${parsed::class.simpleName}: ${parsed.raw.hexString()}")
                 _state.update { dev.ignotus.openbuds.data.qcy.QcyResponseMapper.apply(it, parsed) }
             }
-            is ParsedHeadphoneResponse.Batch -> parsed.items.forEach { dispatchParsed(channel, it) }
+            is ParsedHeadphoneResponse.Batch -> parsed.items.forEach { dispatchParsed(sourceKey, it) }
         }
     }
 
@@ -1038,9 +1035,9 @@ class HeadphoneRepository private constructor(context: Context) : HeadphoneTrans
         }
     }
 
-    private fun applyTable2Diagnostic(channel: TandemChannel, response: ParsedHeadphoneResponse) {
-        appendLog("Table2 ${response::class.simpleName} channel=$channel raw=${response.raw.hexString()}")
-        val diagnostic = table2DiagnosticStateFor(channel, response) ?: return
+    private fun applyTable2Diagnostic(sourceKey: String, response: ParsedHeadphoneResponse) {
+        appendLog("Table2 ${response::class.simpleName} source=$sourceKey raw=${response.raw.hexString()}")
+        val diagnostic = table2DiagnosticStateFor(sourceKey, response) ?: return
         _state.update { it.copy(table2Diagnostic = diagnostic) }
     }
 
@@ -1254,20 +1251,21 @@ private fun ConnectedHeadphoneProfile?.supports(feature: HeadphoneFeature): Bool
 private fun String?.toHeadphoneTransport(): HeadphoneTransport =
     when (this) {
         "SPP" -> HeadphoneTransport.SPP
+        "GATT" -> HeadphoneTransport.GATT
         "GATT_HPC" -> HeadphoneTransport.GATT_HPC
         "GATT_MC" -> HeadphoneTransport.GATT_MC
-        "QCY_GATT" -> HeadphoneTransport.GATT_HPC // QCY uses standard GATT, mapped to HPC for display
+        "QCY_GATT" -> HeadphoneTransport.QCY_GATT
         "UNSUPPORTED_LE_ENDPOINT" -> HeadphoneTransport.UNSUPPORTED_LE_ENDPOINT
         else -> HeadphoneTransport.UNKNOWN
     }
 
 fun table2DiagnosticStateFor(
-    channel: TandemChannel,
+    sourceKey: String,
     response: ParsedHeadphoneResponse,
 ): Table2DiagnosticState? =
     when (response) {
         is ParsedHeadphoneResponse.SonyTandem.Table2Common -> Table2DiagnosticState(
-            channel = channel.name,
+            channel = sourceKey,
             family = response.family,
             command = response.command,
             inquiredType = null,
@@ -1275,7 +1273,7 @@ fun table2DiagnosticStateFor(
             rawHex = response.raw.hexString(),
         )
         is ParsedHeadphoneResponse.SonyTandem.Table2Generic -> Table2DiagnosticState(
-            channel = channel.name,
+            channel = sourceKey,
             family = response.family,
             command = response.raw.table2CommandByte(),
             inquiredType = response.inquiredType,

@@ -1,6 +1,5 @@
 package dev.ignotus.openbuds.ble.sony
 
-import dev.ignotus.openbuds.headphones.TandemChannel
 import java.util.UUID
 
 object SonyDeviceMatcher {
@@ -26,7 +25,7 @@ object SonyDeviceMatcher {
 
     private fun isSonyTandemService(value: String): Boolean {
         val channelFromUuid = runCatching {
-            TandemChannel.fromServiceUuid(UUID.fromString(value))
+            SonyChannel.fromServiceUuid(UUID.fromString(value))
         }.getOrNull()
         if (channelFromUuid != null) return true
         return value == "TANDEM_V2_HPC_SERVICE" ||

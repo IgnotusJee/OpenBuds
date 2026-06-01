@@ -1,6 +1,8 @@
 package dev.ignotus.openbuds.headphones
 
+import dev.ignotus.openbuds.ble.IncomingHeadphoneMessage
 import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
+import dev.ignotus.openbuds.ble.sony.SonyChannel
 import dev.ignotus.openbuds.headphones.sony.SonyTandemHeadphoneAdapter
 import dev.ignotus.openbuds.protocol.AmbientSoundMode
 import dev.ignotus.openbuds.protocol.EqPresetId
@@ -112,9 +114,7 @@ class SonyTandemProfileRoutingTest {
         ).single()
 
         assertArrayEquals(byteArrayOf(0x0E, 0x58, 0x00, 0x17, 0x00), speech.bytes)
-        assertEquals(TandemChannel.GATT_V2_HPC, speech.channel)
         assertArrayEquals(byteArrayOf(0x0E, 0x58, 0x00, 0xA2.toByte(), 0x00), userSetting2.bytes)
-        assertEquals(TandemChannel.GATT_V2_HPC, userSetting2.channel)
     }
 
     @Test
@@ -135,7 +135,7 @@ class SonyTandemProfileRoutingTest {
     fun linkBudsS_dataMdrNo2Response_routesToV2Table2() {
         val profile = linkBudsSProfile()
         val raw = byteArrayOf(0x0F, 0x23, 0x00, 0x01)
-        val parsed = SonyTandemHeadphoneAdapter.parse(profile, raw)
+        val parsed = SonyTandemHeadphoneAdapter.parse(profile, sonyMessage(SonyChannel.SPP_MDR, raw))
 
         assertTrue("Expected Table2Generic but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.Table2Generic)
         parsed as ParsedHeadphoneResponse.SonyTandem.Table2Generic
@@ -162,7 +162,6 @@ class SonyTandemProfileRoutingTest {
             profile.capabilities.features,
         )
         assertTrue(profile.featureBindings.values.all { it.variant == HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1 })
-        assertTrue(profile.featureBindings.values.all { it.channel == TandemChannel.GATT_V1_MC })
         assertFalse(profile.supports(HeadphoneFeature.LEA_STATUS))
         assertFalse(profile.supports(HeadphoneFeature.QUICK_ACCESS))
         assertFalse(profile.supports(HeadphoneFeature.WEARING_STATUS))
@@ -213,7 +212,6 @@ class SonyTandemProfileRoutingTest {
             ),
             commands[0].bytes,
         )
-        assertEquals(TandemChannel.GATT_V1_MC, commands[0].channel)
     }
 
     @Test
@@ -228,7 +226,6 @@ class SonyTandemProfileRoutingTest {
             byteArrayOf(0x0E, 0x10, 0x00),
             batteryCmd.bytes,
         )
-        assertEquals(TandemChannel.GATT_V1_MC, batteryCmd.channel)
     }
 
     @Test
@@ -245,7 +242,6 @@ class SonyTandemProfileRoutingTest {
             NcAsmInquiredType.V1_TABLE_SET1_NC_ASM.code.unsigned,
             ncCmd.bytes[2].unsigned,
         )
-        assertEquals(TandemChannel.GATT_V1_MC, ncCmd.channel)
     }
 
     @Test
@@ -255,10 +251,7 @@ class SonyTandemProfileRoutingTest {
             HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1,
             profile.protocolFor(HeadphoneFeature.EQ),
         )
-        assertTrue(
-            SonyTandemHeadphoneAdapter.buildRefreshEqCommands(profile)
-                .all { it.channel == TandemChannel.GATT_V1_MC },
-        )
+        assertTrue(SonyTandemHeadphoneAdapter.buildRefreshEqCommands(profile).isNotEmpty())
     }
 
     @Test
@@ -269,10 +262,7 @@ class SonyTandemProfileRoutingTest {
             profile.protocolFor(HeadphoneFeature.CLEAR_BASS),
         )
         val context = EqWriteContext(rawBandSteps = emptyList())
-        assertEquals(
-            TandemChannel.GATT_V1_MC,
-            SonyTandemHeadphoneAdapter.buildSetClearBassCommands(profile, level = 3, context).single().channel,
-        )
+        assertTrue(SonyTandemHeadphoneAdapter.buildSetClearBassCommands(profile, level = 3, context).single().bytes.isNotEmpty())
     }
 
     @Test
@@ -287,14 +277,12 @@ class SonyTandemProfileRoutingTest {
             byteArrayOf(0x0E, 0xA2.toByte(), 0x01),
             refresh.bytes,
         )
-        assertEquals(TandemChannel.GATT_V1_MC, refresh.channel)
 
         val play = SonyTandemHeadphoneAdapter.buildPlaybackCommands(profile, PlaybackControl.PLAY).single()
         assertArrayEquals(
             byteArrayOf(0x0E, 0xA4.toByte(), 0x01, 0x00, 0x07),
             play.bytes,
         )
-        assertEquals(TandemChannel.GATT_V1_MC, play.channel)
     }
 
     @Test
@@ -370,7 +358,6 @@ class SonyTandemProfileRoutingTest {
             byteArrayOf(0x0E, 0x58, 0x01, 0xFF.toByte(), 0x06, 0x0A, 0x0A, 0x0A, 0x0A, 0x08, 0x11),
             command.bytes,
         )
-        assertEquals(TandemChannel.GATT_V1_MC, command.channel)
     }
 
     @Test
@@ -398,7 +385,7 @@ class SonyTandemProfileRoutingTest {
     fun xm4_batteryResponse_0x11_parsedViaV1() {
         val profile = xm4Profile()
         val raw = byteArrayOf(0x0E, 0x11, 0x00, 88.toByte(), 0x00)
-        val parsed = SonyTandemHeadphoneAdapter.parse(profile, raw)
+        val parsed = SonyTandemHeadphoneAdapter.parse(profile, sonyMessage(SonyChannel.GATT_V1_MC, raw))
 
         assertTrue("Expected Battery but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.Battery)
         parsed as ParsedHeadphoneResponse.SonyTandem.Battery
@@ -412,7 +399,7 @@ class SonyTandemProfileRoutingTest {
         // NCASM_RET_PARAM for V1_TABLE_SET1_NC_ASM is classified as NOISE_CONTROL
         // and routed through the V1 codec path declared by the profile binding.
         val raw = byteArrayOf(0x0E, 0x67, 0x02, 0x01, 0x02, 0x02, 0x01, 0x00, 0x00)
-        val parsed = SonyTandemHeadphoneAdapter.parse(profile, raw)
+        val parsed = SonyTandemHeadphoneAdapter.parse(profile, sonyMessage(SonyChannel.GATT_V1_MC, raw))
 
         assertTrue("Expected NoiseControl but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.NoiseControl)
         parsed as ParsedHeadphoneResponse.SonyTandem.NoiseControl
@@ -425,7 +412,7 @@ class SonyTandemProfileRoutingTest {
         val profile = xm4Profile()
         val version = "2.5.1".encodeToByteArray()
         val raw = byteArrayOf(0x0E, 0x05, 0x02, version.size.toByte()) + version
-        val parsed = SonyTandemHeadphoneAdapter.parse(profile, raw)
+        val parsed = SonyTandemHeadphoneAdapter.parse(profile, sonyMessage(SonyChannel.GATT_V1_MC, raw))
 
         assertTrue("Expected DeviceInfo but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.DeviceInfo)
         parsed as ParsedHeadphoneResponse.SonyTandem.DeviceInfo
@@ -437,7 +424,7 @@ class SonyTandemProfileRoutingTest {
     fun xm4_playbackResponse_0xa3_parsedViaV1() {
         val profile = xm4Profile()
         val raw = byteArrayOf(0x0E, 0xA3.toByte(), 0x01, 0x00, 0x01)
-        val parsed = SonyTandemHeadphoneAdapter.parse(profile, raw)
+        val parsed = SonyTandemHeadphoneAdapter.parse(profile, sonyMessage(SonyChannel.GATT_V1_MC, raw))
 
         assertTrue("Expected PlaybackAck but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.PlaybackAck)
         parsed as ParsedHeadphoneResponse.SonyTandem.PlaybackAck
@@ -446,12 +433,16 @@ class SonyTandemProfileRoutingTest {
     }
 
     @Test
-    fun xm4_dataMdrNo2Response_doesNotRouteToV2Table2() {
+    fun xm4_sppDataMdrNo2PeripheralResponse_routesToV1Table2() {
         val profile = xm4Profile()
-        val raw = byteArrayOf(0x0F, 0x23, 0x00, 0x01)
-        val parsed = SonyTandemHeadphoneAdapter.parse(profile, raw)
+        val raw = byteArrayOf(0x0F, 0x33, 0x01, 0x02, 0x03)
+        val parsed = SonyTandemHeadphoneAdapter.parse(profile, sonyMessage(SonyChannel.SPP_MDR, raw))
 
-        assertTrue("Expected Unknown but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.Unknown)
+        assertTrue("Expected Table2Generic but got ${parsed::class.simpleName}", parsed is ParsedHeadphoneResponse.SonyTandem.Table2Generic)
+        parsed as ParsedHeadphoneResponse.SonyTandem.Table2Generic
+        assertEquals("PERIPHERAL", parsed.family)
+        assertEquals(0x01, parsed.inquiredType)
+        assertEquals(listOf(0x02, 0x03), parsed.values)
     }
 
     // ── Unknown / fallback Sony device ──────────────────────────────────────
@@ -557,5 +548,12 @@ class SonyTandemProfileRoutingTest {
                 source = "bonded",
                 isLikelyControlEndpoint = true,
             )
+        )
+
+    private fun sonyMessage(channel: SonyChannel, raw: ByteArray): IncomingHeadphoneMessage =
+        IncomingHeadphoneMessage(
+            adapterId = "sony-tandem",
+            sourceKey = channel.sourceKey,
+            raw = raw,
         )
 }

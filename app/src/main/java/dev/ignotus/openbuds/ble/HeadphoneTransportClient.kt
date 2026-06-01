@@ -2,7 +2,6 @@ package dev.ignotus.openbuds.ble
 
 import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
 import dev.ignotus.openbuds.ble.sony.UnsupportedEndpointDiagnostics
-import dev.ignotus.openbuds.headphones.TandemChannel
 
 /**
  * Transport-layer abstraction for BLE headphone communication.
@@ -38,11 +37,8 @@ interface HeadphoneTransportClient {
     /** Disconnect and release GATT resources. */
     fun disconnect()
 
-    /** Send [bytes] on the given [channel]. */
-    fun sendToChannel(channel: TandemChannel, bytes: ByteArray)
-
-    /** Channels currently available (i.e. GATT endpoints discovered). */
-    fun availableChannels(): Set<TandemChannel>
+    /** Send protocol bytes through this client's currently active transport. */
+    fun send(bytes: ByteArray)
 
     /**
      * Re-run the unsupported-endpoint probe for the current connection.
@@ -62,6 +58,27 @@ data class HeadphoneConnectionInfo(
 )
 
 /**
+ * Raw protocol bytes received from a brand transport, plus an opaque brand-local
+ * source key that the corresponding adapter may use for parser dispatch.
+ */
+data class IncomingHeadphoneMessage(
+    val adapterId: String,
+    val sourceKey: String,
+    val raw: ByteArray,
+) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (other !is IncomingHeadphoneMessage) return false
+        return adapterId == other.adapterId &&
+            sourceKey == other.sourceKey &&
+            raw.contentEquals(other.raw)
+    }
+
+    override fun hashCode(): Int =
+        31 * (31 * adapterId.hashCode() + sourceKey.hashCode()) + raw.contentHashCode()
+}
+
+/**
  * Callback interface shared by all [HeadphoneTransportClient] implementations.
  * The repository implements this to receive scan results, connection events,
  * diagnostics, and incoming protocol messages.
@@ -73,6 +90,6 @@ interface HeadphoneTransportListener {
     fun onScanStateChanged(scanning: Boolean)
     fun onConnectionStateChanged(connected: Boolean, device: DiscoveredSonyDevice?)
     fun onReady(info: HeadphoneConnectionInfo)
-    fun onMessage(channel: TandemChannel, raw: ByteArray)
+    fun onMessage(message: IncomingHeadphoneMessage)
     fun onLog(message: String)
 }

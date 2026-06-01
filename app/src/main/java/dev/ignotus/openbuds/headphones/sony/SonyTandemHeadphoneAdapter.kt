@@ -3,7 +3,9 @@ package dev.ignotus.openbuds.headphones.sony
 import android.content.Context
 import dev.ignotus.openbuds.ble.HeadphoneTransportClient
 import dev.ignotus.openbuds.ble.HeadphoneTransportListener
+import dev.ignotus.openbuds.ble.IncomingHeadphoneMessage
 import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
+import dev.ignotus.openbuds.ble.sony.SonyChannel
 import dev.ignotus.openbuds.ble.sony.SonyTandemTransportClient
 import dev.ignotus.openbuds.headphones.ClearBassWriteMode
 import dev.ignotus.openbuds.headphones.ConnectedHeadphoneProfile
@@ -18,7 +20,6 @@ import dev.ignotus.openbuds.headphones.HeadphoneFeature
 import dev.ignotus.openbuds.headphones.HeadphoneFormFactor
 import dev.ignotus.openbuds.headphones.HeadphoneProtocolVariant
 import dev.ignotus.openbuds.headphones.ProfileTemplate
-import dev.ignotus.openbuds.headphones.TandemChannel
 import dev.ignotus.openbuds.headphones.sony.devices.LinkBudsSProfile
 import dev.ignotus.openbuds.headphones.sony.devices.Wf1000Xm5Profile
 import dev.ignotus.openbuds.headphones.sony.devices.Wh1000Xm4Profile
@@ -77,7 +78,7 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
         label: String,
         bytes: ByteArray,
     ): HeadphoneCommand =
-        HeadphoneCommand(label = label, bytes = bytes, channel = profile.channelFor(feature))
+        HeadphoneCommand(label = label, bytes = bytes)
 
     private fun codecFor(profile: ConnectedHeadphoneProfile, feature: HeadphoneFeature): TandemCodec =
         TandemCodecRegistry.codecFor(profile.protocolFor(feature))
@@ -400,23 +401,24 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
 
     override fun parse(
         profile: ConnectedHeadphoneProfile,
-        channel: TandemChannel,
-        raw: ByteArray,
+        message: IncomingHeadphoneMessage,
     ): ParsedHeadphoneResponse {
+        val raw = message.raw
+        val s = SonyChannel.fromSourceKey(message.sourceKey) ?: defaultSonyResponseChannel(profile)
         if (raw.firstOrNull() == DATA_MDR_NO2) {
-            val variant = table2VariantForResponse(profile, channel)
-            return TandemCodecRegistry.codecFor(variant).parse(raw)
+            val variant = table2VariantForResponse(profile, s)
+            return parseDataMdrNo2(variant, raw)
         }
         val normalized = if (raw.firstOrNull() == DATA_MDR) raw else byteArrayOf(DATA_MDR) + raw
         val command = normalized.getOrNull(1) ?: return ParsedHeadphoneResponse.SonyTandem.Unknown(null, null, byteArrayOf(), raw)
         val payload = normalized.drop(2).toByteArray()
-        val binding = bindingForResponse(profile, channel, command, payload)
+        val binding = bindingForResponse(profile, s, command, payload)
         return TandemCodecRegistry.codecFor(binding.variant).parse(raw).let { parsed ->
             if (parsed !is ParsedHeadphoneResponse.SonyTandem.Unknown) {
                 parsed
             } else if (
                 binding.feature == HeadphoneFeature.DEVICE_INFO &&
-                profile.protocolFor(HeadphoneFeature.DEVICE_INFO) == HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1
+                    profile.protocolFor(HeadphoneFeature.DEVICE_INFO) == HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1
             ) {
                 codecFor(profile, HeadphoneFeature.DEVICE_INFO).parse(raw)
             } else {
@@ -425,15 +427,44 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
         }
     }
 
+    private fun parseDataMdrNo2(
+        variant: HeadphoneProtocolVariant,
+        raw: ByteArray,
+    ): ParsedHeadphoneResponse {
+        if (variant != HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE2) {
+            return TandemCodecRegistry.codecFor(variant).parse(raw)
+        }
+        val normalized = byteArrayOf(DATA_MDR) + raw.drop(1).toByteArray()
+        return when (val parsed = TandemCodecRegistry.codecFor(variant).parse(normalized)) {
+            is ParsedHeadphoneResponse.SonyTandem.Table2Generic -> parsed.copy(raw = raw)
+            is ParsedHeadphoneResponse.SonyTandem.Table2Common -> parsed.copy(raw = raw)
+            is ParsedHeadphoneResponse.SonyTandem.Unknown -> parsed.copy(raw = raw)
+            else -> parsed
+        }
+    }
+
+    private fun defaultSonyResponseChannel(profile: ConnectedHeadphoneProfile): SonyChannel {
+        val variants = profile.featureBindings.values.map { it.variant }.toSet()
+        return when {
+            variants.any { it == HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1 } -> SonyChannel.GATT_V2_HPC
+            variants.any {
+                it == HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1 ||
+                    it == HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE2
+            } -> SonyChannel.GATT_V1_MC
+            variants.any { it == HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE2 } -> SonyChannel.GATT_V2_MC
+            else -> SonyChannel.SPP_MDR
+        }
+    }
+
     private fun table2VariantForResponse(
         profile: ConnectedHeadphoneProfile,
-        channel: TandemChannel,
+        channel: SonyChannel,
     ): HeadphoneProtocolVariant =
         when (channel) {
-            TandemChannel.GATT_V2_MC -> HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE2
-            TandemChannel.GATT_V1_MC -> HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE2
-            TandemChannel.GATT_V2_HPC,
-            TandemChannel.SPP_MDR -> {
+            SonyChannel.GATT_V2_MC -> HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE2
+            SonyChannel.GATT_V1_MC -> HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE2
+            SonyChannel.GATT_V2_HPC,
+            SonyChannel.SPP_MDR -> {
                 val profileVariants = profile.featureBindings.values.map { it.variant }.toSet()
                 when {
                     profileVariants.any { it == HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1 || it == HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE2 } ->
@@ -443,39 +474,30 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
                     else -> HeadphoneProtocolVariant.UNKNOWN
                 }
             }
-            TandemChannel.QCY_SETTING_WRITE,
-            TandemChannel.QCY_READSET,
-            TandemChannel.QCY_BATTERY,
-            TandemChannel.QCY_VERSION,
-            TandemChannel.QCY_EQ_RAW,
-            TandemChannel.QCY_FUNCTION -> HeadphoneProtocolVariant.QCY
         }
 
     private fun bindingForResponse(
         profile: ConnectedHeadphoneProfile,
-        channel: TandemChannel,
+        channel: SonyChannel,
         command: Byte,
         payload: ByteArray,
     ): FeatureProtocolBinding {
-        if (channel == TandemChannel.GATT_V2_MC) {
+        if (channel == SonyChannel.GATT_V2_MC) {
             return FeatureProtocolBinding(
                 feature = HeadphoneFeature.DEVICE_INFO,
                 variant = HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE2,
-                channel = channel,
             )
         }
-        if (channel == TandemChannel.GATT_V1_MC && isV1Table2Command(command)) {
+        if (channel == SonyChannel.GATT_V1_MC && isV1Table2Command(command)) {
             return FeatureProtocolBinding(
                 feature = HeadphoneFeature.DEVICE_INFO,
                 variant = HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE2,
-                channel = channel,
             )
         }
         val feature = classifyCommand(command, payload)
         return profile.bindingFor(feature) ?: FeatureProtocolBinding(
             feature = feature,
             variant = variantForChannel(channel, command),
-            channel = channel,
         )
     }
 
@@ -484,22 +506,16 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
         return code in 0x30..0x49
     }
 
-    private fun variantForChannel(channel: TandemChannel, command: Byte): HeadphoneProtocolVariant =
+    private fun variantForChannel(channel: SonyChannel, command: Byte): HeadphoneProtocolVariant =
         when (channel) {
-            TandemChannel.GATT_V2_HPC -> HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1
-            TandemChannel.GATT_V2_MC -> HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE2
-            TandemChannel.GATT_V1_MC -> if (isV1Table2Command(command)) {
+            SonyChannel.GATT_V2_HPC -> HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1
+            SonyChannel.GATT_V2_MC -> HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE2
+            SonyChannel.GATT_V1_MC -> if (isV1Table2Command(command)) {
                 HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE2
             } else {
                 HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1
             }
-            TandemChannel.SPP_MDR -> HeadphoneProtocolVariant.UNKNOWN
-            TandemChannel.QCY_SETTING_WRITE,
-            TandemChannel.QCY_READSET,
-            TandemChannel.QCY_BATTERY,
-            TandemChannel.QCY_VERSION,
-            TandemChannel.QCY_EQ_RAW,
-            TandemChannel.QCY_FUNCTION -> HeadphoneProtocolVariant.QCY
+            SonyChannel.SPP_MDR -> HeadphoneProtocolVariant.UNKNOWN
         }
 
     private fun classifyCommand(command: Byte, payload: ByteArray = byteArrayOf()): HeadphoneFeature = when (command) {

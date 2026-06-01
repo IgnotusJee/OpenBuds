@@ -1,10 +1,8 @@
 package dev.ignotus.openbuds.ble
 
 import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
-import dev.ignotus.openbuds.headphones.TandemChannel
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -30,12 +28,10 @@ class HeadphoneTransportSelectorTest {
                 val name = device.name.lowercase()
                 !name.contains("qcy") && (name.contains("sony") || name.startsWith("wf-"))
             },
-            channels = setOf(TandemChannel.GATT_V2_HPC, TandemChannel.GATT_V2_MC),
         )
         qcyClient = FakeTransportClient(
             id = "qcy-gatt",
             matchPredicate = { device, _ -> device.name.lowercase().contains("qcy") },
-            channels = setOf(TandemChannel.QCY_SETTING_WRITE, TandemChannel.QCY_BATTERY),
         )
         selector = HeadphoneTransportSelector(listOf(sonyClient, qcyClient))
     }
@@ -60,7 +56,7 @@ class HeadphoneTransportSelectorTest {
     @Test
     fun pickFor_ambiguousName_firstClientWins() {
         // Sony-like fake that matches everything, registered first; QCY won't match.
-        val matchAll = FakeTransportClient("match-all", { _, _ -> true }, emptySet())
+        val matchAll = FakeTransportClient("match-all", { _, _ -> true })
         val sel = HeadphoneTransportSelector(listOf(matchAll, qcyClient))
         assertSame(matchAll, sel.pickFor(device("QCY-C30S")))
     }
@@ -94,35 +90,23 @@ class HeadphoneTransportSelectorTest {
     }
 
     @Test
-    fun sendToChannel_routesToActiveClient() {
+    fun send_routesToActiveClient() {
         selector.connect(device("QCY-C30S"))
         val bytes = byteArrayOf(1, 2, 3)
-        selector.sendToChannel(TandemChannel.QCY_SETTING_WRITE, bytes)
+        selector.send(bytes)
         assertEquals(1, qcyClient.sentMessages.size)
-        assertEquals(TandemChannel.QCY_SETTING_WRITE, qcyClient.sentMessages[0].first)
-        assertTrue(qcyClient.sentMessages[0].second.contentEquals(bytes))
+        assertTrue(qcyClient.sentMessages[0].contentEquals(bytes))
         assertEquals(0, sonyClient.sentMessages.size)
     }
 
     @Test
-    fun sendToChannel_noActive_throws() {
+    fun send_noActive_throws() {
         try {
-            selector.sendToChannel(TandemChannel.QCY_BATTERY, byteArrayOf())
+            selector.send(byteArrayOf())
             throw AssertionError("Expected error()")
         } catch (e: IllegalStateException) {
             // expected
         }
-    }
-
-    @Test
-    fun availableChannels_returnsActiveClientChannels() {
-        selector.connect(device("QCY-C30S"))
-        assertEquals(qcyClient.availableChannels(), selector.availableChannels())
-    }
-
-    @Test
-    fun availableChannels_noActive_returnsEmpty() {
-        assertEquals(emptySet<TandemChannel>(), selector.availableChannels())
     }
 
     @Test
@@ -166,19 +150,18 @@ class HeadphoneTransportSelectorTest {
 
 /**
  * Test double for [HeadphoneTransportClient]. Records calls and returns
- * configured channel set / match result.
+ * the configured match result.
  */
 private class FakeTransportClient(
     override val id: String,
     private val matchPredicate: (DiscoveredSonyDevice, String?) -> Boolean,
-    private val channels: Set<TandemChannel>,
 ) : HeadphoneTransportClient {
 
     val connectCalls = mutableListOf<DiscoveredSonyDevice>()
     var disconnectCount = 0
     var startScanCount = 0
     var stopScanCount = 0
-    val sentMessages = mutableListOf<Pair<TandemChannel, ByteArray>>()
+    val sentMessages = mutableListOf<ByteArray>()
 
     override fun matches(device: DiscoveredSonyDevice, reportedModelName: String?): Boolean =
         matchPredicate(device, reportedModelName)
@@ -199,9 +182,7 @@ private class FakeTransportClient(
         disconnectCount++
     }
 
-    override fun sendToChannel(channel: TandemChannel, bytes: ByteArray) {
-        sentMessages.add(channel to bytes)
+    override fun send(bytes: ByteArray) {
+        sentMessages.add(bytes)
     }
-
-    override fun availableChannels(): Set<TandemChannel> = channels
 }

@@ -7,6 +7,7 @@ import android.content.Context
 import android.os.Build
 import android.util.Log
 import dev.ignotus.openbuds.ble.HeadphoneConnectionInfo
+import dev.ignotus.openbuds.ble.IncomingHeadphoneMessage
 import dev.ignotus.openbuds.ble.HeadphoneTransportClient
 import dev.ignotus.openbuds.ble.HeadphoneTransportListener
 import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
@@ -14,7 +15,6 @@ import dev.ignotus.openbuds.ble.transport.GattTransport
 import dev.ignotus.openbuds.ble.transport.GattTransportConfig
 import dev.ignotus.openbuds.ble.transport.GattTransportListener
 import dev.ignotus.openbuds.ble.transport.TransportInfo
-import dev.ignotus.openbuds.headphones.TandemChannel
 import dev.ignotus.openbuds.protocol.qcy.QcyGatt
 import java.util.UUID
 
@@ -56,18 +56,11 @@ class QcyBleClient(
     private var effectiveMtu: Int = 20
 
     private fun handleCharacteristicChanged(uuid: UUID, value: ByteArray) {
-        val channel = when (uuid) {
-            QcyGatt.CHARACTER_BATTERY_UUID -> TandemChannel.QCY_BATTERY
-            QcyGatt.CHARACTER_VERSION_UUID -> TandemChannel.QCY_VERSION
-            QcyGatt.CHARACTER_READSET_UUID -> TandemChannel.QCY_READSET
-            QcyGatt.CHARACTER_EQ_UUID -> TandemChannel.QCY_EQ_RAW
-            QcyGatt.CHARACTER_FUNCTION_UUID -> TandemChannel.QCY_FUNCTION
-            else -> {
-                log("Unhandled characteristic notify: $uuid")
-                return
-            }
+        val channel = QcyChannel.fromCharacteristicUuid(uuid) ?: run {
+            log("Unhandled characteristic notify: $uuid")
+            return
         }
-        listener.onMessage(channel, value)
+        listener.onMessage(IncomingHeadphoneMessage(QCY_ADAPTER_ID, channel.sourceKey, value))
     }
 
     private fun createTransport(): GattTransport =
@@ -139,15 +132,6 @@ class QcyBleClient(
         // see startScan
     }
 
-    override fun availableChannels(): Set<TandemChannel> = setOf(
-        TandemChannel.QCY_SETTING_WRITE,
-        TandemChannel.QCY_READSET,
-        TandemChannel.QCY_BATTERY,
-        TandemChannel.QCY_VERSION,
-        TandemChannel.QCY_EQ_RAW,
-        TandemChannel.QCY_FUNCTION,
-    )
-
     /**
      * Connect using a [DiscoveredSonyDevice]. The device may have been
      * discovered through a classic BT bond listing rather than a BLE scan;
@@ -196,27 +180,15 @@ class QcyBleClient(
 
     /**
      * Send raw bytes to the QCY command characteristic (0x1001).
-     * All QCY writes ultimately go through the same write characteristic; the
-     * `channel` argument is preserved for symmetry with Sony Tandem.
+     * All QCY writes ultimately go through the same write characteristic.
      */
-    override fun sendToChannel(channel: TandemChannel, bytes: ByteArray) {
+    override fun send(bytes: ByteArray) {
         val activeTransport = transport
         if (activeTransport == null) {
-            log("Cannot write on $channel: command characteristic not available")
+            log("Cannot write: QCY command characteristic not available")
             return
         }
-        when (channel) {
-            TandemChannel.QCY_SETTING_WRITE -> activeTransport.send(bytes)
-            TandemChannel.QCY_READSET,
-            TandemChannel.QCY_BATTERY,
-            TandemChannel.QCY_VERSION,
-            TandemChannel.QCY_EQ_RAW,
-            TandemChannel.QCY_FUNCTION -> {
-                log("Write on read channel $channel routed to QCY_SETTING_WRITE")
-                activeTransport.send(bytes)
-            }
-            else -> log("Unsupported channel for QCY: $channel")
-        }
+        activeTransport.send(bytes)
     }
 
     fun getEffectiveMtu(): Int = effectiveMtu

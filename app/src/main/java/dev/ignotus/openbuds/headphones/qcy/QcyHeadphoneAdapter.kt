@@ -1,5 +1,7 @@
 package dev.ignotus.openbuds.headphones.qcy
 
+import dev.ignotus.openbuds.ble.IncomingHeadphoneMessage
+import dev.ignotus.openbuds.ble.qcy.QcyChannel
 import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
 import dev.ignotus.openbuds.headphones.ConnectedHeadphoneProfile
 import dev.ignotus.openbuds.headphones.EqDeviceConfig
@@ -16,7 +18,6 @@ import dev.ignotus.openbuds.headphones.HeadphoneTransport
 import dev.ignotus.openbuds.headphones.InfoLayoutHint
 import dev.ignotus.openbuds.headphones.PlaybackDispatchStrategy
 import dev.ignotus.openbuds.headphones.ProfileTemplate
-import dev.ignotus.openbuds.headphones.TandemChannel
 import dev.ignotus.openbuds.headphones.qcy.devices.QcyC30SProfile
 import dev.ignotus.openbuds.protocol.AmbientSoundMode
 import dev.ignotus.openbuds.protocol.EqPresetId
@@ -33,13 +34,8 @@ import dev.ignotus.openbuds.protocol.unsigned
  * HeadphoneAdapter implementation for QCY headphones.
  *
  * Protocol layout:
- *   - Writes go to `TandemChannel.QCY_SETTING_WRITE` → 0x1001 characteristic.
- *   - Notifications/reads dispatched per characteristic:
- *       0x1002 → QCY_READSET (TLV multi-entry response)
- *       0x0008 → QCY_BATTERY (raw 3-byte battery, MSB = charging flag)
- *       0x0007 → QCY_VERSION (raw 6 bytes: L/R firmware triples)
- *       0x000F → QCY_FUNCTION (raw 2 bytes: RUER, JIANTING)
- *       0x000B → QCY_EQ_RAW (raw EQ data, 6B/band or 7B/band)
+ *   - Writes go to QCY's 0x1001 characteristic.
+ *   - Notifications/reads are dispatched by brand-private QCY source keys.
  *
  * Reference:
  *   QCY_C30S_PROTOCOL.md
@@ -106,7 +102,7 @@ object QcyHeadphoneAdapter : HeadphoneAdapter {
     // ── Command builders ─────────────────────────────────────────
 
     private fun writeCommand(label: String, bytes: ByteArray): HeadphoneCommand =
-        HeadphoneCommand(label = label, bytes = bytes, channel = TandemChannel.QCY_SETTING_WRITE)
+        HeadphoneCommand(label = label, bytes = bytes)
 
     override fun buildRefreshCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> =
         buildList {
@@ -262,17 +258,18 @@ object QcyHeadphoneAdapter : HeadphoneAdapter {
 
     override fun parse(
         profile: ConnectedHeadphoneProfile,
-        channel: TandemChannel,
-        raw: ByteArray,
-    ): ParsedHeadphoneResponse = when (channel) {
-        TandemChannel.QCY_BATTERY -> parseQcyBattery(raw)
-        TandemChannel.QCY_VERSION -> parseQcyVersionRaw(raw)
-        TandemChannel.QCY_FUNCTION -> parseQcyFunctionStatus(raw)
-        TandemChannel.QCY_EQ_RAW -> parseQcyEqRaw(raw)
-        TandemChannel.QCY_READSET -> parseQcyReadset(raw)
-        TandemChannel.QCY_SETTING_WRITE -> // write echo, unusual; try TLV anyway
-            parseQcyReadset(raw)
-        else -> ParsedHeadphoneResponse.SonyTandem.Unknown(null, null, byteArrayOf(), raw)
+        message: IncomingHeadphoneMessage,
+    ): ParsedHeadphoneResponse {
+        val raw = message.raw
+        val qc = QcyChannel.fromSourceKey(message.sourceKey) ?: QcyChannel.READSET
+        return when (qc) {
+            QcyChannel.BATTERY -> parseQcyBattery(raw)
+            QcyChannel.VERSION -> parseQcyVersionRaw(raw)
+            QcyChannel.FUNCTION -> parseQcyFunctionStatus(raw)
+            QcyChannel.EQ_RAW -> parseQcyEqRaw(raw)
+            QcyChannel.READSET -> parseQcyReadset(raw)
+            QcyChannel.SETTING_WRITE -> parseQcyReadset(raw)
+        }
     }
 
     private fun parseQcyVersionRaw(raw: ByteArray): ParsedHeadphoneResponse {

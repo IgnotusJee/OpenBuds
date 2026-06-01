@@ -12,7 +12,6 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 import dev.ignotus.openbuds.ble.HeadphoneTransportClient
 import dev.ignotus.openbuds.ble.HeadphoneTransportListener
-import dev.ignotus.openbuds.headphones.TandemChannel
 import java.util.UUID
 
 class SonyTandemTransportClient(
@@ -108,13 +107,10 @@ class SonyTandemTransportClient(
         activeSession = null
     }
 
-    override fun sendToChannel(channel: TandemChannel, bytes: ByteArray) {
-        activeSession?.sendToChannel(channel, bytes)
+    override fun send(bytes: ByteArray) {
+        activeSession?.send(bytes)
             ?: listener.onBluetoothUnavailable("No Sony Tandem transport is connected")
     }
-
-    override fun availableChannels(): Set<TandemChannel> =
-        activeSession?.availableChannels().orEmpty()
 
     override fun refreshUnsupportedEndpointProbe() {
         activeSession?.refreshUnsupportedEndpointProbe()

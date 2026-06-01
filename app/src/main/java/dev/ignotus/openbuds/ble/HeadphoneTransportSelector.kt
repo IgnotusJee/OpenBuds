@@ -1,7 +1,6 @@
 package dev.ignotus.openbuds.ble
 
 import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
-import dev.ignotus.openbuds.headphones.TandemChannel
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -79,7 +78,7 @@ class HeadphoneTransportSelector(
 
     /**
      * Connect to [device] using the appropriate client.
-     * Sets [activeClient] for subsequent sendToChannel/disconnect calls.
+     * Sets [activeClient] for subsequent send/disconnect calls.
      */
     fun connect(device: DiscoveredSonyDevice) {
         val client = pickFor(device)
@@ -106,13 +105,10 @@ class HeadphoneTransportSelector(
         activeClient = null
     }
 
-    fun sendToChannel(channel: TandemChannel, bytes: ByteArray) {
-        activeClient?.sendToChannel(channel, bytes)
-            ?: error("No active transport client; cannot send on $channel")
+    fun send(bytes: ByteArray) {
+        activeClient?.send(bytes)
+            ?: error("No active transport client; cannot send protocol bytes")
     }
-
-    fun availableChannels(): Set<TandemChannel> =
-        activeClient?.availableChannels() ?: emptySet()
 
     fun refreshUnsupportedEndpointProbe() {
         activeClient?.refreshUnsupportedEndpointProbe()

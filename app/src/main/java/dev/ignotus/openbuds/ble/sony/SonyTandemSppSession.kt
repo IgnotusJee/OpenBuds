@@ -6,10 +6,10 @@ import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothSocket
 import dev.ignotus.openbuds.ble.HeadphoneConnectionInfo
 import dev.ignotus.openbuds.ble.HeadphoneTransportListener
+import dev.ignotus.openbuds.ble.IncomingHeadphoneMessage
 import dev.ignotus.openbuds.ble.transport.SppTransport
 import dev.ignotus.openbuds.ble.transport.TransportInfo
 import dev.ignotus.openbuds.ble.transport.TransportListener
-import dev.ignotus.openbuds.headphones.TandemChannel
 import java.io.IOException
 import java.util.UUID
 
@@ -65,7 +65,7 @@ internal class SonyTandemSppSession(
                         }
 
                         override fun onMessage(bytes: ByteArray) {
-                            listener.onMessage(TandemChannel.SPP_MDR, bytes)
+                            listener.onMessage(IncomingHeadphoneMessage(SONY_ADAPTER_ID, SonyChannel.SPP_MDR.sourceKey, bytes))
                         }
 
                         override fun onDisconnected(reason: String?) {
@@ -103,13 +103,20 @@ internal class SonyTandemSppSession(
         if (notify) listener.onConnectionStateChanged(false, connectedDevice)
     }
 
-    override fun sendToChannel(channel: TandemChannel, bytes: ByteArray) {
+    override fun send(bytes: ByteArray) {
         sppTransport?.send(bytes)
             ?: listener.onBluetoothUnavailable("SPP channel is not available")
     }
 
-    override fun availableChannels(): Set<TandemChannel> =
-        if (sppTransport != null) setOf(TandemChannel.SPP_MDR) else emptySet()
+    override fun sendToChannel(channel: SonyChannel, bytes: ByteArray) {
+        if (channel != SonyChannel.SPP_MDR) {
+            log("SPP session ignoring requested Sony channel $channel; sending over SPP")
+        }
+        send(bytes)
+    }
+
+    override fun availableChannels(): Set<SonyChannel> =
+        if (sppTransport != null) setOf(SonyChannel.SPP_MDR) else emptySet()
 
     @SuppressLint("MissingPermission")
     private fun resolveSppRemoteDevice(

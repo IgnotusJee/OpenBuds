@@ -11,7 +11,7 @@ import android.content.Context
 import android.os.Build
 import dev.ignotus.openbuds.ble.HeadphoneConnectionInfo
 import dev.ignotus.openbuds.ble.HeadphoneTransportListener
-import dev.ignotus.openbuds.headphones.TandemChannel
+import dev.ignotus.openbuds.ble.IncomingHeadphoneMessage
 import dev.ignotus.openbuds.protocol.hexString
 import dev.ignotus.openbuds.protocol.sony.SonyGatt
 import java.util.UUID
@@ -43,7 +43,7 @@ internal class SonyTandemGattSession(
     private var gatt: BluetoothGatt? = null
     private var toAcc: BluetoothGattCharacteristic? = null
     private var fromAcc: BluetoothGattCharacteristic? = null
-    private val gattEndpoints: MutableMap<TandemChannel, GattTandemEndpoint> = mutableMapOf()
+    private val gattEndpoints: MutableMap<SonyChannel, GattTandemEndpoint> = mutableMapOf()
     private var writableValueLength: Int? = null
     private var optimalMtu: Int? = null
     private var negotiatedMtu: Int = 23
@@ -77,12 +77,12 @@ internal class SonyTandemGattSession(
             val service = gatt.getService(SonyGatt.TANDEM_V2_HPC_SERVICE)
             if (service != null) {
                 log("Tandem V2 HPC service discovered")
-                val hpcSpec = TandemGattRouting.endpointSpecFor(TandemChannel.GATT_V2_HPC)
+                val hpcSpec = TandemGattRouting.endpointSpecFor(SonyChannel.GATT_V2_HPC)
                 toAcc = service.getCharacteristic(hpcSpec.toAccUuid)
                 fromAcc = service.getCharacteristic(hpcSpec.fromAccUuid)
                 if (toAcc != null && fromAcc != null) {
-                    gattEndpoints[TandemChannel.GATT_V2_HPC] = GattTandemEndpoint(
-                        channel = TandemChannel.GATT_V2_HPC,
+                    gattEndpoints[SonyChannel.GATT_V2_HPC] = GattTandemEndpoint(
+                        channel = SonyChannel.GATT_V2_HPC,
                         toAcc = toAcc!!,
                         fromAcc = fromAcc!!,
                     )
@@ -221,12 +221,16 @@ internal class SonyTandemGattSession(
         }
     }
 
-    override fun sendToChannel(channel: TandemChannel, bytes: ByteArray) {
+    override fun send(bytes: ByteArray) {
+        sendToChannel(routeOutbound(bytes), bytes)
+    }
+
+    override fun sendToChannel(channel: SonyChannel, bytes: ByteArray) {
         log("TX $channel ${bytes.hexString()}")
         writeToChannel(channel, bytes)
     }
 
-    override fun availableChannels(): Set<TandemChannel> = gattEndpoints.keys.toSet()
+    override fun availableChannels(): Set<SonyChannel> = gattEndpoints.keys.toSet()
 
     private fun clearGattState() {
         writeQueue.clear()
@@ -240,7 +244,7 @@ internal class SonyTandemGattSession(
         unsupportedProbe = null
     }
 
-    private fun writeToChannel(channel: TandemChannel, bytes: ByteArray) {
+    private fun writeToChannel(channel: SonyChannel, bytes: ByteArray) {
         if (channel !in gattEndpoints) {
             listener.onBluetoothUnavailable("Channel $channel is not available (available: ${availableChannels()})")
             return
@@ -315,7 +319,7 @@ internal class SonyTandemGattSession(
             ?: TandemGattRouting.fromAccChannelFor(characteristic.service?.uuid, uuid)
             ?: gattEndpoints.keys.singleOrNull()
             ?: defaultGattWriteChannel()
-        listener.onMessage(channel, value)
+        listener.onMessage(IncomingHeadphoneMessage(SONY_ADAPTER_ID, channel.sourceKey, value))
     }
 
     private fun requestLargeMtu(gatt: BluetoothGatt) {
@@ -469,15 +473,26 @@ internal class SonyTandemGattSession(
         }
     }
 
-    private fun defaultGattWriteChannel(): TandemChannel = when {
-        TandemChannel.GATT_V2_HPC in gattEndpoints -> TandemChannel.GATT_V2_HPC
-        TandemChannel.GATT_V1_MC in gattEndpoints -> TandemChannel.GATT_V1_MC
-        TandemChannel.GATT_V2_MC in gattEndpoints -> TandemChannel.GATT_V2_MC
-        else -> TandemChannel.GATT_V2_HPC
+    private fun routeOutbound(bytes: ByteArray): SonyChannel =
+        if (bytes.firstOrNull() == 0x0F.toByte()) {
+            when {
+                SonyChannel.GATT_V2_MC in gattEndpoints -> SonyChannel.GATT_V2_MC
+                SonyChannel.GATT_V1_MC in gattEndpoints -> SonyChannel.GATT_V1_MC
+                else -> defaultGattWriteChannel()
+            }
+        } else {
+            defaultGattWriteChannel()
+        }
+
+    private fun defaultGattWriteChannel(): SonyChannel = when {
+        SonyChannel.GATT_V2_HPC in gattEndpoints -> SonyChannel.GATT_V2_HPC
+        SonyChannel.GATT_V1_MC in gattEndpoints -> SonyChannel.GATT_V1_MC
+        SonyChannel.GATT_V2_MC in gattEndpoints -> SonyChannel.GATT_V2_MC
+        else -> SonyChannel.GATT_V2_HPC
     }
 
     private fun gattTransportLabel(): String =
-        if (TandemChannel.GATT_V2_HPC in gattEndpoints) "GATT_HPC" else "GATT_MC"
+        if (SonyChannel.GATT_V2_HPC in gattEndpoints) "GATT_HPC" else "GATT_MC"
 
     private fun beginUnsupportedEndpointProbe(gatt: BluetoothGatt, services: List<UUID>, reason: String) {
         val serviceLabels = services.map { SonyGatt.serviceLabel(it) }
@@ -562,7 +577,7 @@ internal class SonyTandemGattSession(
         }
 
     private fun discoverMcEndpoints(gatt: BluetoothGatt) {
-        for (channel in listOf(TandemChannel.GATT_V2_MC, TandemChannel.GATT_V1_MC)) {
+        for (channel in listOf(SonyChannel.GATT_V2_MC, SonyChannel.GATT_V1_MC)) {
             val spec = TandemGattRouting.endpointSpecFor(channel)
             val service = gatt.getService(spec.serviceUuid) ?: continue
             val mcToAcc = service.getCharacteristic(spec.toAccUuid)

@@ -1,13 +1,12 @@
 package dev.ignotus.openbuds.ble.sony
 
-import dev.ignotus.openbuds.headphones.TandemChannel
-
 internal interface SonyTandemSession {
     val connectedDevice: DiscoveredSonyDevice?
 
     fun connect()
     fun disconnect(notify: Boolean)
-    fun sendToChannel(channel: TandemChannel, bytes: ByteArray)
-    fun availableChannels(): Set<TandemChannel>
+    fun send(bytes: ByteArray)
+    fun sendToChannel(channel: SonyChannel, bytes: ByteArray)
+    fun availableChannels(): Set<SonyChannel>
     fun refreshUnsupportedEndpointProbe() {}
 }

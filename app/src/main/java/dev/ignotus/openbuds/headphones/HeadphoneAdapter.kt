@@ -1,6 +1,7 @@
 package dev.ignotus.openbuds.headphones
 
 import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
+import dev.ignotus.openbuds.ble.IncomingHeadphoneMessage
 import dev.ignotus.openbuds.headphones.qcy.QcyHeadphoneAdapter
 import dev.ignotus.openbuds.headphones.sony.EqProtocolEngine
 import dev.ignotus.openbuds.headphones.sony.SonyTandemHeadphoneAdapter
@@ -48,40 +49,11 @@ enum class HeadphoneFeature {
 enum class HeadphoneTransport {
     UNKNOWN,
     SPP,
+    GATT,
     GATT_HPC,
     GATT_MC,
+    QCY_GATT,
     UNSUPPORTED_LE_ENDPOINT,
-}
-
-enum class TandemChannel {
-    SPP_MDR,
-    GATT_V2_HPC,
-    GATT_V2_MC,
-    GATT_V1_MC,
-    // QCY channels — one per source characteristic so the adapter can dispatch
-    // raw bytes to the correct parser. All writes go to QCY_SETTING_WRITE.
-    QCY_SETTING_WRITE,  // 0x1001 — command write channel
-    QCY_READSET,        // 0x1002 — TLV response notifications
-    QCY_BATTERY,        // 0x0008 — battery notifications/reads
-    QCY_VERSION,        // 0x0007 — firmware version reads
-    QCY_EQ_RAW,         // 0x000B — raw EQ data reads/notifications
-    QCY_FUNCTION,       // 0x000F — boolean feature status (RUER, JIANTING)
-    ;
-
-    companion object {
-        fun fromServiceUuid(uuid: java.util.UUID): TandemChannel? {
-            // Lazy-init to avoid circular dependency with SonyGatt
-            val v2Hpc = java.util.UUID.fromString("5b833e20-6bc7-4802-8e9a-723ceca4bd8f")
-            val v2Mc = java.util.UUID.fromString("5b833e21-6bc7-4802-8e9a-723ceca4bd8f")
-            val v1Mc = java.util.UUID.fromString("5b833e23-6bc7-4802-8e9a-723ceca4bd8f")
-            return when (uuid) {
-                v2Hpc -> GATT_V2_HPC
-                v2Mc -> GATT_V2_MC
-                v1Mc -> GATT_V1_MC
-                else -> null
-            }
-        }
-    }
 }
 
 enum class PlaybackDispatchStrategy {
@@ -93,7 +65,6 @@ enum class PlaybackDispatchStrategy {
 data class FeatureProtocolBinding(
     val feature: HeadphoneFeature,
     val variant: HeadphoneProtocolVariant,
-    val channel: TandemChannel,
     val queryTypes: List<Any> = emptyList(),
     val writableTypes: Set<Any> = emptySet(),
 )
@@ -101,15 +72,14 @@ data class FeatureProtocolBinding(
 data class HeadphoneCommand(
     val label: String,
     val bytes: ByteArray,
-    val channel: TandemChannel,
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is HeadphoneCommand) return false
-        return label == other.label && channel == other.channel && bytes.contentEquals(other.bytes)
+        return label == other.label && bytes.contentEquals(other.bytes)
     }
 
-    override fun hashCode(): Int = 31 * (31 * label.hashCode() + channel.hashCode()) + bytes.contentHashCode()
+    override fun hashCode(): Int = 31 * label.hashCode() + bytes.contentHashCode()
 }
 
 data class EqWriteContext(
@@ -157,19 +127,6 @@ data class ConnectedHeadphoneProfile(
     fun protocolFor(feature: HeadphoneFeature): HeadphoneProtocolVariant =
         featureBindings[feature]?.variant ?: featureProtocolMap[feature] ?: HeadphoneProtocolVariant.UNKNOWN
     fun bindingFor(feature: HeadphoneFeature): FeatureProtocolBinding? = featureBindings[feature]
-    fun channelFor(feature: HeadphoneFeature): TandemChannel =
-        featureBindings[feature]?.channel
-            ?: protocolFor(feature)
-                .takeIf { it != HeadphoneProtocolVariant.UNKNOWN }
-                ?.let(::defaultChannelFor)
-            ?: error("No protocol channel binding for $feature on $modelName")
-
-    fun defaultResponseChannel(): TandemChannel =
-        featureBindings.values
-            .firstOrNull { it.channel == TandemChannel.GATT_V2_HPC }
-            ?.channel
-            ?: featureBindings.values.firstOrNull()?.channel
-            ?: TandemChannel.SPP_MDR
 }
 
 data class ProfileTemplate(
@@ -194,7 +151,6 @@ data class ProfileTemplate(
             FeatureProtocolBinding(
                 feature = feature,
                 variant = variant,
-                channel = defaultChannelFor(variant),
                 queryTypes = queryTypesFor(feature),
                 writableTypes = writableTypesFor(feature),
             )
@@ -316,10 +272,10 @@ interface HeadphoneAdapter {
     fun buildPlaybackCommands(profile: ConnectedHeadphoneProfile, control: PlaybackControl): List<HeadphoneCommand> =
         emptyList()
 
-    fun parse(profile: ConnectedHeadphoneProfile, channel: TandemChannel, raw: ByteArray): ParsedHeadphoneResponse
+    fun parse(profile: ConnectedHeadphoneProfile, message: IncomingHeadphoneMessage): ParsedHeadphoneResponse
 
     fun parse(profile: ConnectedHeadphoneProfile, raw: ByteArray): ParsedHeadphoneResponse =
-        parse(profile, profile.defaultResponseChannel(), raw)
+        parse(profile, IncomingHeadphoneMessage(id, "default", raw))
 
     fun canWrite(profile: ConnectedHeadphoneProfile, feature: HeadphoneFeature): Boolean =
         profile.supports(feature)
@@ -386,8 +342,8 @@ object HeadphoneAdapterRegistry {
     fun buildPlaybackCommands(profile: ConnectedHeadphoneProfile, control: PlaybackControl): List<HeadphoneCommand> =
         adapterFor(profile).buildPlaybackCommands(profile, control)
 
-    fun parse(profile: ConnectedHeadphoneProfile, channel: TandemChannel, raw: ByteArray): ParsedHeadphoneResponse =
-        adapterFor(profile).parse(profile, channel, raw)
+    fun parse(profile: ConnectedHeadphoneProfile, message: IncomingHeadphoneMessage): ParsedHeadphoneResponse =
+        adapterFor(profile).parse(profile, message)
 
     fun parse(profile: ConnectedHeadphoneProfile, raw: ByteArray): ParsedHeadphoneResponse =
         adapterFor(profile).parse(profile, raw)
@@ -404,13 +360,3 @@ fun String.normalizedModelName(): String =
     uppercase()
         .removePrefix("LE_")
         .replace(Regex("[\\s\\-_.]+"), "")
-
-fun defaultChannelFor(variant: HeadphoneProtocolVariant): TandemChannel =
-    when (variant) {
-        HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1,
-        HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE2 -> TandemChannel.GATT_V1_MC
-        HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE2 -> TandemChannel.GATT_V2_MC
-        HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1 -> TandemChannel.GATT_V2_HPC
-        HeadphoneProtocolVariant.QCY -> TandemChannel.QCY_SETTING_WRITE
-        HeadphoneProtocolVariant.UNKNOWN -> error("Unknown protocol variant has no default channel")
-    }

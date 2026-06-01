@@ -1,5 +1,7 @@
 package dev.ignotus.openbuds.headphones
 
+import dev.ignotus.openbuds.ble.IncomingHeadphoneMessage
+import dev.ignotus.openbuds.ble.qcy.QcyChannel
 import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
 import dev.ignotus.openbuds.headphones.qcy.QcyHeadphoneAdapter
 import dev.ignotus.openbuds.protocol.ParsedHeadphoneResponse
@@ -24,12 +26,15 @@ class QcyAdapterParseTest {
     private fun hex(s: String): ByteArray =
         s.replace(" ", "").chunked(2).map { it.toInt(16).toByte() }.toByteArray()
 
+    private fun message(channel: QcyChannel, raw: ByteArray): IncomingHeadphoneMessage =
+        IncomingHeadphoneMessage(adapterId = "qcy", sourceKey = channel.sourceKey, raw = raw)
+
     // ── Battery (0x0008) ────────────────────────────────────────────
 
     @Test
     fun parseQcyBattery_charging_bitDecodedFromHighBit() {
         // L=100 (0x64) not charging, R=100|0x80=0xE4 charging, Case=50 (0x32) not charging
-        val parsed = adapter.parse(profile, TandemChannel.QCY_BATTERY, hex("64 E4 32"))
+        val parsed = adapter.parse(profile, message(QcyChannel.BATTERY, hex("64 E4 32")))
         assertTrue(parsed is ParsedHeadphoneResponse.Qcy.Battery)
         parsed as ParsedHeadphoneResponse.Qcy.Battery
         assertEquals(100, parsed.leftLevel)
@@ -42,7 +47,7 @@ class QcyAdapterParseTest {
 
     @Test
     fun parseQcyBattery_partialData_defaultsZero() {
-        val parsed = adapter.parse(profile, TandemChannel.QCY_BATTERY, hex("32"))
+        val parsed = adapter.parse(profile, message(QcyChannel.BATTERY, hex("32")))
         parsed as ParsedHeadphoneResponse.Qcy.Battery
         assertEquals(50, parsed.leftLevel)
         assertEquals(0, parsed.rightLevel)
@@ -53,7 +58,7 @@ class QcyAdapterParseTest {
 
     @Test
     fun parseQcyVersionRaw_sixBytes_splitsLeftAndRight() {
-        val parsed = adapter.parse(profile, TandemChannel.QCY_VERSION, hex("01 02 03 04 05 06"))
+        val parsed = adapter.parse(profile, message(QcyChannel.VERSION, hex("01 02 03 04 05 06")))
         parsed as ParsedHeadphoneResponse.Qcy.DeviceInfo
         assertEquals("1.2.3", parsed.leftFirmware)
         assertEquals("4.5.6", parsed.rightFirmware)
@@ -63,7 +68,7 @@ class QcyAdapterParseTest {
 
     @Test
     fun parseQcyFunctionStatus_bothFlagsOn() {
-        val parsed = adapter.parse(profile, TandemChannel.QCY_FUNCTION, hex("01 01"))
+        val parsed = adapter.parse(profile, message(QcyChannel.FUNCTION, hex("01 01")))
         parsed as ParsedHeadphoneResponse.Qcy.FunctionStatus
         assertTrue(parsed.inEarDetectionOn)
         assertTrue(parsed.transparencyOn)
@@ -71,7 +76,7 @@ class QcyAdapterParseTest {
 
     @Test
     fun parseQcyFunctionStatus_inEarOnly() {
-        val parsed = adapter.parse(profile, TandemChannel.QCY_FUNCTION, hex("01 00"))
+        val parsed = adapter.parse(profile, message(QcyChannel.FUNCTION, hex("01 00")))
         parsed as ParsedHeadphoneResponse.Qcy.FunctionStatus
         assertTrue(parsed.inEarDetectionOn)
         assertFalse(parsed.transparencyOn)
@@ -82,7 +87,7 @@ class QcyAdapterParseTest {
     @Test
     fun parseQcyReadset_multiTlv_wrappedAsBatch() {
         // FF 06 0C 01 01 07 01 64 → CMD_NOISE_MODE + CMD_NOISE_VALUE
-        val parsed = adapter.parse(profile, TandemChannel.QCY_READSET, hex("FF 06 0C 01 01 07 01 64"))
+        val parsed = adapter.parse(profile, message(QcyChannel.READSET, hex("FF 06 0C 01 01 07 01 64")))
         assertTrue("Expected Batch, got $parsed", parsed is ParsedHeadphoneResponse.Batch)
         parsed as ParsedHeadphoneResponse.Batch
         assertEquals(2, parsed.items.size)
@@ -97,7 +102,7 @@ class QcyAdapterParseTest {
     @Test
     fun parseQcyReadset_singleTlv_unwrapped() {
         // FF 03 16 01 32 → balance set to center
-        val parsed = adapter.parse(profile, TandemChannel.QCY_READSET, hex("FF 03 16 01 32"))
+        val parsed = adapter.parse(profile, message(QcyChannel.READSET, hex("FF 03 16 01 32")))
         // Balance CMD (0x16) is not currently mapped → returns Unknown
         // The point of the test: single-TLV frames must NOT return as Batch.
         assertFalse(parsed is ParsedHeadphoneResponse.Batch)
@@ -110,7 +115,7 @@ class QcyAdapterParseTest {
         // body = [eqType=0][mg=0,0][freq=1000,0=E803][gain=350=5E01][q=120=7800][bandType=0]
         // total = 3 + 7 = 10 bytes
         val raw = hex("00 00 00 E8 03 5E 01 78 00 00")
-        val parsed = adapter.parse(profile, TandemChannel.QCY_EQ_RAW, raw)
+        val parsed = adapter.parse(profile, message(QcyChannel.EQ_RAW, raw))
         parsed as ParsedHeadphoneResponse.Qcy.EqData
         assertEquals(1, parsed.bands.size)
         assertEquals(1000, parsed.bands[0].frequency)

@@ -1,21 +1,16 @@
 package dev.ignotus.openbuds.headphones
 
 import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
-import dev.ignotus.openbuds.headphones.sony.SonyTandemV1Table1Codec
-import dev.ignotus.openbuds.headphones.sony.SonyTandemV1Table2Codec
-import dev.ignotus.openbuds.headphones.sony.SonyTandemV2Table1Codec
-import dev.ignotus.openbuds.headphones.sony.SonyTandemV2Table2Codec
 import dev.ignotus.openbuds.protocol.sony.PlaybackControl
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
-import org.junit.Assert.fail
 import org.junit.Test
 import java.io.File
 
 class ProtocolCompatibilityArchitectureTest {
     @Test
-    fun profileBindingsBackProtocolForAndCarryChannels() {
+    fun profileBindingsBackProtocolForWithoutChannels() {
         val profile = HeadphoneAdapterRegistry.resolve(
             DiscoveredSonyDevice(
                 name = "LinkBuds S",
@@ -29,32 +24,10 @@ class ProtocolCompatibilityArchitectureTest {
         val binding = profile.bindingFor(HeadphoneFeature.NOISE_CONTROL)
         requireNotNull(binding)
         assertEquals(profile.protocolFor(HeadphoneFeature.NOISE_CONTROL), binding.variant)
-        assertEquals(TandemChannel.GATT_V2_HPC, binding.channel)
     }
 
     @Test
-    fun protocolDefaultChannelsMatchGattRouting() {
-        assertEquals(TandemChannel.GATT_V1_MC, defaultChannelFor(HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE1))
-        assertEquals(TandemChannel.GATT_V2_MC, defaultChannelFor(HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE2))
-        assertEquals(TandemChannel.GATT_V1_MC, defaultChannelFor(HeadphoneProtocolVariant.SONY_TANDEM_V1_TABLE2))
-        assertEquals(TandemChannel.GATT_V2_HPC, defaultChannelFor(HeadphoneProtocolVariant.SONY_TANDEM_V2_TABLE1))
-        try {
-            defaultChannelFor(HeadphoneProtocolVariant.UNKNOWN)
-            fail("UNKNOWN protocol must not silently default to a concrete channel")
-        } catch (_: IllegalStateException) {
-        }
-    }
-
-    @Test
-    fun codecDefaultChannelsMatchProtocolDefaults() {
-        assertEquals(TandemChannel.GATT_V1_MC, SonyTandemV1Table1Codec.defaultChannel)
-        assertEquals(TandemChannel.GATT_V1_MC, SonyTandemV1Table2Codec.defaultChannel)
-        assertEquals(TandemChannel.GATT_V2_HPC, SonyTandemV2Table1Codec.defaultChannel)
-        assertEquals(TandemChannel.GATT_V2_MC, SonyTandemV2Table2Codec.defaultChannel)
-    }
-
-    @Test
-    fun playbackCommandsAreTandemFirstForStaticProfiles() {
+    fun playbackCommandsArePlainProtocolBytes() {
         val profile = HeadphoneAdapterRegistry.resolve(
             DiscoveredSonyDevice(
                 name = "LinkBuds S",
@@ -67,7 +40,6 @@ class ProtocolCompatibilityArchitectureTest {
 
         assertEquals(PlaybackDispatchStrategy.TANDEM_FIRST, profile.playbackDispatchStrategy)
         val command = HeadphoneAdapterRegistry.buildPlaybackCommands(profile, PlaybackControl.PLAY).single()
-        assertEquals(TandemChannel.GATT_V2_HPC, command.channel)
         assertEquals(0xA4, command.bytes[1].toInt() and 0xFF)
         assertEquals(0x01, command.bytes[2].toInt() and 0xFF)
     }
@@ -95,10 +67,32 @@ class ProtocolCompatibilityArchitectureTest {
     }
 
     @Test
-    fun repositoryDoesNotDropCommandChannel() {
+    fun publicTransportApiDoesNotExposeChannels() {
+        val source = mainSource("ble/HeadphoneTransportClient.kt")
+        assertTrue(source.contains("fun send(bytes: ByteArray)"))
+        assertTrue(source.contains("IncomingHeadphoneMessage"))
+        assertFalse(source.contains("TransportChannelId"))
+        assertFalse(source.contains("sendToChannel"))
+        assertFalse(source.contains("availableChannels"))
+    }
+
+    @Test
+    fun publicHeadphoneModelDoesNotDefineChannelRegistry() {
+        val source = mainSource("headphones/HeadphoneAdapter.kt")
+        assertFalse(source.contains("TransportChannelId"))
+        assertFalse(source.contains("defaultChannelFor"))
+        assertFalse(source.contains("channelFor("))
+        assertFalse(source.contains("defaultResponseChannel"))
+        assertFalse(source.contains("val channel"))
+    }
+
+    @Test
+    fun repositorySendsPlainCommandBytes() {
         val source = mainSource("data/HeadphoneRepository.kt")
-        assertFalse(source.contains("send(bytes)"))
-        assertTrue(source.contains("sendToChannel(command.channel, command.bytes)"))
+        assertTrue(source.contains("transport.send(command.bytes)"))
+        assertFalse(source.contains("sendToChannel(command.channel, command.bytes)"))
+        assertFalse(source.contains("command.channel"))
+        assertFalse(source.contains("availableChannels()"))
     }
 
     @Test
