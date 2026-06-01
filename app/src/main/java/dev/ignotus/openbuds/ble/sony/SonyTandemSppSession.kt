@@ -1,4 +1,5 @@
 package dev.ignotus.openbuds.ble.sony
+import dev.ignotus.openbuds.ble.DiscoveredDevice
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
@@ -15,13 +16,13 @@ import java.util.UUID
 
 internal class SonyTandemSppSession(
     private val adapter: BluetoothAdapter?,
-    selected: DiscoveredSonyDevice,
+    selected: DiscoveredDevice,
     selectedRemote: BluetoothDevice,
     private val listener: HeadphoneTransportListener,
     private val log: (String) -> Unit,
     private val safeDeviceName: (BluetoothDevice) -> String?,
 ) : SonyTandemSession {
-    override var connectedDevice: DiscoveredSonyDevice? = null
+    override var connectedDevice: DiscoveredDevice? = null
         private set
 
     val canConnect: Boolean
@@ -120,7 +121,7 @@ internal class SonyTandemSppSession(
 
     @SuppressLint("MissingPermission")
     private fun resolveSppRemoteDevice(
-        selected: DiscoveredSonyDevice,
+        selected: DiscoveredDevice,
         selectedRemote: BluetoothDevice,
     ): BluetoothDevice? {
         if (selectedRemote.type == BluetoothDevice.DEVICE_TYPE_CLASSIC ||

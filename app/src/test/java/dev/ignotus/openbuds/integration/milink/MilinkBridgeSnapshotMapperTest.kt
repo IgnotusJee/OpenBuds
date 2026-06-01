@@ -1,6 +1,6 @@
 package dev.ignotus.openbuds.integration.milink
 
-import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
+import dev.ignotus.openbuds.ble.DiscoveredDevice
 import dev.ignotus.openbuds.data.BatteryState
 import dev.ignotus.openbuds.data.DeviceInfoState
 import dev.ignotus.openbuds.data.HeadphoneUiState
@@ -26,7 +26,7 @@ class MilinkBridgeSnapshotMapperTest {
     @Test
     fun fromUiState_mapsBatteryWearingAndCharging() {
         val state = HeadphoneUiState(
-            connectedDevice = DiscoveredSonyDevice(
+            connectedDevice = DiscoveredDevice(
                 name = "QCY C30S",
                 address = "aa:bb:cc:dd:ee:ff",
                 rssi = -40,

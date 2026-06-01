@@ -174,7 +174,7 @@ interface GattTransportListener : TransportListener {
 - `IncomingHeadphoneMessage` 使用 opaque `sourceKey`，adapter 通过 `fromSourceKey()` 解析。
 - 架构测试 `ProtocolCompatibilityArchitectureTest` 验证公共 API 无 channel 暴露。
 
-### Phase 5 — 扫描独立化
+### Phase 5 — 扫描独立化（已完成）
 
 **目标**：BLE 扫描不依附于任何一个 Transport。
 
@@ -185,16 +185,29 @@ interface GattTransportListener : TransportListener {
 
 **风险**：低。
 
-### Phase 6 — 清理收尾
+**完成状态：**
+- `SonyBleScanner` → `BleScanner`（`ble/BleScanner.kt`），`ScanListener` → `BleScanListener`
+- `DiscoveredSonyDevice` → `DiscoveredDevice`（`ble/DiscoveredDevice.kt`）
+- `HeadphoneTransportClient`、`HeadphoneTransportSelector`、`HeadphoneAdapter`、`HeadphoneRepository` 等全部使用 `DiscoveredDevice`
+- `SonyTandemTransportClient` 使用 `BleScanner` 进行扫描
+
+### Phase 6 — 清理收尾（已完成）
 
 **目标**：移除向后兼容代码，统一命名。
 
 **变更：**
-1. 移除 `HeadphoneTransportSelector`（如果不再需要）
+1. `HeadphoneTransportSelector` 保留（仍用于多品牌 transport client 路由）
 2. `DiscoveredSonyDevice` → `DiscoveredDevice`
 3. 文档更新
 
 **风险**：低。
+
+**完成状态：**
+- `DiscoveredSonyDevice.kt` 已删除，`DiscoveredDevice.kt` 在 `ble/` 包中
+- `SonyBleScanner.kt` 已删除，`BleScanner.kt` 在 `ble/` 包中
+- 所有 import 和类型引用已更新
+- `HeadphoneTransportSelector` 保留（负责 Sony/QCY transport client 路由和扫描去重）
+- 架构测试全部通过
 
 ## 不变原则
 

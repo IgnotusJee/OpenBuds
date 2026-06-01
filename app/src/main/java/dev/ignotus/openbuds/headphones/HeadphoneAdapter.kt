@@ -1,6 +1,6 @@
 package dev.ignotus.openbuds.headphones
 
-import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
+import dev.ignotus.openbuds.ble.DiscoveredDevice
 import dev.ignotus.openbuds.ble.IncomingHeadphoneMessage
 import dev.ignotus.openbuds.headphones.qcy.QcyHeadphoneAdapter
 import dev.ignotus.openbuds.headphones.sony.EqProtocolEngine
@@ -216,14 +216,14 @@ interface HeadphoneAdapter {
     val brand: String
     val protocolName: String
 
-    fun match(device: DiscoveredSonyDevice, reportedModelName: String? = null): ConnectedHeadphoneProfile?
-    fun fallbackProfile(device: DiscoveredSonyDevice): ConnectedHeadphoneProfile
+    fun match(device: DiscoveredDevice, reportedModelName: String? = null): ConnectedHeadphoneProfile?
+    fun fallbackProfile(device: DiscoveredDevice): ConnectedHeadphoneProfile
     fun withTransport(profile: ConnectedHeadphoneProfile, transport: HeadphoneTransport): ConnectedHeadphoneProfile =
         profile.copy(transport = transport)
 
     fun matchTemplate(
         template: ProfileTemplate,
-        device: DiscoveredSonyDevice,
+        device: DiscoveredDevice,
         reportedModelName: String? = null,
     ): ConnectedHeadphoneProfile? {
         val candidates = listOfNotNull(reportedModelName, device.name.removePrefix("LE_"))
@@ -284,7 +284,7 @@ interface HeadphoneAdapter {
 object HeadphoneAdapterRegistry {
     private val adapters: List<HeadphoneAdapter> = listOf(SonyTandemHeadphoneAdapter, QcyHeadphoneAdapter)
 
-    fun resolve(device: DiscoveredSonyDevice, reportedModelName: String? = null): ConnectedHeadphoneProfile {
+    fun resolve(device: DiscoveredDevice, reportedModelName: String? = null): ConnectedHeadphoneProfile {
         adapters.forEach { adapter ->
             adapter.match(device, reportedModelName)?.let { return it }
         }

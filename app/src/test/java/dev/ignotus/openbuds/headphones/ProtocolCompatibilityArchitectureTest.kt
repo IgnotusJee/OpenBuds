@@ -1,6 +1,6 @@
 package dev.ignotus.openbuds.headphones
 
-import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
+import dev.ignotus.openbuds.ble.DiscoveredDevice
 import dev.ignotus.openbuds.protocol.sony.PlaybackControl
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -12,7 +12,7 @@ class ProtocolCompatibilityArchitectureTest {
     @Test
     fun profileBindingsBackProtocolForWithoutChannels() {
         val profile = HeadphoneAdapterRegistry.resolve(
-            DiscoveredSonyDevice(
+            DiscoveredDevice(
                 name = "LinkBuds S",
                 address = "00:11:22:33:44:55",
                 rssi = 0,
@@ -29,7 +29,7 @@ class ProtocolCompatibilityArchitectureTest {
     @Test
     fun playbackCommandsArePlainProtocolBytes() {
         val profile = HeadphoneAdapterRegistry.resolve(
-            DiscoveredSonyDevice(
+            DiscoveredDevice(
                 name = "LinkBuds S",
                 address = "00:11:22:33:44:55",
                 rssi = 0,

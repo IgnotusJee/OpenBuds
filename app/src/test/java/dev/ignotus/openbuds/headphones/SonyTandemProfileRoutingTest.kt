@@ -1,7 +1,7 @@
 package dev.ignotus.openbuds.headphones
 
 import dev.ignotus.openbuds.ble.IncomingHeadphoneMessage
-import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
+import dev.ignotus.openbuds.ble.DiscoveredDevice
 import dev.ignotus.openbuds.ble.sony.SonyChannel
 import dev.ignotus.openbuds.headphones.sony.SonyTandemHeadphoneAdapter
 import dev.ignotus.openbuds.protocol.AmbientSoundMode
@@ -449,7 +449,7 @@ class SonyTandemProfileRoutingTest {
 
     @Test
     fun unknownSony_onlyHasDeviceInfoAndBattery() {
-        val device = DiscoveredSonyDevice(
+        val device = DiscoveredDevice(
             name = "Unknown Sony Device",
             address = "AA:BB:CC:DD:EE:FF",
             rssi = -60,
@@ -468,7 +468,7 @@ class SonyTandemProfileRoutingTest {
 
     @Test
     fun unknownSony_writableFeaturesAreDisabled() {
-        val device = DiscoveredSonyDevice(
+        val device = DiscoveredDevice(
             name = "Unknown Sony Device",
             address = "AA:BB:CC:DD:EE:FF",
             rssi = -60,
@@ -485,7 +485,7 @@ class SonyTandemProfileRoutingTest {
 
     @Test
     fun unknownSony_refreshCommands_areReadOnlyBasicQueries() {
-        val device = DiscoveredSonyDevice(
+        val device = DiscoveredDevice(
             name = "Sony WH-Abcd1234",
             address = "AA:BB:CC:DD:EE:FF",
             rssi = -60,
@@ -512,7 +512,7 @@ class SonyTandemProfileRoutingTest {
 
     @Test
     fun unknownSony_fallbackProfileHasNoStaticProfileEvidence() {
-        val device = DiscoveredSonyDevice(
+        val device = DiscoveredDevice(
             name = "Sony WH-Abcd1234",
             address = "AA:BB:CC:DD:EE:FF",
             rssi = -60,
@@ -530,7 +530,7 @@ class SonyTandemProfileRoutingTest {
 
     private fun xm4Profile(): ConnectedHeadphoneProfile =
         HeadphoneAdapterRegistry.resolve(
-            DiscoveredSonyDevice(
+            DiscoveredDevice(
                 name = "WH-1000XM4",
                 address = "00:11:22:33:44:55",
                 rssi = 0,
@@ -541,7 +541,7 @@ class SonyTandemProfileRoutingTest {
 
     private fun linkBudsSProfile(): ConnectedHeadphoneProfile =
         HeadphoneAdapterRegistry.resolve(
-            DiscoveredSonyDevice(
+            DiscoveredDevice(
                 name = "LinkBuds S",
                 address = "00:11:22:33:44:56",
                 rssi = 0,

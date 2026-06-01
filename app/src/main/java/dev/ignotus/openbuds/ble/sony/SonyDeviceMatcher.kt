@@ -1,9 +1,10 @@
 package dev.ignotus.openbuds.ble.sony
+import dev.ignotus.openbuds.ble.DiscoveredDevice
 
 import java.util.UUID
 
 object SonyDeviceMatcher {
-    fun matches(device: DiscoveredSonyDevice, reportedModelName: String?): Boolean {
+    fun matches(device: DiscoveredDevice, reportedModelName: String?): Boolean {
         val name = (reportedModelName ?: device.name).lowercase()
         if (name.contains("qcy")) return false
         val sonyAd = device.sonyAd != null

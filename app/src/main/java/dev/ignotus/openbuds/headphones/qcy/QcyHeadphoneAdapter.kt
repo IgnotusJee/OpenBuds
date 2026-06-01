@@ -2,7 +2,7 @@ package dev.ignotus.openbuds.headphones.qcy
 
 import dev.ignotus.openbuds.ble.IncomingHeadphoneMessage
 import dev.ignotus.openbuds.ble.qcy.QcyChannel
-import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
+import dev.ignotus.openbuds.ble.DiscoveredDevice
 import dev.ignotus.openbuds.headphones.ConnectedHeadphoneProfile
 import dev.ignotus.openbuds.headphones.EqDeviceConfig
 import dev.ignotus.openbuds.headphones.sony.EqProtocolEngine
@@ -51,7 +51,7 @@ object QcyHeadphoneAdapter : HeadphoneAdapter {
     // ── Matching ─────────────────────────────────────────────────
 
     override fun match(
-        device: DiscoveredSonyDevice,
+        device: DiscoveredDevice,
         reportedModelName: String?,
     ): ConnectedHeadphoneProfile? {
         // First try template match
@@ -70,7 +70,7 @@ object QcyHeadphoneAdapter : HeadphoneAdapter {
         return null
     }
 
-    override fun fallbackProfile(device: DiscoveredSonyDevice): ConnectedHeadphoneProfile =
+    override fun fallbackProfile(device: DiscoveredDevice): ConnectedHeadphoneProfile =
         ProfileTemplate(
             modelName = device.name.removePrefix("LE_").takeIf { it.isNotBlank() } ?: "QCY audio device",
             series = null,

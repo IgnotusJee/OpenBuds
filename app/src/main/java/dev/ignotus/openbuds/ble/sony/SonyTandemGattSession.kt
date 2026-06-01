@@ -1,4 +1,5 @@
 package dev.ignotus.openbuds.ble.sony
+import dev.ignotus.openbuds.ble.DiscoveredDevice
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothDevice
@@ -20,12 +21,12 @@ import java.util.concurrent.ConcurrentLinkedQueue
 internal class SonyTandemGattSession(
     private val context: Context,
     private val remote: BluetoothDevice,
-    discoveredDevice: DiscoveredSonyDevice,
+    discoveredDevice: DiscoveredDevice,
     private val listener: HeadphoneTransportListener,
     private val log: (String) -> Unit,
     private val safeDeviceName: (BluetoothDevice) -> String?,
 ) : SonyTandemSession {
-    override var connectedDevice: DiscoveredSonyDevice? = discoveredDevice.copy(
+    override var connectedDevice: DiscoveredDevice? = discoveredDevice.copy(
         name = if (discoveredDevice.name == "Unknown BLE device") {
             safeDeviceName(remote) ?: "Sony audio device"
         } else {
@@ -591,7 +592,7 @@ internal class SonyTandemGattSession(
         }
     }
 
-    private fun preferredTransport(device: BluetoothDevice, discovered: DiscoveredSonyDevice): Int =
+    private fun preferredTransport(device: BluetoothDevice, discovered: DiscoveredDevice): Int =
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             when (device.type) {
                 BluetoothDevice.DEVICE_TYPE_LE -> BluetoothDevice.TRANSPORT_LE

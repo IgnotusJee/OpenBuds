@@ -1,6 +1,6 @@
 package dev.ignotus.openbuds.ble
 
-import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
+import dev.ignotus.openbuds.ble.DiscoveredDevice
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -39,7 +39,7 @@ class HeadphoneTransportSelector(
      * Returns the first client whose [HeadphoneTransportClient.matches] returns true.
      * Order of [clients] determines priority (first wins).
      */
-    fun pickFor(device: DiscoveredSonyDevice, reportedModelName: String? = null): HeadphoneTransportClient? =
+    fun pickFor(device: DiscoveredDevice, reportedModelName: String? = null): HeadphoneTransportClient? =
         clients.firstOrNull { it.matches(device, reportedModelName) }
 
     // ── Scan aggregation ─────────────────────────────────────────
@@ -64,7 +64,7 @@ class HeadphoneTransportSelector(
      * Returns true if the device should be suppressed (already seen within
      * the dedup window).
      */
-    fun isDuplicateScanResult(device: DiscoveredSonyDevice): Boolean {
+    fun isDuplicateScanResult(device: DiscoveredDevice): Boolean {
         val now = System.currentTimeMillis()
         val lastSeen = dedupCache[device.address]
         if (lastSeen != null && now - lastSeen < dedupWindowMs) {
@@ -80,7 +80,7 @@ class HeadphoneTransportSelector(
      * Connect to [device] using the appropriate client.
      * Sets [activeClient] for subsequent send/disconnect calls.
      */
-    fun connect(device: DiscoveredSonyDevice) {
+    fun connect(device: DiscoveredDevice) {
         val client = pickFor(device)
             ?: throw IllegalArgumentException("No transport client matches device: ${device.name} (${device.address})")
         activeClient = client
@@ -91,7 +91,7 @@ class HeadphoneTransportSelector(
      * Connect using a raw address/name. Picks the client based on the name.
      */
     fun connect(address: String, name: String) {
-        val device = DiscoveredSonyDevice(
+        val device = DiscoveredDevice(
             name = name,
             address = address,
             rssi = 0,

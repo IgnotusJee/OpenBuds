@@ -1,6 +1,6 @@
 package dev.ignotus.openbuds.headphones
 
-import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
+import dev.ignotus.openbuds.ble.DiscoveredDevice
 import dev.ignotus.openbuds.headphones.sony.SonyTandemHeadphoneAdapter
 import dev.ignotus.openbuds.protocol.EqPresetId
 import dev.ignotus.openbuds.protocol.NoiseControlMode
@@ -137,7 +137,7 @@ class SonyTandemHeadphoneAdapterTest {
     @Test
     fun match_linkBudsS_usesV2Table1AndTrueWirelessBattery() {
         val profile = HeadphoneAdapterRegistry.resolve(
-            DiscoveredSonyDevice(
+            DiscoveredDevice(
                 name = "LinkBuds S",
                 address = "00:11:22:33:44:56",
                 rssi = 0,
@@ -227,7 +227,7 @@ class SonyTandemHeadphoneAdapterTest {
     @Test
     fun parse_linkBudsSNcAsmResponse_routesToV2Parser_returnsNoiseControl() {
         val profile = HeadphoneAdapterRegistry.resolve(
-            DiscoveredSonyDevice(
+            DiscoveredDevice(
                 name = "LinkBuds S",
                 address = "00:11:22:33:44:56",
                 rssi = 0,
@@ -273,7 +273,7 @@ class SonyTandemHeadphoneAdapterTest {
     @Test
     fun registry_resolvesWh1000xm4WithSpaces() {
         val profile = HeadphoneAdapterRegistry.resolve(
-            DiscoveredSonyDevice(
+            DiscoveredDevice(
                 name = "WH 1000XM4",
                 address = "00:11:22:33:44:55",
                 rssi = 0,
@@ -287,7 +287,7 @@ class SonyTandemHeadphoneAdapterTest {
     @Test
     fun registry_resolvesWh1000xm4WithUnderscores() {
         val profile = HeadphoneAdapterRegistry.resolve(
-            DiscoveredSonyDevice(
+            DiscoveredDevice(
                 name = "WH_1000XM4",
                 address = "00:11:22:33:44:55",
                 rssi = 0,
@@ -298,8 +298,8 @@ class SonyTandemHeadphoneAdapterTest {
         assertEquals("WH-1000XM4", profile.modelName)
     }
 
-    private fun xm4Device(): DiscoveredSonyDevice =
-        DiscoveredSonyDevice(
+    private fun xm4Device(): DiscoveredDevice =
+        DiscoveredDevice(
             name = "WH-1000XM4",
             address = "00:11:22:33:44:55",
             rssi = 0,

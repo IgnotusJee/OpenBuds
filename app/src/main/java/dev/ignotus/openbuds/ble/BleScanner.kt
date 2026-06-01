@@ -1,4 +1,4 @@
-package dev.ignotus.openbuds.ble.sony
+package dev.ignotus.openbuds.ble
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -15,13 +15,16 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
+import dev.ignotus.openbuds.ble.sony.SonyAudioAdParser
+import dev.ignotus.openbuds.ble.sony.SonyAudioAdvertisement
+import dev.ignotus.openbuds.ble.sony.SonyDeviceMatcher
 import dev.ignotus.openbuds.protocol.hexString
 
 /**
- * Listener for scan events from [SonyBleScanner].
+ * Listener for scan events from [BleScanner].
  */
-interface ScanListener {
-    fun onDeviceFound(device: DiscoveredSonyDevice)
+interface BleScanListener {
+    fun onDeviceFound(device: DiscoveredDevice)
     fun onScanStateChanged(scanning: Boolean)
     fun onBluetoothUnavailable(reason: String)
     fun onLog(message: String)
@@ -36,12 +39,12 @@ interface ScanListener {
  * - Sony Audio Advertisement parsing via [SonyAudioAdParser]
  * - Device candidate filtering via [isHeadphoneCandidate]
  *
- * Scan results are forwarded to [ScanListener] for the caller to handle
+ * Scan results are forwarded to [BleScanListener] for the caller to handle
  * deduplication and routing.
  */
-class SonyBleScanner(
+class BleScanner(
     private val context: Context,
-    private val listener: ScanListener,
+    private val listener: BleScanListener,
 ) {
     private val bluetoothManager =
         context.getSystemService(Context.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager
@@ -65,7 +68,7 @@ class SonyBleScanner(
             val manufacturerData = result.scanRecord?.manufacturerSummary().orEmpty()
             val serviceData = result.scanRecord?.serviceDataSummary().orEmpty()
             val sonyAd = result.scanRecord?.sonyAudioAdvertisement()
-            val found = DiscoveredSonyDevice(
+            val found = DiscoveredDevice(
                 name = name ?: "Unknown BLE device",
                 address = device.address,
                 rssi = result.rssi,
@@ -206,7 +209,7 @@ class SonyBleScanner(
         if (!SonyDeviceMatcher.isHeadphoneCandidate(name)) return
 
         listener.onDeviceFound(
-            DiscoveredSonyDevice(
+            DiscoveredDevice(
                 name = name ?: "Sony audio device",
                 address = device.address,
                 rssi = rssi,
@@ -241,7 +244,7 @@ class SonyBleScanner(
             PackageManager.PERMISSION_GRANTED
 
     private fun log(message: String) {
-        Log.i("SonyBleScanner", message)
+        Log.i("BleScanner", message)
         listener.onLog(message)
     }
 }

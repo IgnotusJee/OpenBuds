@@ -16,7 +16,7 @@ import dev.ignotus.openbuds.ble.IncomingHeadphoneMessage
 import dev.ignotus.openbuds.ble.HeadphoneTransportSelector
 import dev.ignotus.openbuds.ble.HeadphoneTransportListener
 import dev.ignotus.openbuds.ble.qcy.QcyBleClient
-import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
+import dev.ignotus.openbuds.ble.DiscoveredDevice
 import dev.ignotus.openbuds.ble.sony.UnsupportedEndpointDiagnostics
 import dev.ignotus.openbuds.headphones.ConnectedHeadphoneProfile
 import dev.ignotus.openbuds.headphones.EqUiCapability
@@ -156,9 +156,9 @@ data class HeadphoneUiState(
     val scanState: String = "Idle",
     val isScanning: Boolean = false,
     val permissionIssue: String? = null,
-    val discoveredDevices: List<DiscoveredSonyDevice> = emptyList(),
-    val knownDevices: List<DiscoveredSonyDevice> = emptyList(),
-    val connectedDevice: DiscoveredSonyDevice? = null,
+    val discoveredDevices: List<DiscoveredDevice> = emptyList(),
+    val knownDevices: List<DiscoveredDevice> = emptyList(),
+    val connectedDevice: DiscoveredDevice? = null,
     val connectionInfo: HeadphoneConnectionInfo? = null,
     val connectedProfile: ConnectedHeadphoneProfile? = null,
     val deviceInfo: DeviceInfoState = DeviceInfoState(),
@@ -217,7 +217,7 @@ class HeadphoneRepository private constructor(context: Context) : HeadphoneTrans
         transport.stopScan()
     }
 
-    fun connect(device: DiscoveredSonyDevice) {
+    fun connect(device: DiscoveredDevice) {
         if (!device.isLikelyControlEndpoint && !device.source.startsWith("ble-scan")) {
             appendLog(
                 "Classic endpoint ${device.name} selected; trying direct GATT first. " +
@@ -243,7 +243,7 @@ class HeadphoneRepository private constructor(context: Context) : HeadphoneTrans
         appendLog("Debug connect requested: $name ($address)")
         _state.update { it.copy(endpointDiagnostic = null, table2Diagnostic = null, permissionIssue = null) }
 
-        val device = DiscoveredSonyDevice(
+        val device = DiscoveredDevice(
             name = name,
             address = address,
             rssi = 0,
@@ -558,7 +558,7 @@ class HeadphoneRepository private constructor(context: Context) : HeadphoneTrans
         appendLog(diagnostics.reason)
     }
 
-    override fun onDeviceFound(device: DiscoveredSonyDevice) {
+    override fun onDeviceFound(device: DiscoveredDevice) {
         _state.update { current ->
             val index = current.discoveredDevices.indexOfFirst { it.address == device.address }
             val nextKnown = current.knownDevices.mergeKnownDevice(device)
@@ -584,7 +584,7 @@ class HeadphoneRepository private constructor(context: Context) : HeadphoneTrans
         }
     }
 
-    override fun onConnectionStateChanged(connected: Boolean, device: DiscoveredSonyDevice?) {
+    override fun onConnectionStateChanged(connected: Boolean, device: DiscoveredDevice?) {
         if (!connected) {
             clearPendingPlaybackTransition()
             mainHandler.removeCallbacks(playbackRefreshRunnable)
@@ -738,7 +738,7 @@ class HeadphoneRepository private constructor(context: Context) : HeadphoneTrans
         }
     }
 
-    private fun DeviceInfoState.withResolvedModelImage(device: DiscoveredSonyDevice?): DeviceInfoState {
+    private fun DeviceInfoState.withResolvedModelImage(device: DiscoveredDevice?): DeviceInfoState {
         val preferredModelName = modelName ?: device?.name?.removePrefix("LE_")
         val match = modelImageCatalog.resolve(preferredModelName, modelColor ?: parseModelColor(seriesAndColor))
         return copy(
@@ -1166,7 +1166,7 @@ class HeadphoneRepository private constructor(context: Context) : HeadphoneTrans
      * If the given device is already from a BLE scan, use its address directly.
      * Otherwise, look for a BLE scan entry with a matching address prefix.
      */
-    private fun resolveQcyBleAddress(device: DiscoveredSonyDevice): String {
+    private fun resolveQcyBleAddress(device: DiscoveredDevice): String {
         // If already a BLE scan result, use it directly
         if (device.source.startsWith("ble-scan")) {
             return device.address
@@ -1205,7 +1205,7 @@ class HeadphoneRepository private constructor(context: Context) : HeadphoneTrans
         const val PLAY_NTFY_PARAM = 0xA9
         const val LEA_NTFY_STATUS = 0x45
 
-        fun mergeDevice(old: DiscoveredSonyDevice, new: DiscoveredSonyDevice): DiscoveredSonyDevice =
+        fun mergeDevice(old: DiscoveredDevice, new: DiscoveredDevice): DiscoveredDevice =
             old.copy(
                 name = if (new.name != "Unknown BLE device") new.name else old.name,
                 rssi = if (new.rssi != 0) new.rssi else old.rssi,
@@ -1216,7 +1216,7 @@ class HeadphoneRepository private constructor(context: Context) : HeadphoneTrans
                 sonyAd = new.sonyAd ?: old.sonyAd,
             )
 
-        fun List<DiscoveredSonyDevice>.mergeKnownDevice(device: DiscoveredSonyDevice): List<DiscoveredSonyDevice> {
+        fun List<DiscoveredDevice>.mergeKnownDevice(device: DiscoveredDevice): List<DiscoveredDevice> {
             val index = indexOfFirst { it.address == device.address }
             val merged = if (index >= 0) mergeDevice(this[index], device) else device
             return (listOf(merged) + filterNot { it.address == device.address })
@@ -1224,9 +1224,9 @@ class HeadphoneRepository private constructor(context: Context) : HeadphoneTrans
                 .take(12)
         }
 
-        fun List<DiscoveredSonyDevice>.sortedByConnectionPriority(): List<DiscoveredSonyDevice> =
+        fun List<DiscoveredDevice>.sortedByConnectionPriority(): List<DiscoveredDevice> =
             sortedWith(
-                compareByDescending<DiscoveredSonyDevice> {
+                compareByDescending<DiscoveredDevice> {
                     it.sonyAd?.androidGattCapable == true || it.sonyAd?.leGattControlFlag == true
                 }.thenByDescending {
                     it.isLikelyControlEndpoint

@@ -10,6 +10,9 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.util.Log
 import androidx.core.content.ContextCompat
+import dev.ignotus.openbuds.ble.BleScanner
+import dev.ignotus.openbuds.ble.BleScanListener
+import dev.ignotus.openbuds.ble.DiscoveredDevice
 import dev.ignotus.openbuds.ble.HeadphoneTransportClient
 import dev.ignotus.openbuds.ble.HeadphoneTransportListener
 import java.util.UUID
@@ -25,8 +28,8 @@ class SonyTandemTransportClient(
     private val adapter: BluetoothAdapter?
         get() = bluetoothManager.adapter
 
-    private val scanner = SonyBleScanner(context, object : ScanListener {
-        override fun onDeviceFound(device: DiscoveredSonyDevice) {
+    private val scanner = BleScanner(context, object : BleScanListener {
+        override fun onDeviceFound(device: DiscoveredDevice) {
             listener.onDeviceFound(device)
         }
 
@@ -45,7 +48,7 @@ class SonyTandemTransportClient(
 
     private var activeSession: SonyTandemSession? = null
 
-    override fun matches(device: DiscoveredSonyDevice, reportedModelName: String?): Boolean =
+    override fun matches(device: DiscoveredDevice, reportedModelName: String?): Boolean =
         SonyDeviceMatcher.matches(device, reportedModelName)
 
     override fun startScan(strictFilter: Boolean) {
@@ -57,10 +60,10 @@ class SonyTandemTransportClient(
     }
 
     fun connect(address: String) {
-        connect(DiscoveredSonyDevice(name = "Sony audio device", address = address, rssi = 0, source = "manual-connect"))
+        connect(DiscoveredDevice(name = "Sony audio device", address = address, rssi = 0, source = "manual-connect"))
     }
 
-    override fun connect(device: DiscoveredSonyDevice) {
+    override fun connect(device: DiscoveredDevice) {
         if (!hasConnectPermission()) {
             listener.onBluetoothUnavailable("Bluetooth connect permission is missing")
             return
@@ -118,7 +121,7 @@ class SonyTandemTransportClient(
     }
 
     @SuppressLint("MissingPermission")
-    private fun shouldUseSpp(device: DiscoveredSonyDevice, remote: BluetoothDevice): Boolean {
+    private fun shouldUseSpp(device: DiscoveredDevice, remote: BluetoothDevice): Boolean {
         if (device.sonyAd?.leGattControlFlag == true) return false
         val hasMdrSppUuid = remote.uuids.orEmpty().any { it.uuid == MDR_SPP_MARKER_UUID }
         val classicCandidate = remote.type == BluetoothDevice.DEVICE_TYPE_CLASSIC ||

@@ -10,7 +10,7 @@ import dev.ignotus.openbuds.ble.HeadphoneConnectionInfo
 import dev.ignotus.openbuds.ble.IncomingHeadphoneMessage
 import dev.ignotus.openbuds.ble.HeadphoneTransportClient
 import dev.ignotus.openbuds.ble.HeadphoneTransportListener
-import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
+import dev.ignotus.openbuds.ble.DiscoveredDevice
 import dev.ignotus.openbuds.ble.transport.GattTransport
 import dev.ignotus.openbuds.ble.transport.GattTransportConfig
 import dev.ignotus.openbuds.ble.transport.GattTransportListener
@@ -39,7 +39,7 @@ class QcyBleClient(
 ) : HeadphoneTransportClient {
     override val id: String = "qcy-gatt"
 
-    override fun matches(device: DiscoveredSonyDevice, reportedModelName: String?): Boolean {
+    override fun matches(device: DiscoveredDevice, reportedModelName: String?): Boolean {
         val name = (reportedModelName ?: device.name).orEmpty().lowercase()
         if (name.contains("qcy")) return true
         // Also match if the device advertises the QCY service UUID.
@@ -52,7 +52,7 @@ class QcyBleClient(
     private val adapter get() = bluetoothManager.adapter
 
     private var transport: GattTransport? = null
-    private var connectedDevice: DiscoveredSonyDevice? = null
+    private var connectedDevice: DiscoveredDevice? = null
     private var effectiveMtu: Int = 20
 
     private fun handleCharacteristicChanged(uuid: UUID, value: ByteArray) {
@@ -133,13 +133,13 @@ class QcyBleClient(
     }
 
     /**
-     * Connect using a [DiscoveredSonyDevice]. The device may have been
+     * Connect using a [DiscoveredDevice]. The device may have been
      * discovered through a classic BT bond listing rather than a BLE scan;
      * in that case the MAC may differ from the actual BLE GATT MAC (QCY
      * dual-mode devices typically differ in the last byte). [HeadphoneTransportSelector]
      * is responsible for picking the BLE-side MAC before invoking this.
      */
-    override fun connect(device: DiscoveredSonyDevice) {
+    override fun connect(device: DiscoveredDevice) {
         connect(device.address, device.name)
     }
 
@@ -151,7 +151,7 @@ class QcyBleClient(
             return
         }
         disconnect()
-        connectedDevice = DiscoveredSonyDevice(
+        connectedDevice = DiscoveredDevice(
             name = deviceName,
             address = mac,
             rssi = 0,

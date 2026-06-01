@@ -5,7 +5,7 @@ import dev.ignotus.openbuds.headphones.HeadphoneAdapterRegistry
 import dev.ignotus.openbuds.headphones.HeadphoneFeature
 import dev.ignotus.openbuds.headphones.HeadphoneProtocolVariant
 import dev.ignotus.openbuds.headphones.sony.SonyTandemHeadphoneAdapter
-import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
+import dev.ignotus.openbuds.ble.DiscoveredDevice
 import dev.ignotus.openbuds.protocol.sony.CommonInquiredType
 import dev.ignotus.openbuds.protocol.sony.PowerInquiredType
 import dev.ignotus.openbuds.protocol.sony.SonyTandemV1Table1Protocol
@@ -233,7 +233,7 @@ class SonyTandemCommandCollisionTest {
 
     private fun xm4Profile(): ConnectedHeadphoneProfile =
         HeadphoneAdapterRegistry.resolve(
-            DiscoveredSonyDevice(
+            DiscoveredDevice(
                 name = "WH-1000XM4",
                 address = "00:11:22:33:44:55",
                 rssi = 0,
@@ -244,7 +244,7 @@ class SonyTandemCommandCollisionTest {
 
     private fun linkBudsSProfile(): ConnectedHeadphoneProfile =
         HeadphoneAdapterRegistry.resolve(
-            DiscoveredSonyDevice(
+            DiscoveredDevice(
                 name = "LinkBuds S",
                 address = "00:11:22:33:44:56",
                 rssi = 0,

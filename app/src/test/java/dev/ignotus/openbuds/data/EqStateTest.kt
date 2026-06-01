@@ -1,6 +1,6 @@
 package dev.ignotus.openbuds.data
 
-import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
+import dev.ignotus.openbuds.ble.DiscoveredDevice
 import dev.ignotus.openbuds.headphones.EqWriteContext
 import dev.ignotus.openbuds.headphones.HeadphoneAdapterRegistry
 import dev.ignotus.openbuds.headphones.sony.SonyTandemHeadphoneAdapter
@@ -27,7 +27,7 @@ class EqStateTest {
         val nextRawSteps = synced.rawBandSteps.toMutableList()
             .also { it[1] = displayEqStepToRaw(1) }
         val profile = HeadphoneAdapterRegistry.resolve(
-            DiscoveredSonyDevice(
+            DiscoveredDevice(
                 name = "LinkBuds S",
                 address = "00:11:22:33:44:55",
                 rssi = 0,

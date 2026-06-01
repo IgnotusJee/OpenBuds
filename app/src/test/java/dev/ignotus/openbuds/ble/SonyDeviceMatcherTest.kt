@@ -1,6 +1,6 @@
 package dev.ignotus.openbuds.ble
 
-import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
+import dev.ignotus.openbuds.ble.DiscoveredDevice
 import dev.ignotus.openbuds.ble.sony.SonyAudioAdvertisement
 import dev.ignotus.openbuds.ble.sony.SonyDeviceMatcher
 import dev.ignotus.openbuds.protocol.sony.SonyGatt
@@ -45,6 +45,6 @@ class SonyDeviceMatcherTest {
         )
     }
 
-    private fun device(name: String): DiscoveredSonyDevice =
-        DiscoveredSonyDevice(name = name, address = "00:11:22:33:44:55", rssi = 0)
+    private fun device(name: String): DiscoveredDevice =
+        DiscoveredDevice(name = name, address = "00:11:22:33:44:55", rssi = 0)
 }

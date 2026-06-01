@@ -1,6 +1,6 @@
 package dev.ignotus.openbuds.ble
 
-import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
+import dev.ignotus.openbuds.ble.DiscoveredDevice
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -144,8 +144,8 @@ class HeadphoneTransportSelectorTest {
 
     // ── helpers ─────────────────────────────────────────────────
 
-    private fun device(name: String, address: String = "00:00:00:00:00:00"): DiscoveredSonyDevice =
-        DiscoveredSonyDevice(name = name, address = address, rssi = 0, source = "test")
+    private fun device(name: String, address: String = "00:00:00:00:00:00"): DiscoveredDevice =
+        DiscoveredDevice(name = name, address = address, rssi = 0, source = "test")
 }
 
 /**
@@ -154,16 +154,16 @@ class HeadphoneTransportSelectorTest {
  */
 private class FakeTransportClient(
     override val id: String,
-    private val matchPredicate: (DiscoveredSonyDevice, String?) -> Boolean,
+    private val matchPredicate: (DiscoveredDevice, String?) -> Boolean,
 ) : HeadphoneTransportClient {
 
-    val connectCalls = mutableListOf<DiscoveredSonyDevice>()
+    val connectCalls = mutableListOf<DiscoveredDevice>()
     var disconnectCount = 0
     var startScanCount = 0
     var stopScanCount = 0
     val sentMessages = mutableListOf<ByteArray>()
 
-    override fun matches(device: DiscoveredSonyDevice, reportedModelName: String?): Boolean =
+    override fun matches(device: DiscoveredDevice, reportedModelName: String?): Boolean =
         matchPredicate(device, reportedModelName)
 
     override fun startScan(strictFilter: Boolean) {
@@ -174,7 +174,7 @@ private class FakeTransportClient(
         stopScanCount++
     }
 
-    override fun connect(device: DiscoveredSonyDevice) {
+    override fun connect(device: DiscoveredDevice) {
         connectCalls.add(device)
     }
 

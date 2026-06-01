@@ -1,6 +1,6 @@
 package dev.ignotus.openbuds.ble
 
-import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
+import dev.ignotus.openbuds.ble.DiscoveredDevice
 import dev.ignotus.openbuds.ble.sony.UnsupportedEndpointDiagnostics
 
 /**
@@ -23,7 +23,7 @@ interface HeadphoneTransportClient {
      * Called by [HeadphoneTransportSelector] during device → client routing.
      * The [reportedModelName] is an optional hint from bonded device records.
      */
-    fun matches(device: DiscoveredSonyDevice, reportedModelName: String?): Boolean
+    fun matches(device: DiscoveredDevice, reportedModelName: String?): Boolean
 
     /** Start BLE scan for devices this client can handle. */
     fun startScan(strictFilter: Boolean)
@@ -32,7 +32,7 @@ interface HeadphoneTransportClient {
     fun stopScan()
 
     /** Connect to [device] using this client's transport. */
-    fun connect(device: DiscoveredSonyDevice)
+    fun connect(device: DiscoveredDevice)
 
     /** Disconnect and release GATT resources. */
     fun disconnect()
@@ -86,9 +86,9 @@ data class IncomingHeadphoneMessage(
 interface HeadphoneTransportListener {
     fun onBluetoothUnavailable(reason: String)
     fun onUnsupportedEndpoint(diagnostics: UnsupportedEndpointDiagnostics)
-    fun onDeviceFound(device: DiscoveredSonyDevice)
+    fun onDeviceFound(device: DiscoveredDevice)
     fun onScanStateChanged(scanning: Boolean)
-    fun onConnectionStateChanged(connected: Boolean, device: DiscoveredSonyDevice?)
+    fun onConnectionStateChanged(connected: Boolean, device: DiscoveredDevice?)
     fun onReady(info: HeadphoneConnectionInfo)
     fun onMessage(message: IncomingHeadphoneMessage)
     fun onLog(message: String)

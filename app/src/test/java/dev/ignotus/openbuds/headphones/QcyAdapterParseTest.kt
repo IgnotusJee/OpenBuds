@@ -2,7 +2,7 @@ package dev.ignotus.openbuds.headphones
 
 import dev.ignotus.openbuds.ble.IncomingHeadphoneMessage
 import dev.ignotus.openbuds.ble.qcy.QcyChannel
-import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
+import dev.ignotus.openbuds.ble.DiscoveredDevice
 import dev.ignotus.openbuds.headphones.qcy.QcyHeadphoneAdapter
 import dev.ignotus.openbuds.protocol.ParsedHeadphoneResponse
 import org.junit.Assert.assertEquals
@@ -20,7 +20,7 @@ class QcyAdapterParseTest {
 
     private val adapter = QcyHeadphoneAdapter
     private val profile = adapter.fallbackProfile(
-        DiscoveredSonyDevice(name = "QCY-C30S", address = "AA:BB:CC:DD:EE:FF", rssi = 0)
+        DiscoveredDevice(name = "QCY-C30S", address = "AA:BB:CC:DD:EE:FF", rssi = 0)
     )
 
     private fun hex(s: String): ByteArray =

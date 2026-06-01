@@ -1,12 +1,13 @@
-package dev.ignotus.openbuds.ble.sony
+package dev.ignotus.openbuds.ble
 
 import android.bluetooth.BluetoothDevice
+import dev.ignotus.openbuds.ble.sony.SonyAudioAdvertisement
 
 /**
  * A headphone device discovered through BLE scan, bonded-device enumeration,
  * or manual connection.
  */
-data class DiscoveredSonyDevice(
+data class DiscoveredDevice(
     val name: String,
     val address: String,
     val rssi: Int,

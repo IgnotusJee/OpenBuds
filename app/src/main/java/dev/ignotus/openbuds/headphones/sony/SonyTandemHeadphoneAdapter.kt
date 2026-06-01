@@ -4,7 +4,7 @@ import android.content.Context
 import dev.ignotus.openbuds.ble.HeadphoneTransportClient
 import dev.ignotus.openbuds.ble.HeadphoneTransportListener
 import dev.ignotus.openbuds.ble.IncomingHeadphoneMessage
-import dev.ignotus.openbuds.ble.sony.DiscoveredSonyDevice
+import dev.ignotus.openbuds.ble.DiscoveredDevice
 import dev.ignotus.openbuds.ble.sony.SonyChannel
 import dev.ignotus.openbuds.ble.sony.SonyTandemTransportClient
 import dev.ignotus.openbuds.headphones.ClearBassWriteMode
@@ -84,7 +84,7 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
         TandemCodecRegistry.codecFor(profile.protocolFor(feature))
 
     override fun match(
-        device: DiscoveredSonyDevice,
+        device: DiscoveredDevice,
         reportedModelName: String?,
     ): ConnectedHeadphoneProfile? {
         return templates.firstOrNull { template ->
@@ -94,7 +94,7 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
         }
     }
 
-    override fun fallbackProfile(device: DiscoveredSonyDevice): ConnectedHeadphoneProfile =
+    override fun fallbackProfile(device: DiscoveredDevice): ConnectedHeadphoneProfile =
         ProfileTemplate(
             modelName = device.name.removePrefix("LE_").takeIf { it.isNotBlank() } ?: "Sony audio device",
             series = null,
