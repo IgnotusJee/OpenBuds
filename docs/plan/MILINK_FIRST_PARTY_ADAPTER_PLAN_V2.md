@@ -395,6 +395,14 @@ setEqBand(mac, bandIndex, value)
 - V1 代码完全移除。
 - V2 trace 不改变米链行为。
 
+M0 完成记录（2026-06-02）：
+
+- V1 6 个源文件 + 5 个测试文件全部删除。
+- 新增 `mitws/` 目录：`MilinkRouteConfig.kt`、`MilinkMiTwsFacadeEntry.kt`、`MilinkMiTwsTraceEntry.kt`、`MilinkMiTwsFacadeHook.kt`、`MilinkBridgeClient.kt`、`MiTwsBridgeCache.kt`、`MiTwsDeviceIdPolicy.kt`。
+- `ModuleMain.kt` 路由逻辑从 AirPods V1 改为 MiTWS V2：`com.milink.service` → `MITWS`/`TRACE_ONLY` 双模式。
+- 所有 hook 为 trace-only，调用原方法并返回原结果。
+- M0 审计通过：V1 完全清除 ✓，trace 不改变行为 ✓。
+
 M0 签名冻结：
 
 | 类 | 已确认方法 |
@@ -406,11 +414,11 @@ M0 签名冻结：
 
 ### M1：MiTWS 分类和调用链 trace（1 周）
 
-- [ ] 新增 `MilinkMiTwsFacadeHook`，只注入 `com.milink.service`。
-- [ ] trace `checkIsMiTWS`、`getDeviceId`、`connectMma`、`disconnectMma`、`registerCallback`、`getBatteryLevel`、`getAncState`、`getWearStatus`。
-- [ ] 在实验开关开启时，仅对 OpenBuds allowlist 设备让 `checkIsMiTWS` 返回 `1`。
-- [ ] `connectMma` trace 分两类：真实 MiTWS 可以观察原始返回码；OpenBuds allowlist 默认 trace + no-op，不调用原始 Xiaomi MMA 连接。只有独立 debug 开关允许对 OpenBuds 临时透传原调用。
-- [ ] 对比 `01010101` 和 `01013201` deviceId 对 UI、图标、控件的影响。
+- [x] 新增 `MilinkMiTwsFacadeHook`，只注入 `com.milink.service`。
+- [x] trace `checkIsMiTWS`、`getDeviceId`、`connectMma`、`disconnectMma`、`registerCallback`、`getBatteryLevel`、`getAncState`、`getWearStatus`。
+- [x] 在实验开关开启时，仅对 OpenBuds allowlist 设备让 `checkIsMiTWS` 返回 `1`。
+- [x] `connectMma` trace 分两类：真实 MiTWS 可以观察原始返回码；OpenBuds allowlist 默认 trace + no-op，不调用原始 Xiaomi MMA 连接。只有独立 debug 开关允许对 OpenBuds 临时透传原调用。
+- [x] 对比 `01010101` 和 `01013201` deviceId 对 UI、图标、控件的影响。
 
 验收：
 
@@ -418,6 +426,17 @@ M0 签名冻结：
 - 真实小米耳机透传。
 - 明确 HeadsetDetailFragment 是否打开、哪些 getter/callback 被调用。
 - 明确 `connectMma` 成功码/失败码/调用时机；OpenBuds fake MiTWS 不应在 M1 默认触发真实 Xiaomi MMA 连接。
+
+M1 完成记录（2026-06-02）：
+
+- `MilinkMiTwsFacadeHook` 注册 12 个 hook（10 Manager 方法 + 2 callback 方法），全部在 `com.milink.service` 进程内。
+- `checkIsMiTWS` 对授权 OpenBuds 设备返回 `1`，真实 MiTWS 透传原值。
+- `getDeviceId` 按 `debug.openbuds.milink_mitws_device_id` 系统属性选择模板（默认 `01010101`），per-MAC 稳定映射。
+- `connectMma`/`disconnectMma` 对 OpenBuds 默认 no-op 返回 `0`；`debug.openbuds.milink_mitws_mma_passthrough=true` 可临时透传。
+- `openAnc`/`openTransparent`/`closeAnc` 对 OpenBuds 返回 `0`（control no-op，M3 实现）。
+- 其余 getter 和 callback 保持 trace-only。
+- 双闸门：`debug.openbuds.milink_mitws_enable` 系统属性 + App 设置 `milinkAdapterEnabled`。
+- 新增测试：`MiTwsDeviceIdPolicyTest`（6 个）、`MiTwsBridgeCacheTest`（3 个）、`MilinkRouteConfigTest`（9 个）。
 
 ### M2：MiTWS 只读 facade（1-2 周）
 
