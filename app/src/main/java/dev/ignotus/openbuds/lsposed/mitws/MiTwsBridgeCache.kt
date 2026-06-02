@@ -92,7 +92,16 @@ class MiTwsBridgeCache(
         if (!adapterEnabled) {
             emptyList()
         } else {
-            authorizedMacs.mapNotNull(::snapshotFor).sortedBy { it.mac }
+            authorizedMacs.mapNotNull { mac ->
+                val entry = entries[mac] ?: return@mapNotNull null
+                if (now() - entry.savedAtMs > ttlMs) {
+                    if (now() - entry.savedAtMs > STALE_TOLERANCE_MS) {
+                        entries.remove(mac)
+                        return@mapNotNull null
+                    }
+                }
+                entry.snapshot.takeIf { it.connected }
+            }.sortedBy { it.mac }
         }
 
     fun markError(message: String?) {
