@@ -43,20 +43,16 @@ class MiTwsCallbackPump(
     }
 
     fun dispatchSnapshot(snapshot: MilinkDeviceSnapshot, force: Boolean = false) {
-        asyncDispatcher.dispatch {
-            snapshotTargets().forEach { callback ->
-                dispatchSnapshotLocked(callback, snapshot, force)
-            }
+        snapshotTargets().forEach { callback ->
+            dispatchSnapshotLocked(callback, snapshot, force)
         }
     }
 
     fun dispatchConnection(snapshot: MilinkDeviceSnapshot, connected: Boolean) {
-        asyncDispatcher.dispatch {
-            snapshotTargets().forEach { callback ->
-                val device = deviceLookup(snapshot.mac)
-                if (device == null && !allowNullDevice) return@forEach
-                invoke(callback, "onConnectMmaStateChanged", device, connected)
-            }
+        snapshotTargets().forEach { callback ->
+            val device = deviceLookup(snapshot.mac)
+            if (device == null && !allowNullDevice) return@forEach
+            invoke(callback, "onConnectMmaStateChanged", device, connected)
         }
     }
 
@@ -90,7 +86,11 @@ class MiTwsCallbackPump(
     }
 
     private fun invoke(callback: Any, methodName: String, device: BluetoothDevice?, value: Any) {
-        val method = callback.javaClass.findMiTwsCallbackMethod(methodName, value) ?: return
+        val method = callback.javaClass.findMiTwsCallbackMethod(methodName, value)
+        if (method == null) {
+            Log.w(TAG, "MiTWS callback method not found: $methodName(${value.javaClass.name}) on ${callback.javaClass.name}")
+            return
+        }
         runCatching {
             method.invoke(callback, device, value)
         }.onFailure { error ->
