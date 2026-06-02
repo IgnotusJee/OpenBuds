@@ -1,7 +1,10 @@
 package dev.ignotus.openbuds.lsposed
 
 import android.util.Log
-import dev.ignotus.openbuds.lsposed.milink.MilinkAirpodsAdapterEntry
+import dev.ignotus.openbuds.lsposed.mitws.MilinkMiTwsFacadeEntry
+import dev.ignotus.openbuds.lsposed.mitws.MilinkMiTwsTraceEntry
+import dev.ignotus.openbuds.lsposed.mitws.MilinkRouteConfig
+import dev.ignotus.openbuds.lsposed.mitws.MilinkRouteMode
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
 
@@ -17,27 +20,21 @@ import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
  *
  * 1. [init] — writes a startup marker to `/sdcard/openbuds_lsposed_startup.txt`
  *    for diagnostics (process name + timestamp).
- * 2. [onPackageLoaded] — when `com.milink.service` loads, delegates to
- *    [MilinkAirpodsAdapterEntry] which installs all AirPods adapter path hooks.
+ * 2. [onPackageLoaded] — when `com.milink.service` loads, installs MiTWS
+ *    facade hooks (M1) or trace-only hooks according to [MilinkRouteConfig].
  *
  * ## Hook architecture
  *
  * ```
  * com.milink.service process
- *   ├── MxBluetoothManager.checkIsAirPods(String)   ← intercepted
- *   ├── MxBluetoothManager.getAirPodsState(String)  ← bridge snapshot state
- *   ├── BluetoothServiceClient.isAirPods(BluetoothDevice) ← fallback
- *   ├── BluetoothServiceClient.getAirpodsDeviceId(...)    ← trace-only
- *   ├── BluetoothServiceClient.getAirpodsHeadsetType(...) ← trace-only
- *   └── ContentResolver.call(getAirpodsState)             ← bridge snapshot Bundle
+ *   └── MxBluetoothManager MiTWS methods ← M1 facade mutation + trace
  * ```
  *
  * No hooks target `com.android.bluetooth`, `com.android.systemui`, or any
  * other system process. All interception happens **before** milink makes
  * binder calls to the Bluetooth stack.
  *
- * @see MilinkAirpodsAdapterEntry
- * @see docs/plan/MILINK_FIRST_PARTY_ADAPTER_PLAN.md
+ * @see docs/plan/MILINK_FIRST_PARTY_ADAPTER_PLAN_V2.md
  */
 class ModuleMain : XposedModule() {
 
@@ -74,7 +71,10 @@ class ModuleMain : XposedModule() {
 
         when (param.packageName) {
             "com.milink.service" -> {
-                MilinkAirpodsAdapterEntry(cl).install()
+                when (MilinkRouteConfig.mode()) {
+                    MilinkRouteMode.MITWS -> MilinkMiTwsFacadeEntry(cl).install()
+                    MilinkRouteMode.TRACE_ONLY -> MilinkMiTwsTraceEntry(cl).install()
+                }
             }
         }
     }

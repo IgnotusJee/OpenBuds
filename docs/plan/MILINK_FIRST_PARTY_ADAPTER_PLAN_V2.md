@@ -1,8 +1,10 @@
 # OpenBuds 米链第一方耳机适配器集成方案 V2
 
-更新日期：2026-06-01
+更新日期：2026-06-02
 
-本文是对 V2 草案的可行性修订版。结论先行：**把 OpenBuds 设备伪装成 MiTWS 并让米链用第一方耳机页面渲染是可行的，但不应把 `com.xiaomi.bluetooth` 的 GATT/SPP/MMA 协议替换作为主线起点。**主线应先在 `com.milink.service` 内做 MiTWS facade，复用现有 bridge 状态；`com.xiaomi.bluetooth` 只作为弹窗、状态栏通知、或更深层 MMA/GATT/SPP 的后续实验。
+本文是 V2 草案的可行性修订版，基于对 `com.milink.service` 和 `com.xiaomi.bluetooth` 反编译源码的交叉验证。结论先行：**把 OpenBuds 设备伪装成 MiTWS 并让米链用第一方耳机页面渲染是可行的，且 MiTWS 路径是主线。** AirPods 伪装路径（V1）已废弃，不再维护。
+
+主线在 `com.milink.service` 内做 MiTWS facade，复用现有 bridge 状态；`com.xiaomi.bluetooth` 只作为弹窗、状态栏通知、或更深层 MMA/GATT/SPP 的后续实验。
 
 ## 0. 可行性结论
 
@@ -15,13 +17,13 @@
 | `com.xiaomi.bluetooth` GATT/SPP/MMA 代理 | 低到中 | 技术上可 hook，但服务/特征 UUID、SPP UUID、MMA 帧、注册门控和 Sony 默认路径都不匹配；不能作为 M2 前置 | M5 实验 |
 | 完整 MMA 协议栈或 Xiaomi 蓝牙插件仿真 | 低 | 工作量接近逆向一套 Mi Headset 协议，且蓝牙进程稳定性风险高 | 暂不承诺 |
 
-**推荐路线**：V1 AirPods 路径保持默认可用；V2 先做 `com.milink.service` MiTWS facade。只有 M2 真机证明第一方页面、状态和降级都稳定后，再评估 `com.xiaomi.bluetooth` 的 FastConnect、GATT 或 SPP/MMA 实验。
+**推荐路线**：MiTWS 作为主线。只有 M2 真机证明第一方页面、状态和降级都稳定后，再评估 `com.xiaomi.bluetooth` 的 FastConnect、GATT 或 SPP/MMA 实验。
 
 ## 1. 对原 V2 草案的关键修正
 
 ### 1.1 `checkIsMiTWS` 只是分类入口
 
-米链分类链路仍然成立：
+米链分类链路：
 
 ```text
 BluetoothServiceClient.getDeviceType(dev)
@@ -49,9 +51,13 @@ if (Constant.isFlora(getDeviceId(device))) return 1
 else mBluetoothHeadsetService.checkIsMiTWS(address)
 ```
 
-这里的 `getDeviceId()` 是 `MxBluetoothService` 自己的方法，会调用 `IMiuiHeadsetService.checkSupport(device)`。如果我们只 hook `MxBluetoothManager.getDeviceId(BluetoothDevice)`，不会影响 `MxBluetoothService.checkIsMiTWS()` 内部的 Flora 快速路径。
+这里的 `getDeviceId()` 是 `MxBluetoothService` 的私有方法（源码第737行），会调用 `IMiuiHeadsetService.checkSupport(device)` 这个 AIDL 跨进程调用。如果我们只 hook `MxBluetoothManager.getDeviceId(BluetoothDevice)`，不会影响 `MxBluetoothService.checkIsMiTWS()` 内部的 Flora 快速路径。
 
-V2 主线策略应改为：
+**关键理解**：如果选择在 `MxBluetoothManager.checkIsMiTWS()` 层 hook（推荐），Flora 快速路径完全不会被触发，因为 hook 在 Manager 层就返回了，不会执行到 `MxBluetoothService.checkIsMiTWS()` 内部的 `Constant.isFlora(getDeviceId())` 调用。Flora deviceId 的讨论只对以下场景有意义：
+- 不 hook Manager 层而是 hook 更底层（如 `MxBluetoothService` 或 `IMiuiHeadsetService`）
+- 想通过设置 Flora deviceId 让 service 层自动返回 1 以减少 hook 点
+
+V2 主线策略：
 
 1. 对 OpenBuds allowlist 设备，直接在 `MxBluetoothManager.checkIsMiTWS(BluetoothDevice)` 层返回 `1`，不要依赖 service 内部 Flora fast-path。
 2. `MxBluetoothManager.getDeviceId(BluetoothDevice)` 的 hook 用于米链 UI、图标、能力 profile，而不是用于让 service fast-path 生效。
@@ -82,6 +88,7 @@ public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteris
 - `readCharacteristic`、`writeDescriptor`、`setCharacteristicNotification` 的同一套 UUID 映射。
 - `onCharacteristicChanged` 里回调给 `IPCServiceEventCallback.onCharacteristicChanged(device, serviceUuid, characteristicUuid, value)` 的反向 UUID 和数据映射。
 - `BluetoothGatt.getService()` 查不到 Xiaomi UUID 时的失败路径。
+- `onServicesDiscovered` 回调（第582-594行）→ `onServicesDiscovered(BluetoothDevice, List<BluetoothGattService>, int status)`。如果 Xiaomi 层在 service discovery 后发现没有预期的 Xiaomi 服务，可能会提前断开。
 
 只做 `writeCharacteristic` after-hook 修改字节会太晚，因为原方法已经按 Xiaomi UUID 查找服务和特征，Sony/QCY 设备大概率直接失败。
 
@@ -97,9 +104,11 @@ FastConnect 侧依赖 `ScanRecord` 的小米 fast-pair service data、manufactur
 
 ### 1.5 Sony 默认不适合走 Xiaomi GATT/SPP 注入
 
-OpenBuds 当前对 LinkBuds S 的可靠路径是 App 侧 SPP/Tandem。Sony 官方 App 也同时存在 GATT 和 SPP 两条控制路径：GATT 侧通过 Sony 自己的 service/characteristic UUID 做 Tandem 读写；SPP 侧通过 MDR SPP UUID 建 RFCOMM socket。Sony GATT Tandem 仍有价值，但不是所有目标 Sony 设备的默认稳定通道。
+OpenBuds 当前对 LinkBuds S 的可靠路径是 App 侧 SPP/Tandem。Sony 官方 App 也同时存在 GATT 和 SPP 两条控制路径：GATT 侧通过 Sony 自己的 service/characteristic UUID 做 Tandem 读写；SPP 侧通过 MDR SPP UUID 建 RFCOMM socket。
 
 `com.xiaomi.bluetooth` 里也存在 `MiuiSppPeripheral`，它可以用调用方传入的 UUID 建 RFCOMM socket，并通过 `sendData(byte[])` 写原始字节。但这个 SPP 入口属于 Xiaomi PC service / MMA 注册体系，受 package allowlist、cloud switch、type=SPP 注册、UUID 和上层协议状态机约束。它不是一个可以直接替换成 Sony Tandem SPP 的自然入口。
+
+`MiuiSppPeripheral.sendData()`（源码第248-273行）没有帧封装、没有 ACK、没有重试——只是原始字节写入。Sony Tandem 的 SPP 帧封装（`SppFrameType`, `SonySppPayloadMapper`）如果通过 Xiaomi SPP 发送，需要在调用 `sendData` 之前自己完成帧封装。
 
 因此，把 Xiaomi GATT 门面直接改造成 Sony GATT 代理，或把 Xiaomi SPP 门面直接改造成 Sony SPP 代理，都可能绕开当前最可靠的 OpenBuds 协议状态来源。
 
@@ -142,7 +151,7 @@ LSPosed module injected into com.xiaomi.bluetooth
 - 主线不 hook `com.android.bluetooth`。
 - 主线不让 `com.milink.service` 的 MiTWS 调用真正打到 Xiaomi MMA 连接层。
 - 主线不在 `com.xiaomi.bluetooth` 内运行完整 OpenBuds 协议栈。
-- 真实小米耳机和真实 AirPods 必须透传原方法。
+- 真实小米耳机必须透传原方法。
 
 ## 3. `com.milink.service` Hook 规格
 
@@ -181,12 +190,13 @@ deviceId 要拆成两类模板：
 - 默认先使用 `01010101` 验证 MiTWS 页面是否能渲染。
 - 只有在 M2 证明普通模板隐藏了必要 MiTWS 控件时，才切到 Flora 模板。
 - deviceId hook 只服务 UI 和能力 profile，不宣称能影响 `MxBluetoothService.checkIsMiTWS()` 内部 fast-path。
+- **副作用注意**：`BluetoothServiceClient` 中 `getHeadsetType()`（第349-360行）和 `isCirculateGlasses()`（第433-444行）等多个方法都调 `mxBluetoothManager.getDeviceId()`。如果返回 Flora 模板 deviceId，`getHeadsetType()` 会通过 `AbstractC14649a.m51162b(deviceId)` 返回不同的 headsetType，影响图标和功能展示。同时 `isCirculateGlasses()` 等眼镜检测也会被影响。
 
 ### 3.3 `connectMma(BluetoothDevice)` / `disconnectMma(BluetoothDevice)`
 
 这是 MiTWS facade 的关键安全点。对于 OpenBuds allowlist 设备：
 
-- 不调用原始 `connectMma`，避免 Xiaomi MMA 层尝试连接 Sony/QCY 耳机。
+- **不调用原始 `connectMma`**，避免 Xiaomi MMA 层尝试连接 Sony/QCY 耳机。原始方法（`MxBluetoothService.java:614-628`）会调用 `ConnectManager.checkAndConnect()` → `BluetoothEngineImpl`，对非小米设备大概率超时失败。
 - 返回米链认为成功或可接受的状态码，具体码值必须 M1 trace 真实 MiTWS 或参考调用方确认。
 - 通过捕获到的 `MMACallback` 主动派发 `onConnectMmaStateChanged(device, true)`。
 - `disconnectMma` 同理返回成功并派发断开状态。
@@ -204,6 +214,14 @@ onConnectMmaStateChanged(BluetoothDevice, boolean)
 onDeviceIdUpdate(BluetoothDevice, String)
 onRingStateChanged(BluetoothDevice, boolean)
 ```
+
+**实现策略**：拦截 `MMACallback` 有两种方式——
+
+**策略 A（捕获 callback — 推荐）**：hook `MxBluetoothManager.registerCallback()`，捕获调用方传入的 `MMACallback` 实例，存入自己的分发表。当 bridge snapshot 变化时，直接调用 `callback.onBatteryLevel()` 等。需要同时处理 `unregisterCallback` 和 callback 生命周期。
+
+**策略 B（拦截 proxy）**：hook `MiaoXiangCallbackProxy`（`MxBluetoothManager` 的私有内部类，第48行）的回调方法。这些方法在 `MxBluetoothService` 回调到达时被调用，在分发给所有 `MMACallback` 之前拦截。优点是无需处理 register/unregister 生命周期，缺点是依赖内部类结构，可能随 HyperOS 版本变化。
+
+推荐策略 A，因为更稳定（不依赖内部类实现细节）。
 
 细节要求：
 
@@ -224,10 +242,9 @@ getWearStatus(BluetoothDevice): String
 
 映射策略需要 M1 trace 确认返回格式：
 
-- `getBatteryLevel` 可能只是触发刷新，不一定直接返回电量值。若返回值不被 UI 直接消费，应以 `MMACallback.onBatteryLevel(int[])` 为主。
-- `getAncState` 可从 OpenBuds `NoiseControlMode` 映射，初始只支持 `OFF`、`NOISE_CANCELLING`、`AMBIENT_SOUND`。
-- `getWearStatus` 返回字符串格式未知，M1 先 trace 真实返回或调用方解析逻辑。
-- `getRingFindState(String)` 在 `MxBluetoothManager` 层受 `mAirPodsAdapterEnable` 门控，不能作为 MiTWS 查找状态主线；仅保留给 V1 AirPods fallback 或 trace 验证。
+- `getBatteryLevel` **只是触发刷新**（`MxBluetoothService.java:720-734` 总是返回 `1`，表示"请求已发送"）。实际电量通过 `MmaInterfaces.getTargetInfoResponse()` 回调 → `onBatteryLevel(localDevice, mulQuantity)` 传递，其中 `mulQuantity` 是 `int[3]` 数组 `[left?, right?, case?]`。若返回值不被 UI 直接消费，应以 `MMACallback.onBatteryLevel(int[])` 为主。
+- `getAncState` 从 `mAncStateMap` 读取（`MxBluetoothService.java:695-717`）。可从 OpenBuds `NoiseControlMode` 映射，初始只支持 `OFF`、`NOISE_CANCELLING`、`AMBIENT_SOUND`。
+- `getWearStatus` 通过 `setCommonCommand(102, "", device)` 实现（`MxBluetoothService.java:782-798`）。返回字符串格式未知，M1 先 trace 真实返回或调用方解析逻辑。
 
 OpenBuds 现有 `MilinkDeviceSnapshot` 只包含电量、佩戴、充电和设备信息；M2 若要支持 ANC，需要扩展 bridge snapshot。
 
@@ -240,6 +257,10 @@ openAnc(BluetoothDevice): int
 openTransparent(BluetoothDevice): int
 closeAnc(BluetoothDevice): int
 ```
+
+ANC 模式值（`MxBluetoothService.java:50-52`）：`0=OFF, 1=ANC, 2=TRANSPARENT`。
+
+**重要**：hook 这三个方法后，**必须不调用原方法**（`chain.proceed()` 应返回 mock 成功值如 `1`），因为原方法会通过 `MmaCommandTools.tryToSetAncMode()` 尝试通过 MMA 协议栈发送命令到设备，而 Sony/QCY 设备不支持 MMA 协议。命令应通过 bridge 的 AIDL 接口发送到 OpenBuds App，由 App 侧的 `HeadphoneRepository` 通过 Sony Tandem/QCY TLV 协议执行。
 
 后续再评估：
 
@@ -257,7 +278,6 @@ MiTWS 查找耳机实际调用链
 - 所有控制 hook 独立闸门，默认关闭。
 - UI 操作后不做米链侧乐观状态，等待 OpenBuds 协议执行成功后由 bridge 快照回推。
 - 不支持的品牌能力必须返回失败或透传，不伪造成功。
-- `ringFindForAirPods(String, boolean)` 只属于 AirPods adapter fallback，不作为 MiTWS 主线控制点。M3 必须先 trace HeadsetDetailFragment/控件实际调用的是 MiTWS 方法、`setCommonCommand` 还是 AirPods fallback。
 
 ## 4. `com.xiaomi.bluetooth` 实验规格
 
@@ -343,13 +363,13 @@ data class MiuiGattRequest(
 
 V2 需要新增：
 
-| 能力 | 说明 | 阶段 |
-|------|------|------|
-| 多设备 snapshot map | Sony + QCY 同时连接或历史设备时不能只存一个 latestSnapshot | M2 |
-| ANC / playback / ring 状态字段 | 当前 `MilinkDeviceSnapshot` 缺少 ANC、播放、响铃状态 | M2-M3 |
-| 命令 AIDL | `setNoiseControl`、`ringFind`、`playback`、`setEqPreset` 等 | M3 |
-| 命令结果回执 | 米链 hook 需要同步返回成功/失败，但真实协议是异步；需要短超时缓存最近命令结果 | M3 |
-| capability 矩阵 | 按品牌/型号决定哪些 hook 返回能力，避免 UI 显示不能执行的控件 | M3 |
+| 能力 | 说明 | 阶段 | 当前状态 |
+|------|------|------|---------|
+| 多设备 snapshot map | Sony + QCY 同时连接或历史设备时不能只存一个 latestSnapshot | M2 | ❌ 未实现 |
+| ANC / playback / ring 状态字段 | 当前 `MilinkDeviceSnapshot` 缺少 ANC、播放、响铃状态 | M2-M3 | ❌ 未实现 |
+| 命令 AIDL | `setNoiseControl`、`ringFind`、`playback`、`setEqPreset` 等 | M3 | ❌ 未实现 |
+| 命令结果回执 | 米链 hook 需要同步返回成功/失败，但真实协议是异步；需要短超时缓存最近命令结果 | M3 | ❌ 未实现 |
+| capability 矩阵 | 按品牌/型号决定哪些 hook 返回能力，避免 UI 显示不能执行的控件 | M3 | ❌ 未实现 |
 
 命令接口建议保持领域语义，不暴露 Sony/QCY 原始字节：
 
@@ -365,15 +385,24 @@ setEqBand(mac, bandIndex, value)
 
 ### M0：证据冻结和闸门设计（1-2 天）
 
-- [ ] 在文档中记录已确认的真实签名：`MxBluetoothManager`、`MxBluetoothService`、`MiuiGattPeripheral`、`MiuiSppPeripheral`。
-- [ ] 给 V2 增加独立开关：App 设置开关 + `debug.openbuds.milink_mitws_enable` 系统属性。
-- [ ] 默认 V1 AirPods 路径继续启用，V2 仅 trace。
-- [ ] 明确真实 MiTWS / AirPods 保护策略：原方法返回真值时永远透传。
+- [x] 在文档中记录已确认的真实签名：`MxBluetoothManager`、`MxBluetoothService`、`MiuiGattPeripheral`、`MiuiSppPeripheral`。
+- [x] 给 V2 增加独立开关：App 设置开关 + `debug.openbuds.milink_mitws_enable` 系统属性。
+- [x] 删除 V1 AirPods 路径的所有代码（`MilinkAirpodsM1Hook.kt`、`MilinkAirpodsAdapterEntry.kt`、`AirpodsStateMapper.kt`、`MilinkAirpodsTargetMatcher.kt`、`NotifyChangePump.kt`、`MilinkBridgeCache.kt`）。
+- [x] 明确真实 MiTWS 保护策略：M0 trace hook 一律调用原方法并返回原结果；M1+ mutation hook 也必须在原方法返回真值、bridge 不可达、App 设置关闭或系统属性关闭时透传。
 
 验收：
 
-- V1 功能不回退。
+- V1 代码完全移除。
 - V2 trace 不改变米链行为。
+
+M0 签名冻结：
+
+| 类 | 已确认方法 |
+|----|------------|
+| `MxBluetoothManager` | `checkIsMiTWS(BluetoothDevice): int`、`getDeviceId(BluetoothDevice): String`、`connectMma(BluetoothDevice): int`、`disconnectMma(BluetoothDevice): int`、`registerCallback(MMACallback): boolean`、`unregisterCallback(MMACallback): boolean`、`getBatteryLevel(BluetoothDevice): int`、`getAncState(BluetoothDevice): int`、`getWearStatus(BluetoothDevice): String`、`openAnc(BluetoothDevice): int`、`openTransparent(BluetoothDevice): int`、`closeAnc(BluetoothDevice): int`。来源：`references/mi/com.milink.service/sources/com/xiaomi/mxbluetoothsdk/manager/MxBluetoothManager.java` 第317、349、366、400、438、461、478、516、601、618、635、701行附近。 |
+| `MxBluetoothService` | `checkIsMiTWS(BluetoothDevice): int`、`connectMma(BluetoothDevice): int`、`disconnectMma(BluetoothDevice): int`、`getAncState(BluetoothDevice): int`、`getBatteryLevel(BluetoothDevice): int`、`getDeviceId(BluetoothDevice): String`、`getWearStatus(BluetoothDevice): String`、`openAnc(BluetoothDevice): int`、`openTransparent(BluetoothDevice): int`、`closeAnc(BluetoothDevice): int`、`registerCallback(IMiaoXiangCallback): void`、`unregisterCallback(IMiaoXiangCallback): void`。来源：`references/mi/com.milink.service/sources/com/xiaomi/mxbluetoothsdk/service/MxBluetoothService.java` 第565、593、614、657、695、720、737、782、877、898、919、1023行附近。 |
+| `MiuiGattPeripheral` | `connect(boolean): boolean`、`disconnect(): void`、`writeCharacteristic(BluetoothDevice, String, String, byte[]): boolean`、`readCharacteristic(BluetoothDevice, String, String): boolean`、`writeDescriptor(BluetoothDevice, String, String, String, byte[], int): boolean`、`requestMTU(BluetoothDevice, int): boolean`、`setCharacteristicNotification(BluetoothDevice, String, String, boolean): boolean`、`onCharacteristicChanged(BluetoothGatt, BluetoothGattCharacteristic): void`。来源：`references/mi/com.xiaomi.bluetooth/sources/com/xiaomi/bluetooth/peripheral/MiuiGattPeripheral.java` 第134、189、216、248、279、346、361、597行附近。 |
+| `MiuiSppPeripheral` | `MiuiSppPeripheral(Context, BluetoothDevice, String, IPCServiceEventCallback)`、`connect(boolean): boolean`、`sendData(byte[]): boolean`；内部连接使用 `createRfcommSocketToServiceRecord(UUID.fromString(mUuid))`。来源：`references/mi/com.xiaomi.bluetooth/sources/com/xiaomi/bluetooth/peripheral/MiuiSppPeripheral.java` 第56、153、248、329行附近。 |
 
 ### M1：MiTWS 分类和调用链 trace（1 周）
 
@@ -386,7 +415,7 @@ setEqBand(mac, bandIndex, value)
 验收：
 
 - OpenBuds 设备可进入 `HEADSET` 分类。
-- 真实小米耳机和 AirPods 透传。
+- 真实小米耳机透传。
 - 明确 HeadsetDetailFragment 是否打开、哪些 getter/callback 被调用。
 - 明确 `connectMma` 成功码/失败码/调用时机；OpenBuds fake MiTWS 不应在 M1 默认触发真实 Xiaomi MMA 连接。
 
@@ -396,7 +425,6 @@ setEqBand(mac, bandIndex, value)
 - [ ] hook `registerCallback` 并从 bridge 派发电量、佩戴、连接、deviceId 状态。
 - [ ] hook 必要状态 getter，补齐 callback 之外的同步读取。
 - [ ] 扩展 `MilinkDeviceSnapshot`：ANC 状态、ring 状态、capability flags。
-- [ ] 保留 AirPods ContentProvider hook 作为 fallback，但 MiTWS 主线不依赖它。
 
 验收：
 
@@ -407,8 +435,8 @@ setEqBand(mac, bandIndex, value)
 ### M3：反向控制闭环（1-2 周）
 
 - [ ] 扩展 bridge 命令 AIDL。
-- [ ] 实现 `openAnc`、`openTransparent`、`closeAnc` 到 OpenBuds `ControlCommand.SetNoiseControl` 的映射。
-- [ ] trace 并实现 MiTWS 对应查找接口到 OpenBuds 查找命令；`ringFindForAirPods` 只作为 V1 fallback，不作为 V2 MiTWS 主线。
+- [ ] 实现 `openAnc`、`openTransparent`、`closeAnc` 到 OpenBuds `ControlCommand.SetNoiseControl` 的映射。**注意：hook 后必须不调用原方法**，因为原方法会通过 MMA 协议栈发送命令到不支持的设备。
+- [ ] trace 并实现 MiTWS 对应查找接口到 OpenBuds 查找命令。
 - [ ] 如果 UI 调用了 `changeAncMode` / `changeAncLevel`，再加 hook；否则不主动实现。
 - [ ] 每个命令需要：米链 UI 操作 -> bridge command -> OpenBuds 协议执行 -> snapshot 更新 -> callback 回推。
 
@@ -447,7 +475,6 @@ setEqBand(mac, bandIndex, value)
 - [ ] 多设备缓存。
 - [ ] Sony/QCY capability 矩阵。
 - [ ] 真实 MiTWS 回归测试。
-- [ ] V1/V2 双路径切换策略：V2 稳定后可设为默认，V1 作为只读 fallback。
 
 ## 7. 测试矩阵
 
@@ -456,7 +483,6 @@ setEqBand(mac, bandIndex, value)
 | Sony LinkBuds S 已连接 | 必测 | 必测 | 必测 | 进入 HEADSET，状态真实；M3 通过 UI 调用链验证后 ANC 可控 |
 | QCY C30S 已连接 | 选测 | 必测 | 选测 | 状态只读先可用，控制按 capability 启用 |
 | 真实 Redmi / Xiaomi Buds | 必测 | 必测 | 必测 | 原路径透传，无误注入 |
-| 真实 AirPods | 选测 | 选测 | 选测 | V1 保护仍成立，V2 不影响 |
 | Bridge 不可达 | 必测 | 必测 | 必测 | hook 透传或返回安全缺省 |
 | OpenBuds App 普通进程死亡 | 必测 | 必测 | 必测 | 可重新绑定服务或使用 TTL 缓存恢复 |
 | OpenBuds App 被用户强停 | 必测 | 必测 | 必测 | 不承诺自动拉起；hook 必须快速降级，用户重新打开 OpenBuds 后恢复 |
@@ -483,26 +509,41 @@ setEqBand(mac, bandIndex, value)
 
 ## 9. 代码资产映射
 
-可复用：
+可复用（需改造）：
 
-| 文件 | 用途 | 备注 |
-|------|------|------|
+| 文件 | 用途 | 改造方向 |
+|------|------|---------|
 | `integration/milink/MilinkBridgeService.kt` | App 侧 bridge | M3 需要加命令接口 |
 | `integration/milink/MilinkDeviceSnapshot.kt` | 状态快照 | M2 需要加 ANC/ring/capability |
-| `lsposed/milink/MilinkBridgeClient.kt` | 模块侧缓存 | 可复用 |
-| `lsposed/milink/NotifyChangePump.kt` | AirPods fallback 刷新 | MiTWS callback 主线不一定需要 |
-| `lsposed/milink/DeviceIdRegistry.kt` | deviceId 稳定映射 | 需要增加 MiTWS 模板策略 |
-| `lsposed/milink/MilinkAirpodsM1Hook.kt` | V1 fallback | 保持维护，不直接改成 MiTWS |
+| `lsposed/mitws/MilinkBridgeClient.kt` | 模块侧 bridge client | M0 已迁移为 MiTWS 命名，并移除 AirPods fallback/system-property allowlist |
+| `lsposed/mitws/MiTwsBridgeCache.kt` | 模块侧 snapshot TTL 缓存 | M0 已重建为 MiTWS 命名 |
+| `lsposed/mitws/MiTwsDeviceIdPolicy.kt` | deviceId 稳定映射 | M0 已加入默认 `01010101` 和实验 Flora 模板 |
 
-新增建议：
+废弃（M0 删除）：
+
+| 文件 | 原因 |
+|------|------|
+| `lsposed/milink/MilinkAirpodsM1Hook.kt` | V1 AirPods 路径已废弃 |
+| `lsposed/milink/MilinkAirpodsAdapterEntry.kt` | V1 AirPods 路径已废弃 |
+| `lsposed/milink/AirpodsStateMapper.kt` | V1 AirPods 路径已废弃 |
+| `lsposed/milink/MilinkAirpodsTargetMatcher.kt` | V1 AirPods 路径已废弃 |
+| `lsposed/milink/NotifyChangePump.kt` | V1 AirPods 路径已废弃 |
+| `lsposed/milink/MilinkBridgeCache.kt` | V1 命名已废弃；M0 以 `MiTwsBridgeCache` 重建最小缓存 |
+
+新增（注意：类名不带 V1/V2 后缀）：
 
 ```text
 app/src/main/java/dev/ignotus/openbuds/lsposed/mitws/
-    MilinkMiTwsFacadeHook.kt
-    MiTwsDeviceIdPolicy.kt
-    MiTwsStateMapper.kt
-    MiTwsCallbackPump.kt
-    MiTwsControlMapper.kt
+    MilinkRouteConfig.kt              // 路由配置（MITWS / TRACE）
+    MilinkMiTwsFacadeEntry.kt         // MiTWS 入口
+    MilinkMiTwsTraceEntry.kt          // trace-only 入口
+    MilinkMiTwsFacadeHook.kt          // 核心 hook 实现
+    MilinkBridgeClient.kt             // 模块侧 bridge client
+    MiTwsBridgeCache.kt               // bridge snapshot TTL 缓存
+    MiTwsDeviceIdPolicy.kt            // deviceId 模板策略
+    MiTwsStateMapper.kt               // M2: bridge snapshot → MiTWS 状态映射
+    MiTwsCallbackPump.kt              // M2: callback 派发泵
+    MiTwsControlMapper.kt             // M3: 反向控制命令映射
 
 app/src/main/java/dev/ignotus/openbuds/lsposed/xiaomi_bluetooth/
     XiaomiBluetoothTraceEntry.kt
@@ -514,25 +555,13 @@ app/src/main/java/dev/ignotus/openbuds/lsposed/xiaomi_bluetooth/
     MiuiSppProxyStrategy.kt         // M5 only, default disabled
 ```
 
-`ModuleMain.kt` 需要从单 package dispatch 改成按路线和 per-MAC ownership 分流，而不是同时让 V1/V2 认领同一设备：
+`ModuleMain.kt` 路由逻辑（类名不带 V1/V2 后缀）：
 
 ```kotlin
 when (param.packageName) {
     "com.milink.service" -> when (MilinkRouteConfig.mode()) {
-        MilinkRouteMode.AIRPODS_V1_ONLY -> {
-            MilinkAirpodsAdapterEntry(cl).install()
-        }
-        MilinkRouteMode.MITWS_V2_ONLY -> {
-            MilinkMiTwsFacadeEntry(cl).install()
-        }
-        MilinkRouteMode.DUAL_WITH_PER_MAC_ROUTER -> {
-            val router = MilinkDeviceOwnershipRouter(cl)
-            MilinkAirpodsAdapterEntry(cl, router).install()
-            MilinkMiTwsFacadeEntry(cl, router).install()
-        }
-        MilinkRouteMode.TRACE_ONLY -> {
-            MilinkMiTwsTraceEntry(cl).install()
-        }
+        MilinkRouteMode.MITWS -> MilinkMiTwsFacadeEntry(cl).install()
+        MilinkRouteMode.TRACE_ONLY -> MilinkMiTwsTraceEntry(cl).install()
     }
     "com.xiaomi.bluetooth" -> {
         XiaomiBluetoothTraceEntry(cl).installIfEnabled()
@@ -540,7 +569,14 @@ when (param.packageName) {
 }
 ```
 
-实际实现时 V1 和 V2 必须有互斥闸门，同一 MAC 不应同时被 AirPods 和 MiTWS 两条路径认领。
+`MilinkRouteMode`（枚举值不带 V1/V2 后缀）：
+
+```kotlin
+enum class MilinkRouteMode {
+    MITWS,       // 默认：MiTWS 主线
+    TRACE_ONLY,  // 仅 trace，不修改返回值
+}
+```
 
 ## 10. 参考源
 
@@ -556,13 +592,6 @@ when (param.packageName) {
 - `references/mi/com.xiaomi.bluetooth/sources/com/android/bluetooth/ble/app/fastconnect/MiuiFastConnectService.java`
 - `references/mi/com.xiaomi.bluetooth/sources/com/android/bluetooth/ble/app/fastconnect/MiuiFastConnectStateMachine.java`
 - `references/mi/com.xiaomi.bluetooth/sources/com/android/bluetooth/ble/app/headset/plugin/BluetoothHeadsetServicePlugin.java`
-- `references/SonyConnect/Reverse/sources/mg/C20731w.java`
-- `references/SonyConnect/Reverse/sources/mg/RunnableC20715g.java`
-- `references/SonyConnect/Reverse/sources/mg/RunnableC20714f.java`
-- `references/SonyConnect/Reverse/sources/com/sony/songpal/mdr/platform/connection/connection/ConnectionController.java`
-- `references/SonyConnect/Reverse/sources/com/sony/songpal/mdr/platform/connection/connection/C11667r0.java`
-- `references/SonyConnect/Reverse/sources/com/sony/songpal/mdr/platform/connection/broadcastreceiver/C11593j.java`
-- `references/SonyConnect/Reverse/sources/com/sony/songpal/ble/client/AdPacketDynamicInfo.java`
 - `docs/plan/MILINK_FIRST_PARTY_ADAPTER_PLAN.md`
 - `docs/PROTOCOL_GUIDE.md`
 - `docs/BRAND_INTEGRATION_GUIDE.md`

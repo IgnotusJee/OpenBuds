@@ -1,4 +1,4 @@
-package dev.ignotus.openbuds.lsposed.milink
+package dev.ignotus.openbuds.lsposed.mitws
 
 import android.content.ComponentName
 import android.content.Context
@@ -14,13 +14,13 @@ import dev.ignotus.openbuds.integration.milink.IMilinkBridgeCallback
 import dev.ignotus.openbuds.integration.milink.IMilinkBridgeService
 import dev.ignotus.openbuds.integration.milink.MilinkBridgeContract
 import dev.ignotus.openbuds.integration.milink.MilinkDeviceSnapshot
+import dev.ignotus.openbuds.integration.milink.normalizeMac
 
 class MilinkBridgeClient(
     private val context: Context,
-    private val cache: MilinkBridgeCache = MilinkBridgeCache(),
-    private val notifyPump: NotifyChangePump = NotifyChangePump(context),
-) {
-    private val worker = HandlerThread("OpenBuds-MiLinkBridge").also { it.start() }
+    private val cache: MiTwsBridgeCache = MiTwsBridgeCache(),
+) : MilinkBridgeClientFacade {
+    private val worker = HandlerThread("OpenBuds-MiTwsBridge").also { it.start() }
     private val handler = Handler(worker.looper)
 
     @Volatile
@@ -32,16 +32,17 @@ class MilinkBridgeClient(
     private var retryMs = MIN_RETRY_MS
     private var bound = false
 
+    override val adapterEnabled: Boolean
+        get() = cache.adapterEnabled
+
     private val callback = object : IMilinkBridgeCallback.Stub() {
         override fun onSnapshotChanged(snapshot: Bundle?) {
             val parsed = MilinkDeviceSnapshot.fromBundle(snapshot) ?: return
             cache.updateSnapshot(parsed)
-            notifyPump.requestNotify()
         }
 
         override fun onAdapterStatusChanged(status: Bundle?) {
             applyStatus(status)
-            notifyPump.requestNotify()
         }
     }
 
@@ -89,7 +90,7 @@ class MilinkBridgeClient(
         handler.post { scheduleBind(delayMs = 0L) }
     }
 
-    fun snapshotFor(mac: String?): MilinkDeviceSnapshot? {
+    override fun snapshotFor(mac: String?): MilinkDeviceSnapshot? {
         val snapshot = cache.snapshotFor(mac)
         if (snapshot == null) {
             handler.post { refreshFromBridge(mac) }
@@ -97,35 +98,15 @@ class MilinkBridgeClient(
         return snapshot
     }
 
-    fun isAuthorized(mac: String?): Boolean =
-        snapshotFor(mac) != null || fallbackAuthorized(mac)
-
-    /**
-     * Fallback authorization via system property allowlist.
-     *
-     * Used when the bridge is active but has no connected-device snapshots
-     * (e.g. App process was just started by milink's bind but
-     * [dev.ignotus.openbuds.service.SonyControlService] hasn't re-established
-     * the BLE protocol connection yet).
-     *
-     * Set via:
-     * ```powershell
-     * adb shell setprop debug.openbuds.milink_m1_macs "F8:4E:17:D1:32:27,AA:BB:CC:DD:EE:FF"
-     * ```
-     */
-    private fun fallbackAuthorized(mac: String?): Boolean {
-        val normalized = MilinkAirpodsTargetMatcher.normalizeMac(mac) ?: return false
-        val allowlist = readSystemProp("debug.openbuds.milink_m1_macs", "")
-        if (allowlist.isBlank()) return false
-        val allowMacs = allowlist.split(",").mapNotNull(MilinkAirpodsTargetMatcher::normalizeMac).toSet()
-        return normalized in allowMacs
-    }
+    override fun isAuthorized(mac: String?): Boolean = snapshotFor(mac) != null
 
     private fun scheduleBind(delayMs: Long = retryMs) {
         handler.removeCallbacksAndMessages(BIND_TOKEN)
-        handler.postAtTime({
-            bind()
-        }, BIND_TOKEN, android.os.SystemClock.uptimeMillis() + delayMs)
+        handler.postAtTime(
+            { bind() },
+            BIND_TOKEN,
+            android.os.SystemClock.uptimeMillis() + delayMs,
+        )
     }
 
     private fun bind() {
@@ -139,7 +120,7 @@ class MilinkBridgeClient(
         val success = runCatching {
             context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
         }.getOrElse { error ->
-            Log.w(TAG, "Bridge bind failed", error)
+            Log.w(TAG, "MiTWS bridge bind failed", error)
             false
         }
         if (success) {
@@ -168,9 +149,9 @@ class MilinkBridgeClient(
             refreshAuthorizedSnapshots(bridge, openedToken)
             bridge.registerCallback(openedToken, callback)
             cache.markError(null)
-            Log.i(TAG, "MiLink bridge session opened")
+            Log.i(TAG, "MiLink MiTWS bridge session opened")
         }.onFailure { error ->
-            Log.w(TAG, "Bridge session failed", error)
+            Log.w(TAG, "MiTWS bridge session failed", error)
             token = null
             cache.markError(error.message ?: "bridge_session_failed")
             retryLater()
@@ -180,7 +161,7 @@ class MilinkBridgeClient(
     private fun refreshFromBridge(mac: String?) {
         val bridge = service ?: return
         val openedToken = token ?: return
-        val normalized = MilinkAirpodsTargetMatcher.normalizeMac(mac) ?: return
+        val normalized = mac?.normalizeMac() ?: return
         runCatching {
             val snapshot = MilinkDeviceSnapshot.fromBundle(
                 bridge.getDeviceSnapshot(openedToken, normalized),
@@ -216,7 +197,7 @@ class MilinkBridgeClient(
     }
 
     private fun handleBridgeError(error: Throwable) {
-        Log.w(TAG, "Bridge call failed", error)
+        Log.w(TAG, "MiTWS bridge call failed", error)
         if (error is RemoteException || error is SecurityException) {
             token = null
             service = null
@@ -230,7 +211,7 @@ class MilinkBridgeClient(
             runCatching {
                 context.unbindService(connection)
             }.onFailure { error ->
-                Log.w(TAG, "Bridge unbind failed", error)
+                Log.w(TAG, "MiTWS bridge unbind failed", error)
             }
         }
         bound = false
@@ -243,12 +224,11 @@ class MilinkBridgeClient(
         private const val MIN_RETRY_MS = 1_000L
         private const val MAX_RETRY_MS = 30_000L
         private val BIND_TOKEN = Any()
-
-        private fun readSystemProp(key: String, default: String): String =
-            runCatching {
-                val clazz = Class.forName("android.os.SystemProperties")
-                val method = clazz.getMethod("get", String::class.java, String::class.java)
-                method.invoke(null, key, default) as? String ?: default
-            }.getOrDefault(default)
     }
+}
+
+interface MilinkBridgeClientFacade {
+    val adapterEnabled: Boolean
+    fun snapshotFor(mac: String?): MilinkDeviceSnapshot?
+    fun isAuthorized(mac: String?): Boolean
 }

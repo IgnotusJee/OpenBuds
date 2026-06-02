@@ -1,10 +1,11 @@
-package dev.ignotus.openbuds.lsposed.milink
+package dev.ignotus.openbuds.lsposed.mitws
 
 import android.os.SystemClock
 import dev.ignotus.openbuds.integration.milink.MilinkDeviceSnapshot
+import dev.ignotus.openbuds.integration.milink.normalizeMac
 import java.util.concurrent.ConcurrentHashMap
 
-class MilinkBridgeCache(
+class MiTwsBridgeCache(
     private val ttlMs: Long = DEFAULT_TTL_MS,
     private val now: () -> Long = SystemClock::elapsedRealtime,
 ) {
@@ -23,12 +24,12 @@ class MilinkBridgeCache(
 
     fun updateStatus(enabled: Boolean, authorized: Collection<String>) {
         adapterEnabled = enabled
-        authorizedMacs = authorized.mapNotNull(MilinkAirpodsTargetMatcher::normalizeMac).toSet()
+        authorizedMacs = authorized.mapNotNull { it.normalizeMac() }.toSet()
         if (!enabled) clearSnapshots()
     }
 
     fun updateSnapshot(snapshot: MilinkDeviceSnapshot) {
-        val mac = MilinkAirpodsTargetMatcher.normalizeMac(snapshot.mac) ?: return
+        val mac = snapshot.mac.normalizeMac() ?: return
         if (snapshot.connected) {
             entries[mac] = Entry(snapshot.copy(mac = mac), now())
         } else {
@@ -38,7 +39,7 @@ class MilinkBridgeCache(
 
     fun snapshotFor(mac: String?): MilinkDeviceSnapshot? {
         if (!adapterEnabled) return null
-        val normalized = MilinkAirpodsTargetMatcher.normalizeMac(mac) ?: return null
+        val normalized = mac?.normalizeMac() ?: return null
         if (normalized !in authorizedMacs) return null
         val entry = entries[normalized] ?: return null
         if (now() - entry.savedAtMs > ttlMs) {

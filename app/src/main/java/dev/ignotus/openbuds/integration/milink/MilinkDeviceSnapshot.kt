@@ -2,7 +2,7 @@ package dev.ignotus.openbuds.integration.milink
 
 import android.os.Bundle
 import dev.ignotus.openbuds.data.HeadphoneUiState
-import dev.ignotus.openbuds.lsposed.milink.DeviceIdRegistry
+import dev.ignotus.openbuds.lsposed.mitws.MiTwsDeviceIdPolicy
 
 data class MilinkDeviceSnapshot(
     val mac: String,
@@ -55,7 +55,7 @@ data class MilinkDeviceSnapshot(
                 brand = bundle.getString(MilinkBridgeContract.KEY_BRAND),
                 model = bundle.getString(MilinkBridgeContract.KEY_MODEL),
                 deviceId = bundle.getString(MilinkBridgeContract.KEY_DEVICE_ID)
-                    ?: DeviceIdRegistry.GENERIC_EARBUD_DEVICE_ID,
+                    ?: MiTwsDeviceIdPolicy.GENERIC_EARBUD_DEVICE_ID,
                 connected = bundle.getBoolean(MilinkBridgeContract.KEY_CONNECTED, false),
                 protocolReady = bundle.getBoolean(MilinkBridgeContract.KEY_PROTOCOL_READY, false),
                 leftBattery = bundle.intOrNull(MilinkBridgeContract.KEY_LEFT_BATTERY),
@@ -89,7 +89,7 @@ object MilinkBridgeSnapshotMapper {
             name = device.name.takeIf { it.isNotBlank() } ?: profile?.displayName,
             brand = profile?.brand,
             model = state.deviceInfo.modelName ?: profile?.modelName,
-            deviceId = DeviceIdRegistry.deviceIdForMac(mac),
+            deviceId = MiTwsDeviceIdPolicy.deviceIdForMac(mac),
             connected = true,
             protocolReady = state.deviceInfo.protocolReady,
             leftBattery = battery.left,

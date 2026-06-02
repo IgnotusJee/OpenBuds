@@ -1,4 +1,4 @@
-package dev.ignotus.openbuds.lsposed.milink
+package dev.ignotus.openbuds.lsposed.mitws
 
 import android.app.Application
 import android.content.Context
@@ -6,39 +6,19 @@ import android.util.Log
 import dev.ignotus.openbuds.lsposed.ModuleMain
 import io.github.libxposed.api.XposedInterface
 
-/**
- * Top-level entry point for the MiLink first-party adapter path.
- *
- * ## Architecture
- *
- * This entry is invoked by [ModuleMain][dev.ignotus.openbuds.lsposed.ModuleMain]
- * when the LSPosed module loads inside `com.milink.service`. It installs hooks
- * that intercept milink's AirPods classification chain **before** any binder
- * call reaches `com.android.bluetooth`.
- *
- * ## Key principle
- *
- * **Never cross the process boundary.** All hooks live inside `com.milink.service`.
- * The Bluetooth process (`com.android.bluetooth`) is never touched, hooked, or
- * reverse-engineered.
- *
- * @see MilinkAirpodsM1Hook for hook implementation details
- * @see docs/plan/MILINK_FIRST_PARTY_ADAPTER_PLAN.md
- */
-class MilinkAirpodsAdapterEntry(
+class MilinkMiTwsFacadeEntry(
     private val classLoader: ClassLoader,
 ) {
     @Volatile
     private var bridgeClient: MilinkBridgeClient? = null
 
     fun install() {
-        Log.i(TAG, "Installing MiLink AirPods bridge hooks")
-        installApplicationAttachHook()
-        val client = MilinkBridgeClientHolder
-        MilinkAirpodsM1Hook(classLoader, client).install()
+        Log.i(TAG, "Installing MiLink MiTWS facade entry (M1)")
+        installApplicationOnCreateHook()
+        MilinkMiTwsFacadeHook(classLoader, BridgeClientHolder).installTraceHooks()
     }
 
-    private fun installApplicationAttachHook() {
+    private fun installApplicationOnCreateHook() {
         val method = runCatching {
             Application::class.java.getDeclaredMethod("onCreate")
                 .also { it.isAccessible = true }
@@ -58,7 +38,7 @@ class MilinkAirpodsAdapterEntry(
                     return result
                 }
             })
-        Log.i(TAG, "hooked: Application.onCreate()")
+        Log.i(TAG, "hooked: Application.onCreate() for MiTWS bridge")
     }
 
     private fun startBridgeClient(context: Context) {
@@ -67,30 +47,25 @@ class MilinkAirpodsAdapterEntry(
             if (bridgeClient != null) return
             val client = MilinkBridgeClient(context)
             bridgeClient = client
-            MilinkBridgeClientHolder.delegate = client
+            BridgeClientHolder.delegate = client
             client.start()
-            Log.i(TAG, "MiLink bridge client started")
+            Log.i(TAG, "MiLink MiTWS bridge client started (M1)")
         }
     }
 
-    /**
-     * Hook callbacks may run before Application.attach has supplied a Context.
-     * Until then this delegate returns no snapshots, preserving strict fallback.
-     */
-    private object MilinkBridgeClientHolder : MilinkBridgeClientFacade {
+    private object BridgeClientHolder : MilinkBridgeClientFacade {
         @Volatile
         var delegate: MilinkBridgeClient? = null
 
+        override val adapterEnabled: Boolean
+            get() = delegate?.adapterEnabled == true
+
         override fun snapshotFor(mac: String?) = delegate?.snapshotFor(mac)
+
         override fun isAuthorized(mac: String?) = delegate?.isAuthorized(mac) == true
     }
 
     private companion object {
         private const val TAG = "OpenBuds"
     }
-}
-
-interface MilinkBridgeClientFacade {
-    fun snapshotFor(mac: String?): dev.ignotus.openbuds.integration.milink.MilinkDeviceSnapshot?
-    fun isAuthorized(mac: String?): Boolean
 }

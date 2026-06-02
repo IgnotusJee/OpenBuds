@@ -18,7 +18,7 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import dev.ignotus.openbuds.MainActivity
 import dev.ignotus.openbuds.data.HeadphoneRepository
-import dev.ignotus.openbuds.lsposed.milink.MilinkAirpodsTargetMatcher
+import dev.ignotus.openbuds.integration.milink.normalizeMac
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -129,7 +129,7 @@ class SonyControlService : Service() {
                     && repository.state.value.discoveredDevices.isNotEmpty()
                 ) {
                     val discovered = repository.state.value.discoveredDevices
-                        .firstOrNull { d -> MilinkAirpodsTargetMatcher.normalizeMac(d.address) != null }
+                        .firstOrNull { d -> d.address.normalizeMac() != null }
                     if (discovered != null) {
                         Log.i(TAG, "Auto-connecting discovered: ${discovered.name} (${discovered.address})")
                         repository.connect(discovered)

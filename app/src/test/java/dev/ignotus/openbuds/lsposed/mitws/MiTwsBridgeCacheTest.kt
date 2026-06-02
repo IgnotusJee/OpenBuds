@@ -1,13 +1,13 @@
-package dev.ignotus.openbuds.lsposed.milink
+package dev.ignotus.openbuds.lsposed.mitws
 
 import dev.ignotus.openbuds.integration.milink.MilinkDeviceSnapshot
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-class MilinkBridgeCacheTest {
+class MiTwsBridgeCacheTest {
     private var nowMs = 1_000L
-    private val cache = MilinkBridgeCache(ttlMs = 5_000L, now = { nowMs })
+    private val cache = MiTwsBridgeCache(ttlMs = 5_000L, now = { nowMs })
 
     @Test
     fun snapshotFor_requiresEnabledAuthorizedAndFreshSnapshot() {
@@ -49,7 +49,7 @@ class MilinkBridgeCacheTest {
             name = "LinkBuds S",
             brand = "Sony",
             model = "LinkBuds S",
-            deviceId = DeviceIdRegistry.GENERIC_EARBUD_DEVICE_ID,
+            deviceId = MiTwsDeviceIdPolicy.GENERIC_EARBUD_DEVICE_ID,
             connected = true,
             protocolReady = true,
             leftBattery = 70,

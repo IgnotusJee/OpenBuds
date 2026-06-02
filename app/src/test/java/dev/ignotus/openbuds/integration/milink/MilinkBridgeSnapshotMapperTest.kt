@@ -5,7 +5,7 @@ import dev.ignotus.openbuds.data.BatteryState
 import dev.ignotus.openbuds.data.DeviceInfoState
 import dev.ignotus.openbuds.data.HeadphoneUiState
 import dev.ignotus.openbuds.data.WearingState
-import dev.ignotus.openbuds.lsposed.milink.DeviceIdRegistry
+import dev.ignotus.openbuds.lsposed.mitws.MiTwsDeviceIdPolicy
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -48,7 +48,7 @@ class MilinkBridgeSnapshotMapperTest {
         assertEquals("AA:BB:CC:DD:EE:FF", snapshot.mac)
         assertEquals("QCY C30S", snapshot.name)
         assertEquals("QCY C30S", snapshot.model)
-        assertEquals(DeviceIdRegistry.GENERIC_EARBUD_DEVICE_ID, snapshot.deviceId)
+        assertEquals(MiTwsDeviceIdPolicy.GENERIC_EARBUD_DEVICE_ID, snapshot.deviceId)
         assertEquals(80, snapshot.leftBattery)
         assertEquals(90, snapshot.rightBattery)
         assertEquals(50, snapshot.caseBattery)

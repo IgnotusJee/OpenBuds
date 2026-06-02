@@ -107,7 +107,7 @@ class MainActivity : ComponentActivity() {
             setOnClickListener { repository.disconnect() }
         }
         milinkAdapterCheck = CheckBox(this).apply {
-            text = "MiLink adapter"
+            text = "MiLink MiTWS adapter"
             textSize = 12f
             setTextColor(Color.parseColor("#CCCCCC"))
             setPadding(8, 4, 8, 4)
