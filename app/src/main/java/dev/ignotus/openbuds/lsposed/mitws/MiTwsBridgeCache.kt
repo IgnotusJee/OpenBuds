@@ -14,6 +14,15 @@ class MiTwsBridgeCache(
     @Volatile
     private var authorizedMacs: Set<String> = emptySet()
 
+    /**
+     * MACs that were ever authorized by the bridge, persisted across bridge
+     * disconnections. This prevents classification flapping when the bridge
+     * hasn't connected yet or is temporarily unavailable — the hook can still
+     * recognize known devices as MiTWS.
+     */
+    @Volatile
+    private var knownAuthorizedMacs: Set<String> = emptySet()
+
     @Volatile
     var adapterEnabled: Boolean = false
         private set
@@ -24,7 +33,10 @@ class MiTwsBridgeCache(
 
     fun updateStatus(enabled: Boolean, authorized: Collection<String>) {
         adapterEnabled = enabled
-        authorizedMacs = authorized.mapNotNull { it.normalizeMac() }.toSet()
+        val normalized = authorized.mapNotNull { it.normalizeMac() }.toSet()
+        authorizedMacs = normalized
+        // Persist authorized MACs across bridge disconnections
+        knownAuthorizedMacs = knownAuthorizedMacs + normalized
         if (!enabled) clearSnapshots()
     }
 
@@ -37,22 +49,40 @@ class MiTwsBridgeCache(
         }
     }
 
+    /**
+     * Returns a snapshot for the given MAC if available and fresh enough.
+     * Falls back to a minimal placeholder snapshot if the MAC is a known
+     * authorized device but no live data is available — this ensures
+     * classification as MiTWS even before the bridge connects.
+     */
     fun snapshotFor(mac: String?): MilinkDeviceSnapshot? {
         if (!adapterEnabled) return null
         val normalized = mac?.normalizeMac() ?: return null
-        if (normalized !in authorizedMacs) return null
-        val entry = entries[normalized] ?: return null
+        if (normalized !in authorizedMacs) {
+            // Not in current authorized list — check if it's a known device
+            // from a previous bridge session
+            if (normalized in knownAuthorizedMacs) {
+                return placeholderSnapshot(normalized)
+            }
+            return null
+        }
+        val entry = entries[normalized]
+        if (entry == null) {
+            // Authorized but no snapshot yet (bridge hasn't pushed data)
+            return placeholderSnapshot(normalized)
+        }
         // Return stale snapshot if within stale tolerance to avoid classification flapping.
-        // This prevents the "dual sticker" issue where cache expiry between bridge updates
-        // causes checkIsMiTWS to flip from 1 to 0.
         if (now() - entry.savedAtMs > ttlMs) {
             if (now() - entry.savedAtMs > STALE_TOLERANCE_MS) {
                 entries.remove(normalized)
-                return null
+                // Fall through to placeholder — MAC is still known authorized
+            } else {
+                return entry.snapshot.takeIf { it.connected }
             }
+        } else {
             return entry.snapshot.takeIf { it.connected }
         }
-        return entry.snapshot.takeIf { it.connected }
+        return placeholderSnapshot(normalized)
     }
 
     fun authorizedMacs(): Set<String> =
@@ -64,12 +94,35 @@ class MiTwsBridgeCache(
             adapterEnabled = false
             authorizedMacs = emptySet()
             clearSnapshots()
+            // knownAuthorizedMacs intentionally NOT cleared — survives bridge restart
         }
     }
 
     fun clearSnapshots() {
         entries.clear()
     }
+
+    private fun placeholderSnapshot(mac: String): MilinkDeviceSnapshot =
+        MilinkDeviceSnapshot(
+            mac = mac,
+            name = "",
+            brand = "",
+            model = "",
+            deviceId = "",
+            connected = true,
+            protocolReady = false,
+            leftBattery = null,
+            rightBattery = null,
+            caseBattery = null,
+            singleBattery = null,
+            leftWearing = null,
+            rightWearing = null,
+            leftCharging = null,
+            rightCharging = null,
+            caseCharging = null,
+            revision = 0L,
+            updatedAt = now(),
+        )
 
     private data class Entry(
         val snapshot: MilinkDeviceSnapshot,

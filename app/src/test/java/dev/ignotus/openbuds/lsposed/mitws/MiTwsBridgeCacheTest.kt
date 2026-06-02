@@ -33,15 +33,45 @@ class MiTwsBridgeCacheTest {
     }
 
     @Test
-    fun snapshotFor_returnsNull_afterStaleTolerance() {
+    fun snapshotFor_returnsPlaceholder_afterStaleTolerance() {
         val snapshot = snapshot("AA:BB:CC:DD:EE:FF")
         cache.updateStatus(enabled = true, authorized = listOf(snapshot.mac))
         cache.updateSnapshot(snapshot)
 
-        // Advance past stale tolerance
+        // Advance past stale tolerance — entry is evicted but MAC is still known
         nowMs += 301_000L
 
+        val result = cache.snapshotFor(snapshot.mac)
+        assertEquals(snapshot.mac, result?.mac)
+        assertEquals(true, result?.connected)
+    }
+
+    @Test
+    fun snapshotFor_returnsPlaceholder_whenAuthorizedButNoSnapshot() {
+        cache.updateStatus(enabled = true, authorized = listOf("AA:BB:CC:DD:EE:FF"))
+
+        val result = cache.snapshotFor("AA:BB:CC:DD:EE:FF")
+        assertEquals("AA:BB:CC:DD:EE:FF", result?.mac)
+        assertEquals(true, result?.connected)
+    }
+
+    @Test
+    fun knownAuthorizedMacs_survivesBridgeDisconnection() {
+        val snapshot = snapshot("AA:BB:CC:DD:EE:FF")
+        cache.updateStatus(enabled = true, authorized = listOf(snapshot.mac))
+        cache.updateSnapshot(snapshot)
+
+        // Simulate bridge disconnect — markError clears adapter state
+        cache.markError("bridge_disconnected")
+
+        // After markError, adapterEnabled=false → snapshotFor returns null
         assertNull(cache.snapshotFor(snapshot.mac))
+
+        // Simulate bridge reconnect
+        cache.updateStatus(enabled = true, authorized = listOf(snapshot.mac))
+        // Snapshot should be available again (knownAuthorizedMacs preserved the MAC)
+        val result = cache.snapshotFor(snapshot.mac)
+        assertEquals(snapshot.mac, result?.mac)
     }
 
     @Test

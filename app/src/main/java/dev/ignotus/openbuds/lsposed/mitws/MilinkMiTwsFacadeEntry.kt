@@ -14,11 +14,25 @@ class MilinkMiTwsFacadeEntry(
 
     fun install() {
         Log.i(TAG, "Installing MiLink MiTWS facade entry (M1)")
-        installApplicationOnCreateHook()
+        // Start bridge client immediately so snapshot is available before
+        // MxBluetoothManager methods are first called. The Application.onCreate()
+        // hook is a fallback if ActivityThread.currentApplication() isn't ready yet.
+        val app = currentApplication()
+        if (app != null) {
+            startBridgeClient(app)
+        } else {
+            installApplicationOnCreateFallback()
+        }
         MilinkMiTwsFacadeHook(classLoader, BridgeClientHolder).installTraceHooks()
     }
 
-    private fun installApplicationOnCreateHook() {
+    private fun currentApplication(): Application? = runCatching {
+        val atClass = Class.forName("android.app.ActivityThread")
+        val method = atClass.getDeclaredMethod("currentApplication")
+        method.invoke(null) as? Application
+    }.getOrNull()
+
+    private fun installApplicationOnCreateFallback() {
         val method = runCatching {
             Application::class.java.getDeclaredMethod("onCreate")
                 .also { it.isAccessible = true }
@@ -38,7 +52,7 @@ class MilinkMiTwsFacadeEntry(
                     return result
                 }
             })
-        Log.i(TAG, "hooked: Application.onCreate() for MiTWS bridge")
+        Log.i(TAG, "hooked: Application.onCreate() fallback for MiTWS bridge")
     }
 
     private fun startBridgeClient(context: Context) {
