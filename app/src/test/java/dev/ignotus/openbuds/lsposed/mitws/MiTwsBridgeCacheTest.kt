@@ -21,12 +21,25 @@ class MiTwsBridgeCacheTest {
     }
 
     @Test
-    fun snapshotFor_expiresAfterTtl() {
+    fun snapshotFor_returnsStaleSnapshot_withinStaleTolerance() {
         val snapshot = snapshot("AA:BB:CC:DD:EE:FF")
         cache.updateStatus(enabled = true, authorized = listOf(snapshot.mac))
         cache.updateSnapshot(snapshot)
 
-        nowMs += 6_000L
+        // Advance past TTL but within stale tolerance (300s)
+        nowMs += 60_000L
+
+        assertEquals(snapshot, cache.snapshotFor(snapshot.mac))
+    }
+
+    @Test
+    fun snapshotFor_returnsNull_afterStaleTolerance() {
+        val snapshot = snapshot("AA:BB:CC:DD:EE:FF")
+        cache.updateStatus(enabled = true, authorized = listOf(snapshot.mac))
+        cache.updateSnapshot(snapshot)
+
+        // Advance past stale tolerance
+        nowMs += 301_000L
 
         assertNull(cache.snapshotFor(snapshot.mac))
     }

@@ -42,9 +42,15 @@ class MiTwsBridgeCache(
         val normalized = mac?.normalizeMac() ?: return null
         if (normalized !in authorizedMacs) return null
         val entry = entries[normalized] ?: return null
+        // Return stale snapshot if within stale tolerance to avoid classification flapping.
+        // This prevents the "dual sticker" issue where cache expiry between bridge updates
+        // causes checkIsMiTWS to flip from 1 to 0.
         if (now() - entry.savedAtMs > ttlMs) {
-            entries.remove(normalized)
-            return null
+            if (now() - entry.savedAtMs > STALE_TOLERANCE_MS) {
+                entries.remove(normalized)
+                return null
+            }
+            return entry.snapshot.takeIf { it.connected }
         }
         return entry.snapshot.takeIf { it.connected }
     }
@@ -72,5 +78,6 @@ class MiTwsBridgeCache(
 
     companion object {
         const val DEFAULT_TTL_MS = 10_000L
+        const val STALE_TOLERANCE_MS = 300_000L // 5 min — prevent classification flapping
     }
 }
