@@ -12,7 +12,6 @@ import android.os.RemoteException
 import android.os.SystemClock
 import android.util.Log
 import dev.ignotus.openbuds.data.HeadphoneRepository
-import dev.ignotus.openbuds.data.HeadphoneUiState
 import dev.ignotus.openbuds.data.settings.AppSettingsStore
 import dev.ignotus.openbuds.service.SonyControlService
 import kotlinx.coroutines.CoroutineScope
@@ -33,12 +32,7 @@ class MilinkBridgeService : Service() {
     private val callbacks = RemoteCallbackList<IMilinkBridgeCallback>()
     private val secureRandom = SecureRandom()
     private val sessions = ConcurrentHashMap<String, Session>()
-
-    @Volatile
-    private var latestState: HeadphoneUiState = HeadphoneUiState()
-
-    @Volatile
-    private var latestSnapshot: MilinkDeviceSnapshot? = null
+    private val snapshots = ConcurrentHashMap<String, MilinkDeviceSnapshot>()
 
     @Volatile
     private var adapterEnabled: Boolean = false
@@ -60,17 +54,17 @@ class MilinkBridgeService : Service() {
             combine(repository.state, settingsStore.settings) { state, settings ->
                 state to settings.milinkAdapterEnabled
             }.collect { (state, enabled) ->
-                latestState = state
                 adapterEnabled = enabled
                 revision += 1
-                latestSnapshot = if (enabled) {
+                snapshots.clear()
+                if (enabled) {
                     MilinkBridgeSnapshotMapper.fromUiState(
                         state = state,
                         revision = revision,
                         updatedAt = SystemClock.elapsedRealtime(),
-                    )
-                } else {
-                    null
+                    )?.takeIf(::isAuthorized)?.let { snapshot ->
+                        snapshots[snapshot.mac] = snapshot
+                    }
                 }
                 notifyClients()
             }
@@ -125,8 +119,8 @@ class MilinkBridgeService : Service() {
         override fun getDeviceSnapshot(token: String?, mac: String?): Bundle {
             verifySession(token)
             val targetMac = mac?.normalizeMac() ?: return Bundle()
-            val snapshot = latestSnapshot
-            return if (snapshot != null && snapshot.mac == targetMac && isAuthorized(snapshot)) {
+            val snapshot = snapshots[targetMac]
+            return if (snapshot != null && isAuthorized(snapshot)) {
                 snapshot.toBundle()
             } else {
                 Bundle()
@@ -139,7 +133,7 @@ class MilinkBridgeService : Service() {
             callbacks.register(callback)
             runCatching {
                 callback.onAdapterStatusChanged(statusBundle())
-                latestSnapshot?.takeIf(::isAuthorized)?.let { callback.onSnapshotChanged(it.toBundle()) }
+                authorizedSnapshots().forEach { callback.onSnapshotChanged(it.toBundle()) }
             }.onFailure { error ->
                 Log.w(TAG, "Initial callback dispatch failed", error)
             }
@@ -174,33 +168,37 @@ class MilinkBridgeService : Service() {
 
     private fun statusBundle(): Bundle =
         Bundle().apply {
-            val snapshot = latestSnapshot
+            val authorized = authorizedSnapshots()
             putBoolean(MilinkBridgeContract.KEY_ENABLED, adapterEnabled)
-            putBoolean(MilinkBridgeContract.KEY_CONNECTED, snapshot?.connected == true)
-            putBoolean(MilinkBridgeContract.KEY_PROTOCOL_READY, snapshot?.protocolReady == true)
-            putStringArrayList(MilinkBridgeContract.KEY_AUTHORIZED_MACS, ArrayList(authorizedMacs()))
+            putBoolean(MilinkBridgeContract.KEY_CONNECTED, authorized.any { it.connected })
+            putBoolean(MilinkBridgeContract.KEY_PROTOCOL_READY, authorized.any { it.protocolReady })
+            putStringArrayList(
+                MilinkBridgeContract.KEY_AUTHORIZED_MACS,
+                ArrayList(authorized.map { it.mac }),
+            )
             putString(
                 MilinkBridgeContract.KEY_REASON,
                 when {
                     !adapterEnabled -> "disabled"
-                    snapshot == null -> "no_connected_device"
-                    !snapshot.connected -> "disconnected"
+                    authorized.isEmpty() -> "no_connected_device"
                     else -> "ready"
                 },
             )
         }
 
     private fun authorizedMacs(): List<String> =
-        latestSnapshot
-            ?.takeIf(::isAuthorized)
-            ?.let { listOf(it.mac) }
-            .orEmpty()
+        authorizedSnapshots().map { it.mac }
+
+    private fun authorizedSnapshots(): List<MilinkDeviceSnapshot> =
+        snapshots.values
+            .filter(::isAuthorized)
+            .sortedBy { it.mac }
 
     private fun isAuthorized(snapshot: MilinkDeviceSnapshot): Boolean =
         adapterEnabled && snapshot.connected && snapshot.mac.isNotBlank()
 
     private fun notifyClients() {
-        val snapshot = latestSnapshot
+        val authorized = authorizedSnapshots()
         val status = statusBundle()
         val count = callbacks.beginBroadcast()
         try {
@@ -208,7 +206,7 @@ class MilinkBridgeService : Service() {
                 val callback = callbacks.getBroadcastItem(index)
                 try {
                     callback.onAdapterStatusChanged(status)
-                    if (snapshot != null && isAuthorized(snapshot)) {
+                    authorized.forEach { snapshot ->
                         callback.onSnapshotChanged(snapshot.toBundle())
                     }
                 } catch (error: RemoteException) {

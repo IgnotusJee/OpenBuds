@@ -1,5 +1,6 @@
 package dev.ignotus.openbuds.lsposed.mitws
 
+import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.util.Log
 import dev.ignotus.openbuds.integration.milink.MilinkDeviceSnapshot
@@ -20,24 +21,34 @@ class MilinkMiTwsFacadeHook(
     private val classLoader: ClassLoader,
     private val bridgeClient: MilinkBridgeClientFacade?,
 ) {
+    private val devicesByMac = ConcurrentHashMap<String, BluetoothDevice>()
+    private val callbackPump = MiTwsCallbackPump(
+        deviceLookup = { mac -> deviceForMac(mac) },
+        deviceIdForMac = ::assignedDeviceIdFor,
+    )
+    private val bridgeSnapshotListener: (MilinkDeviceSnapshot) -> Unit = { snapshot ->
+        callbackPump.dispatchSnapshot(snapshot)
+    }
+
     fun installTraceHooks() {
         val manager = loadClass(MX_BLUETOOTH_MANAGER) ?: return
+        bridgeClient?.addSnapshotListener(bridgeSnapshotListener)
 
         hookCheckIsMiTws(manager)
         hookGetDeviceId(manager)
         hookMmaConnection(manager, "connectMma")
         hookMmaConnection(manager, "disconnectMma")
-        hookTrace(manager, "getBatteryLevel", BluetoothDevice::class.java)
-        hookTrace(manager, "getAncState", BluetoothDevice::class.java)
-        hookTrace(manager, "getWearStatus", BluetoothDevice::class.java)
+        hookBatteryLevel(manager)
+        hookAncState(manager)
+        hookWearStatus(manager)
         hookControlNoOp(manager, "openAnc")
         hookControlNoOp(manager, "openTransparent")
         hookControlNoOp(manager, "closeAnc")
 
         val callback = loadClass(MMA_CALLBACK)
         if (callback != null) {
-            hookTrace(manager, "registerCallback", callback)
-            hookTrace(manager, "unregisterCallback", callback)
+            hookRegisterCallback(manager, callback)
+            hookUnregisterCallback(manager, callback)
         } else {
             log("missing: $MMA_CALLBACK")
         }
@@ -119,16 +130,21 @@ class MilinkMiTwsFacadeHook(
             .intercept(object : XposedInterface.Hooker {
                 override fun intercept(chain: XposedInterface.Chain): Any? {
                     val device = chain.args.firstOrNull() as? BluetoothDevice
+                    rememberDevice(device)
                     val mac = safeMac(device)
                     val snapshot = facadeSnapshot(mac)
                     val passthrough = MilinkRouteConfig.allowOpenBudsMmaPassthrough()
                     if (snapshot != null && !passthrough) {
+                        callbackPump.dispatchConnection(
+                            snapshot = snapshot,
+                            connected = name == "connectMma",
+                        )
                         log(
                             "$name mac=$mac name=${safeName(device)} " +
-                                "facadeTarget=true passthrough=false noOpResult=$MMA_NO_OP_RESULT " +
+                                "facadeTarget=true passthrough=false facadeResult=$MMA_FACADE_SUCCESS_RESULT " +
                                 "gate=${facadeGateSummary()}"
                         )
-                        return MMA_NO_OP_RESULT
+                        return MMA_FACADE_SUCCESS_RESULT
                     }
                     val result = chain.proceed()
                     log(
@@ -140,6 +156,158 @@ class MilinkMiTwsFacadeHook(
                 }
             })
         log("hooked M1 facade: ${manager.name}.${method.name}")
+    }
+
+    private fun hookBatteryLevel(manager: Class<*>) {
+        val method = findMethod(manager, "getBatteryLevel", BluetoothDevice::class.java)
+        if (method == null) {
+            log("missing M2 facade: ${manager.name}.getBatteryLevel(BluetoothDevice)")
+            return
+        }
+        ModuleMain.instance.hook(method)
+            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+            .intercept(object : XposedInterface.Hooker {
+                override fun intercept(chain: XposedInterface.Chain): Any? {
+                    val device = chain.args.firstOrNull() as? BluetoothDevice
+                    rememberDevice(device)
+                    val mac = safeMac(device)
+                    val snapshot = facadeSnapshot(mac)
+                    if (snapshot != null) {
+                        callbackPump.dispatchSnapshot(snapshot, force = true)
+                        log(
+                            "getBatteryLevel mac=$mac name=${safeName(device)} " +
+                                "facadeTarget=true facadeResult=$BATTERY_REQUEST_SUCCESS_RESULT " +
+                                "battery=${MiTwsStateMapper.batteryArray(snapshot).joinToString(prefix = "[", postfix = "]")} " +
+                                "gate=${facadeGateSummary()}"
+                        )
+                        return BATTERY_REQUEST_SUCCESS_RESULT
+                    }
+                    val result = chain.proceed()
+                    log(
+                        "trace getBatteryLevel mac=$mac name=${safeName(device)} " +
+                            "facadeTarget=false result=${resultSummary(result)} gate=${facadeGateSummary()}"
+                    )
+                    return result
+                }
+            })
+        log("hooked M2 facade: ${manager.name}.${method.name}")
+    }
+
+    private fun hookAncState(manager: Class<*>) {
+        val method = findMethod(manager, "getAncState", BluetoothDevice::class.java)
+        if (method == null) {
+            log("missing M2 facade: ${manager.name}.getAncState(BluetoothDevice)")
+            return
+        }
+        ModuleMain.instance.hook(method)
+            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+            .intercept(object : XposedInterface.Hooker {
+                override fun intercept(chain: XposedInterface.Chain): Any? {
+                    val device = chain.args.firstOrNull() as? BluetoothDevice
+                    rememberDevice(device)
+                    val mac = safeMac(device)
+                    val snapshot = facadeSnapshot(mac)
+                    if (snapshot != null) {
+                        val ancState = MiTwsStateMapper.ancState(snapshot)
+                        callbackPump.dispatchSnapshot(snapshot, force = true)
+                        log(
+                            "getAncState mac=$mac name=${safeName(device)} " +
+                                "facadeTarget=true facadeResult=$ancState gate=${facadeGateSummary()}"
+                        )
+                        return ancState
+                    }
+                    val result = chain.proceed()
+                    log(
+                        "trace getAncState mac=$mac name=${safeName(device)} " +
+                            "facadeTarget=false result=${resultSummary(result)} gate=${facadeGateSummary()}"
+                    )
+                    return result
+                }
+            })
+        log("hooked M2 facade: ${manager.name}.${method.name}")
+    }
+
+    private fun hookWearStatus(manager: Class<*>) {
+        val method = findMethod(manager, "getWearStatus", BluetoothDevice::class.java)
+        if (method == null) {
+            log("missing M2 facade: ${manager.name}.getWearStatus(BluetoothDevice)")
+            return
+        }
+        ModuleMain.instance.hook(method)
+            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+            .intercept(object : XposedInterface.Hooker {
+                override fun intercept(chain: XposedInterface.Chain): Any? {
+                    val device = chain.args.firstOrNull() as? BluetoothDevice
+                    rememberDevice(device)
+                    val mac = safeMac(device)
+                    val snapshot = facadeSnapshot(mac)
+                    if (snapshot != null) {
+                        val wearStatus = MiTwsStateMapper.wearStatus(snapshot)
+                        log(
+                            "getWearStatus mac=$mac name=${safeName(device)} " +
+                                "facadeTarget=true facadeResult=$wearStatus " +
+                                "leftWearing=${snapshot.leftWearing} rightWearing=${snapshot.rightWearing} " +
+                                "gate=${facadeGateSummary()}"
+                        )
+                        return wearStatus
+                    }
+                    val result = chain.proceed()
+                    log(
+                        "trace getWearStatus mac=$mac name=${safeName(device)} " +
+                            "facadeTarget=false result=${resultSummary(result)} gate=${facadeGateSummary()}"
+                    )
+                    return result
+                }
+            })
+        log("hooked M2 facade: ${manager.name}.${method.name}")
+    }
+
+    private fun hookRegisterCallback(manager: Class<*>, callbackClass: Class<*>) {
+        val method = findMethod(manager, "registerCallback", callbackClass)
+        if (method == null) {
+            log("missing M2 facade: ${manager.name}.registerCallback(${callbackClass.simpleName})")
+            return
+        }
+        ModuleMain.instance.hook(method)
+            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+            .intercept(object : XposedInterface.Hooker {
+                override fun intercept(chain: XposedInterface.Chain): Any? {
+                    val callback = chain.args.firstOrNull()
+                    val result = chain.proceed()
+                    val registered = callbackPump.register(callback, bridgeClient?.authorizedSnapshots().orEmpty())
+                    log(
+                        "registerCallback callback=${callback?.javaClass?.name} " +
+                            "original=${resultSummary(result)} captured=$registered callbacks=${callbackPump.callbackCount()} " +
+                            "gate=${facadeGateSummary()}"
+                    )
+                    return result
+                }
+            })
+        log("hooked M2 callback capture: ${manager.name}.${method.name}")
+    }
+
+    private fun hookUnregisterCallback(manager: Class<*>, callbackClass: Class<*>) {
+        val method = findMethod(manager, "unregisterCallback", callbackClass)
+        if (method == null) {
+            log("missing M2 facade: ${manager.name}.unregisterCallback(${callbackClass.simpleName})")
+            return
+        }
+        ModuleMain.instance.hook(method)
+            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+            .intercept(object : XposedInterface.Hooker {
+                override fun intercept(chain: XposedInterface.Chain): Any? {
+                    val callback = chain.args.firstOrNull()
+                    val result = chain.proceed()
+                    val removed = callbackPump.unregister(callback)
+                    log(
+                        "unregisterCallback callback=${callback?.javaClass?.name} " +
+                            "original=${resultSummary(result)} removed=$removed callbacks=${callbackPump.callbackCount()} " +
+                            "gate=${facadeGateSummary()}"
+                    )
+                    return result
+                }
+            })
+        log("hooked M2 callback release: ${manager.name}.${method.name}")
     }
 
     private fun hookControlNoOp(manager: Class<*>, name: String) {
@@ -191,6 +359,7 @@ class MilinkMiTwsFacadeHook(
                 override fun intercept(chain: XposedInterface.Chain): Any? {
                     val result = chain.proceed()
                     val device = chain.args.firstOrNull() as? BluetoothDevice
+                    rememberDevice(device)
                     val mac = safeMac(device)
                     log(
                         "trace ${method.name} mac=$mac name=${safeName(device)} " +
@@ -221,6 +390,21 @@ class MilinkMiTwsFacadeHook(
 
     private fun safeName(device: BluetoothDevice?): String =
         runCatching { device?.name.orEmpty() }.getOrDefault("")
+
+    private fun rememberDevice(device: BluetoothDevice?) {
+        val mac = safeMac(device).normalizeMac() ?: return
+        if (device != null) {
+            devicesByMac[mac] = device
+        }
+    }
+
+    private fun deviceForMac(mac: String): BluetoothDevice? {
+        val normalized = mac.normalizeMac() ?: return null
+        devicesByMac[normalized]?.let { return it }
+        return runCatching {
+            BluetoothAdapter.getDefaultAdapter()?.getRemoteDevice(normalized)
+        }.getOrNull()?.also { devicesByMac[normalized] = it }
+    }
 
     private fun facadeSnapshot(mac: String): MilinkDeviceSnapshot? {
         if (!MilinkRouteConfig.canUseFacade(bridgeClient)) return null
@@ -259,7 +443,8 @@ class MilinkMiTwsFacadeHook(
         const val MMA_CALLBACK = "com.xiaomi.mxbluetoothsdk.manager.MxBluetoothManager\$MMACallback"
 
         private const val MITWS_RESULT_TRUE = 1
-        private const val MMA_NO_OP_RESULT = 0
+        private const val MMA_FACADE_SUCCESS_RESULT = 1
+        private const val BATTERY_REQUEST_SUCCESS_RESULT = 1
         private const val CONTROL_NO_OP_RESULT = 0
         private const val TAG = "OpenBuds"
         private val assignedDeviceIds = ConcurrentHashMap<String, String>()

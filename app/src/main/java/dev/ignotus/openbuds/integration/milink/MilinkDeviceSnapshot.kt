@@ -2,7 +2,9 @@ package dev.ignotus.openbuds.integration.milink
 
 import android.os.Bundle
 import dev.ignotus.openbuds.data.HeadphoneUiState
+import dev.ignotus.openbuds.headphones.HeadphoneFeature
 import dev.ignotus.openbuds.lsposed.mitws.MiTwsDeviceIdPolicy
+import dev.ignotus.openbuds.protocol.NoiseControlMode
 
 data class MilinkDeviceSnapshot(
     val mac: String,
@@ -21,6 +23,12 @@ data class MilinkDeviceSnapshot(
     val leftCharging: Boolean?,
     val rightCharging: Boolean?,
     val caseCharging: Boolean?,
+    val ancMode: Int?,
+    val ringing: Boolean,
+    val supportsBattery: Boolean,
+    val supportsNoiseControl: Boolean,
+    val supportsWearing: Boolean,
+    val supportsRing: Boolean,
     val revision: Long,
     val updatedAt: Long,
 ) {
@@ -41,6 +49,12 @@ data class MilinkDeviceSnapshot(
         leftCharging?.let { putBoolean(MilinkBridgeContract.KEY_LEFT_CHARGING, it) }
         rightCharging?.let { putBoolean(MilinkBridgeContract.KEY_RIGHT_CHARGING, it) }
         caseCharging?.let { putBoolean(MilinkBridgeContract.KEY_CASE_CHARGING, it) }
+        ancMode?.let { putInt(MilinkBridgeContract.KEY_ANC_MODE, it) }
+        putBoolean(MilinkBridgeContract.KEY_RINGING, ringing)
+        putBoolean(MilinkBridgeContract.KEY_SUPPORTS_BATTERY, supportsBattery)
+        putBoolean(MilinkBridgeContract.KEY_SUPPORTS_NOISE_CONTROL, supportsNoiseControl)
+        putBoolean(MilinkBridgeContract.KEY_SUPPORTS_WEARING, supportsWearing)
+        putBoolean(MilinkBridgeContract.KEY_SUPPORTS_RING, supportsRing)
         putLong(MilinkBridgeContract.KEY_REVISION, revision)
         putLong(MilinkBridgeContract.KEY_UPDATED_AT, updatedAt)
     }
@@ -67,6 +81,12 @@ data class MilinkDeviceSnapshot(
                 leftCharging = bundle.booleanOrNull(MilinkBridgeContract.KEY_LEFT_CHARGING),
                 rightCharging = bundle.booleanOrNull(MilinkBridgeContract.KEY_RIGHT_CHARGING),
                 caseCharging = bundle.booleanOrNull(MilinkBridgeContract.KEY_CASE_CHARGING),
+                ancMode = bundle.intOrNull(MilinkBridgeContract.KEY_ANC_MODE, min = 0, max = 2),
+                ringing = bundle.getBoolean(MilinkBridgeContract.KEY_RINGING, false),
+                supportsBattery = bundle.getBoolean(MilinkBridgeContract.KEY_SUPPORTS_BATTERY, false),
+                supportsNoiseControl = bundle.getBoolean(MilinkBridgeContract.KEY_SUPPORTS_NOISE_CONTROL, false),
+                supportsWearing = bundle.getBoolean(MilinkBridgeContract.KEY_SUPPORTS_WEARING, false),
+                supportsRing = bundle.getBoolean(MilinkBridgeContract.KEY_SUPPORTS_RING, false),
                 revision = bundle.getLong(MilinkBridgeContract.KEY_REVISION, 0L),
                 updatedAt = bundle.getLong(MilinkBridgeContract.KEY_UPDATED_AT, 0L),
             )
@@ -84,6 +104,7 @@ object MilinkBridgeSnapshotMapper {
         val mac = device.address.normalizeMac() ?: return null
         val battery = state.batteryState
         val profile = state.connectedProfile
+        val noiseControl = state.noiseControlState
         return MilinkDeviceSnapshot(
             mac = mac,
             name = device.name.takeIf { it.isNotBlank() } ?: profile?.displayName,
@@ -101,6 +122,17 @@ object MilinkBridgeSnapshotMapper {
             leftCharging = battery.leftCharging,
             rightCharging = battery.rightCharging,
             caseCharging = battery.cradleCharging,
+            ancMode = when (noiseControl.controlMode) {
+                NoiseControlMode.OFF -> 0
+                NoiseControlMode.NOISE_CANCELLING -> 1
+                NoiseControlMode.AMBIENT_SOUND -> 2
+                null -> null
+            },
+            ringing = false,
+            supportsBattery = profile.supports(HeadphoneFeature.BATTERY),
+            supportsNoiseControl = profile.supports(HeadphoneFeature.NOISE_CONTROL),
+            supportsWearing = profile.supports(HeadphoneFeature.WEARING_STATUS),
+            supportsRing = false,
             revision = revision,
             updatedAt = updatedAt,
         )
@@ -112,10 +144,15 @@ fun String.normalizeMac(): String? {
     return normalized.takeIf { MAC_REGEX.matches(it) }
 }
 
-private fun Bundle.intOrNull(key: String): Int? =
-    if (containsKey(key)) getInt(key).coerceIn(0, 100) else null
+private fun Bundle.intOrNull(key: String, min: Int = 0, max: Int = 100): Int? =
+    if (containsKey(key)) getInt(key).coerceIn(min, max) else null
 
 private fun Bundle.booleanOrNull(key: String): Boolean? =
     if (containsKey(key)) getBoolean(key) else null
 
 private val MAC_REGEX = Regex("^[0-9A-F]{2}(:[0-9A-F]{2}){5}$")
+
+private fun dev.ignotus.openbuds.headphones.ConnectedHeadphoneProfile?.supports(
+    feature: HeadphoneFeature,
+): Boolean =
+    this?.supports(feature) == true

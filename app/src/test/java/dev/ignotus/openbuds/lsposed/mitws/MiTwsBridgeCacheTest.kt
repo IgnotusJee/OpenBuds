@@ -104,6 +104,12 @@ class MiTwsBridgeCacheTest {
             leftCharging = null,
             rightCharging = null,
             caseCharging = null,
+            ancMode = 1,
+            ringing = false,
+            supportsBattery = true,
+            supportsNoiseControl = true,
+            supportsWearing = true,
+            supportsRing = false,
             revision = 1L,
             updatedAt = nowMs,
         )

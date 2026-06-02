@@ -31,6 +31,7 @@ class MilinkBridgeClient(
 
     private var retryMs = MIN_RETRY_MS
     private var bound = false
+    private val snapshotListeners = mutableSetOf<(MilinkDeviceSnapshot) -> Unit>()
 
     override val adapterEnabled: Boolean
         get() = cache.adapterEnabled
@@ -39,6 +40,7 @@ class MilinkBridgeClient(
         override fun onSnapshotChanged(snapshot: Bundle?) {
             val parsed = MilinkDeviceSnapshot.fromBundle(snapshot) ?: return
             cache.updateSnapshot(parsed)
+            notifySnapshotListeners(parsed)
         }
 
         override fun onAdapterStatusChanged(status: Bundle?) {
@@ -99,6 +101,21 @@ class MilinkBridgeClient(
     }
 
     override fun isAuthorized(mac: String?): Boolean = snapshotFor(mac) != null
+
+    override fun authorizedSnapshots(): List<MilinkDeviceSnapshot> = cache.authorizedSnapshots()
+
+    override fun addSnapshotListener(listener: (MilinkDeviceSnapshot) -> Unit) {
+        handler.post {
+            snapshotListeners.add(listener)
+            cache.authorizedSnapshots().forEach(listener)
+        }
+    }
+
+    override fun removeSnapshotListener(listener: (MilinkDeviceSnapshot) -> Unit) {
+        handler.post {
+            snapshotListeners.remove(listener)
+        }
+    }
 
     private fun scheduleBind(delayMs: Long = retryMs) {
         handler.removeCallbacksAndMessages(BIND_TOKEN)
@@ -168,6 +185,7 @@ class MilinkBridgeClient(
             )
             if (snapshot != null) {
                 cache.updateSnapshot(snapshot)
+                notifySnapshotListeners(snapshot)
             }
         }.onFailure { error ->
             handleBridgeError(error)
@@ -181,7 +199,10 @@ class MilinkBridgeClient(
         cache.updateStatus(cache.adapterEnabled, authorized)
         authorized.forEach { mac ->
             MilinkDeviceSnapshot.fromBundle(bridge.getDeviceSnapshot(openedToken, mac))
-                ?.let(cache::updateSnapshot)
+                ?.let { snapshot ->
+                    cache.updateSnapshot(snapshot)
+                    notifySnapshotListeners(snapshot)
+                }
         }
     }
 
@@ -203,6 +224,13 @@ class MilinkBridgeClient(
             service = null
             cache.markError(error.message ?: "bridge_call_failed")
             retryLater()
+        }
+    }
+
+    private fun notifySnapshotListeners(snapshot: MilinkDeviceSnapshot) {
+        snapshotListeners.toList().forEach { listener ->
+            runCatching { listener(snapshot) }
+                .onFailure { error -> Log.w(TAG, "MiTWS snapshot listener failed", error) }
         }
     }
 
@@ -231,4 +259,7 @@ interface MilinkBridgeClientFacade {
     val adapterEnabled: Boolean
     fun snapshotFor(mac: String?): MilinkDeviceSnapshot?
     fun isAuthorized(mac: String?): Boolean
+    fun authorizedSnapshots(): List<MilinkDeviceSnapshot> = emptyList()
+    fun addSnapshotListener(listener: (MilinkDeviceSnapshot) -> Unit) = Unit
+    fun removeSnapshotListener(listener: (MilinkDeviceSnapshot) -> Unit) = Unit
 }

@@ -29,6 +29,12 @@ object MilinkBridgeContract {
     const val KEY_LEFT_CHARGING = "leftCharging"
     const val KEY_RIGHT_CHARGING = "rightCharging"
     const val KEY_CASE_CHARGING = "caseCharging"
+    const val KEY_ANC_MODE = "ancMode"
+    const val KEY_RINGING = "ringing"
+    const val KEY_SUPPORTS_BATTERY = "supportsBattery"
+    const val KEY_SUPPORTS_NOISE_CONTROL = "supportsNoiseControl"
+    const val KEY_SUPPORTS_WEARING = "supportsWearing"
+    const val KEY_SUPPORTS_RING = "supportsRing"
     const val KEY_REVISION = "revision"
     const val KEY_UPDATED_AT = "updatedAt"
 }

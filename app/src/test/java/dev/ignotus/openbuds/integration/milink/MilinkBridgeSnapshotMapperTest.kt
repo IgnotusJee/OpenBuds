@@ -4,8 +4,11 @@ import dev.ignotus.openbuds.ble.DiscoveredDevice
 import dev.ignotus.openbuds.data.BatteryState
 import dev.ignotus.openbuds.data.DeviceInfoState
 import dev.ignotus.openbuds.data.HeadphoneUiState
+import dev.ignotus.openbuds.data.NoiseControlState
 import dev.ignotus.openbuds.data.WearingState
+import dev.ignotus.openbuds.headphones.qcy.devices.QcyC30SProfile
 import dev.ignotus.openbuds.lsposed.mitws.MiTwsDeviceIdPolicy
+import dev.ignotus.openbuds.protocol.NoiseControlMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -31,6 +34,7 @@ class MilinkBridgeSnapshotMapperTest {
                 address = "aa:bb:cc:dd:ee:ff",
                 rssi = -40,
             ),
+            connectedProfile = QcyC30SProfile.template.toProfile("qcy", "QCY", "QCY GATT TLV", "QCY C30S"),
             deviceInfo = DeviceInfoState(modelName = "QCY C30S", protocolReady = false),
             batteryState = BatteryState(
                 left = 80,
@@ -40,6 +44,7 @@ class MilinkBridgeSnapshotMapperTest {
                 rightCharging = false,
                 cradleCharging = true,
             ),
+            noiseControlState = NoiseControlState(controlMode = NoiseControlMode.AMBIENT_SOUND),
             wearingState = WearingState(leftWearing = true, rightWearing = null),
         )
 
@@ -57,6 +62,12 @@ class MilinkBridgeSnapshotMapperTest {
         assertEquals(true, snapshot.caseCharging)
         assertEquals(true, snapshot.leftWearing)
         assertNull(snapshot.rightWearing)
+        assertEquals(2, snapshot.ancMode)
+        assertEquals(false, snapshot.ringing)
+        assertEquals(true, snapshot.supportsBattery)
+        assertEquals(true, snapshot.supportsNoiseControl)
+        assertEquals(false, snapshot.supportsWearing)
+        assertEquals(false, snapshot.supportsRing)
         assertEquals(7L, snapshot.revision)
         assertEquals(9L, snapshot.updatedAt)
     }

@@ -88,6 +88,13 @@ class MiTwsBridgeCache(
     fun authorizedMacs(): Set<String> =
         if (adapterEnabled) authorizedMacs else emptySet()
 
+    fun authorizedSnapshots(): List<MilinkDeviceSnapshot> =
+        if (!adapterEnabled) {
+            emptyList()
+        } else {
+            authorizedMacs.mapNotNull(::snapshotFor).sortedBy { it.mac }
+        }
+
     fun markError(message: String?) {
         lastError = message
         if (message != null) {
@@ -120,6 +127,12 @@ class MiTwsBridgeCache(
             leftCharging = null,
             rightCharging = null,
             caseCharging = null,
+            ancMode = null,
+            ringing = false,
+            supportsBattery = false,
+            supportsNoiseControl = false,
+            supportsWearing = false,
+            supportsRing = false,
             revision = 0L,
             updatedAt = now(),
         )

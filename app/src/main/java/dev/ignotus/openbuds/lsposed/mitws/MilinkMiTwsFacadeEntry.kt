@@ -61,15 +61,25 @@ class MilinkMiTwsFacadeEntry(
             if (bridgeClient != null) return
             val client = MilinkBridgeClient(context)
             bridgeClient = client
-            BridgeClientHolder.delegate = client
+            BridgeClientHolder.attach(client)
             client.start()
             Log.i(TAG, "MiLink MiTWS bridge client started (M1)")
         }
     }
 
     private object BridgeClientHolder : MilinkBridgeClientFacade {
+        private val snapshotListeners =
+            mutableSetOf<(dev.ignotus.openbuds.integration.milink.MilinkDeviceSnapshot) -> Unit>()
+
         @Volatile
-        var delegate: MilinkBridgeClient? = null
+        private var delegate: MilinkBridgeClient? = null
+
+        fun attach(client: MilinkBridgeClient) {
+            delegate = client
+            synchronized(snapshotListeners) {
+                snapshotListeners.forEach(client::addSnapshotListener)
+            }
+        }
 
         override val adapterEnabled: Boolean
             get() = delegate?.adapterEnabled == true
@@ -77,6 +87,22 @@ class MilinkMiTwsFacadeEntry(
         override fun snapshotFor(mac: String?) = delegate?.snapshotFor(mac)
 
         override fun isAuthorized(mac: String?) = delegate?.isAuthorized(mac) == true
+
+        override fun authorizedSnapshots() = delegate?.authorizedSnapshots().orEmpty()
+
+        override fun addSnapshotListener(listener: (dev.ignotus.openbuds.integration.milink.MilinkDeviceSnapshot) -> Unit) {
+            synchronized(snapshotListeners) {
+                snapshotListeners.add(listener)
+            }
+            delegate?.addSnapshotListener(listener)
+        }
+
+        override fun removeSnapshotListener(listener: (dev.ignotus.openbuds.integration.milink.MilinkDeviceSnapshot) -> Unit) {
+            synchronized(snapshotListeners) {
+                snapshotListeners.remove(listener)
+            }
+            delegate?.removeSnapshotListener(listener)
+        }
     }
 
     private companion object {
