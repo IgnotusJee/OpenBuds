@@ -438,6 +438,14 @@ M1 完成记录（2026-06-02）：
 - 双闸门：`debug.openbuds.milink_mitws_enable` 系统属性 + App 设置 `milinkAdapterEnabled`。
 - 新增测试：`MiTwsDeviceIdPolicyTest`（6 个）、`MiTwsBridgeCacheTest`（3 个）、`MilinkRouteConfigTest`（9 个）。
 
+M1 真机验证发现的问题及修复（2026-06-02）：
+
+- **问题：第三方贴纸与第一方贴纸并存** — `MiTwsBridgeCache` 的 TTL 仅 10s，SPP 断连重连期间 bridge 未推送 snapshot 更新，缓存过期 → `checkIsMiTWS` 从 1 翻转为 0 → 米链创建设备的第三方贴纸，但第一方贴纸已渲染不消失，二者并存。
+  - **修复**：引入 `STALE_TOLERANCE_MS = 300s`（5 分钟），TTL 过期后不立即丢弃 snapshot，在 stale tolerance 范围内继续返回过期数据用于分类判断。
+- **问题：首次连接时先出现第三方贴纸，然后才出现第一方贴纸** — bridge client 通过 `Application.onCreate()` hook 异步启动，但 `checkIsMiTWS` 在 `Application.onCreate()` 之前就被调用。此时 bridge 未连接、缓存为空 → 返回 0 → 第三方贴纸先渲染。
+  - **修复 1**：`MilinkMiTwsFacadeEntry` 在 `install()` 中通过 `ActivityThread.currentApplication()` 立即启动 bridge client，不等 `Application.onCreate()` hook。
+  - **修复 2**：`MiTwsBridgeCache` 引入 `knownAuthorizedMacs` — 一旦 bridge 返回过授权列表，MAC 被永久记住。bridge 未连接或缓存过期时，返回最小 `placeholderSnapshot`（`connected=true`），让 `checkIsMiTWS` 仍能返回 1。`markError` 不擦除 `knownAuthorizedMacs`，bridge 重启后分类不丢失。
+
 ### M2：MiTWS 只读 facade（1-2 周）
 
 - [ ] 对 allowlist 设备接管 `connectMma` / `disconnectMma`，避免触发真实 Xiaomi MMA。
