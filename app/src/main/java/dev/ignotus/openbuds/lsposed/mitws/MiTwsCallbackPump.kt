@@ -20,12 +20,13 @@ class MiTwsCallbackPump(
 
     fun register(callback: Any?, snapshots: List<MilinkDeviceSnapshot> = emptyList()): Boolean {
         if (callback == null) return false
-        asyncDispatcher.dispatch {
-            synchronized(callbacks) {
-                callbacks.add(callback)
-            }
-            snapshots.forEach { dispatchSnapshotLocked(callback, it, force = true) }
+        synchronized(callbacks) {
+            callbacks.add(callback)
         }
+        // Dispatch initial snapshots synchronously so the UI gets data
+        // before it finishes rendering. Subsequent dispatches use the
+        // async dispatcher to avoid blocking the caller.
+        snapshots.forEach { dispatchSnapshotLocked(callback, it, force = true) }
         return true
     }
 

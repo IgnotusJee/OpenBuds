@@ -25,6 +25,7 @@ class MilinkMiTwsFacadeHook(
     private val callbackPump = MiTwsCallbackPump(
         deviceLookup = { mac -> deviceForMac(mac) },
         deviceIdForMac = ::assignedDeviceIdFor,
+        allowNullDevice = true,
     )
     private val bridgeSnapshotListener: (MilinkDeviceSnapshot) -> Unit = { snapshot ->
         callbackPump.dispatchSnapshot(snapshot)
