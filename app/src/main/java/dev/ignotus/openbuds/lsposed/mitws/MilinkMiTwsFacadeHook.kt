@@ -137,10 +137,16 @@ class MilinkMiTwsFacadeHook(
                     val snapshot = facadeSnapshot(mac)
                     val passthrough = MilinkRouteConfig.allowOpenBudsMmaPassthrough()
                     if (snapshot != null && !passthrough) {
-                        callbackPump.dispatchConnection(
-                            snapshot = snapshot,
-                            connected = name == "connectMma",
-                        )
+                        // Only dispatch for connectMma. disconnectMma fires constantly
+                        // (every ~100ms as the controller polls), and dispatching
+                        // onConnectMmaStateChanged(false) each time would cause the UI
+                        // to hide battery/ANC controls thinking MMA is disconnected.
+                        if (name == "connectMma") {
+                            callbackPump.dispatchConnection(
+                                snapshot = snapshot,
+                                connected = true,
+                            )
+                        }
                         log(
                             "$name mac=$mac name=${safeName(device)} " +
                                 "facadeTarget=true passthrough=false facadeResult=$MMA_FACADE_SUCCESS_RESULT " +

@@ -22,10 +22,14 @@ class MiTwsCallbackPump(
 
     fun register(callback: Any?, snapshots: List<MilinkDeviceSnapshot> = emptyList()): Boolean {
         if (callback == null) return false
+        Log.i(TAG, "[DIAG] register callback=${callback.javaClass.name} snapshotCount=${snapshots.size}")
         synchronized(callbacks) {
             callbacks.add(callback)
         }
-        snapshots.forEach { dispatchSnapshotLocked(callback, it, force = true) }
+        snapshots.forEach { snapshot ->
+            Log.i(TAG, "[DIAG] register dispatch mac=${snapshot.mac} supportsBattery=${snapshot.supportsBattery} supportsNoiseControl=${snapshot.supportsNoiseControl} connected=${snapshot.connected} ancMode=${snapshot.ancMode} leftBattery=${snapshot.leftBattery} isPlaceholder=${snapshot.protocolReady == false && snapshot.name == ""}")
+            dispatchSnapshotLocked(callback, snapshot, force = true)
+        }
         return true
     }
 
@@ -44,11 +48,13 @@ class MiTwsCallbackPump(
     fun dispatchSnapshot(snapshot: MilinkDeviceSnapshot, force: Boolean = false) {
         val targets = snapshotTargets()
         if (targets.isEmpty()) return
+        Log.i(TAG, "[DIAG] dispatchSnapshot mac=${snapshot.mac} supportsBattery=${snapshot.supportsBattery} supportsNoiseControl=${snapshot.supportsNoiseControl} callbacks=${targets.size} thread=${Thread.currentThread().name}")
         // dispatchSnapshot is called from the bridge handler thread (Binder).
         // MMACallback methods must be invoked on the main thread — the original
         // MiaoXiangCallbackProxy uses mHandler.post. UI updates from a background
         // thread are silently ignored.
         if (mainHandler != null && Looper.myLooper() != Looper.getMainLooper()) {
+            Log.i(TAG, "[DIAG] dispatchSnapshot posting to main thread")
             mainHandler.post { targets.forEach { dispatchSnapshotLocked(it, snapshot, force) } }
         } else {
             targets.forEach { dispatchSnapshotLocked(it, snapshot, force) }
@@ -72,19 +78,42 @@ class MiTwsCallbackPump(
     private fun dispatchSnapshotLocked(callback: Any, snapshot: MilinkDeviceSnapshot, force: Boolean) {
         val mac = snapshot.mac.normalizeMac() ?: return
         val key = CallbackMacKey(System.identityHashCode(callback), mac)
-        if (!force && lastRevisionByCallback[key] == snapshot.revision) return
+        if (!force && lastRevisionByCallback[key] == snapshot.revision) {
+            Log.i(TAG, "[DIAG] skip dispatch: same revision=${snapshot.revision}")
+            return
+        }
         val device = deviceLookup(mac)
-        if (device == null && !allowNullDevice) return
+        if (device == null && !allowNullDevice) {
+            Log.i(TAG, "[DIAG] skip dispatch: device null for mac=$mac")
+            return
+        }
+        Log.i(TAG, "[DIAG] dispatchSnapshotLocked mac=$mac revision=${snapshot.revision} force=$force device=${device != null}")
 
+        Log.i(TAG, "[DIAG] -> onConnectMmaStateChanged(${MiTwsStateMapper.connected(snapshot)})")
         invoke(callback, "onConnectMmaStateChanged", device, MiTwsStateMapper.connected(snapshot))
+        // Ensure ancBatteryModel is created on the AncBatteryController.
+        // The controller only creates the model in onConnectMmaStateChanged(true)
+        // when pendingConnectMmaAddress matches, but register() dispatches the
+        // callback before connectMma sets the address. Force-create via reflection.
+        if (snapshot.connected && snapshot.protocolReady && !snapshot.mac.isBlank()) {
+            ensureAncBatteryModel(callback, device, snapshot.mac)
+        }
         if (snapshot.supportsBattery) {
-            invoke(callback, "onBatteryLevel", device, MiTwsStateMapper.batteryArray(snapshot))
+            val batt = MiTwsStateMapper.batteryArray(snapshot)
+            Log.i(TAG, "[DIAG] -> onBatteryLevel(${batt.joinToString()})")
+            invoke(callback, "onBatteryLevel", device, batt)
+        } else {
+            Log.i(TAG, "[DIAG] -> SKIP onBatteryLevel: supportsBattery=false")
         }
         if (snapshot.supportsNoiseControl) {
             val anc = MiTwsStateMapper.ancState(snapshot)
+            Log.i(TAG, "[DIAG] -> onAncStateChanged($anc) onReportAncState($anc)")
             invoke(callback, "onAncStateChanged", device, anc)
             invoke(callback, "onReportAncState", device, anc)
+        } else {
+            Log.i(TAG, "[DIAG] -> SKIP onAncStateChanged: supportsNoiseControl=false")
         }
+        Log.i(TAG, "[DIAG] -> onDeviceIdUpdate(${deviceIdForMac(mac)})")
         invoke(callback, "onDeviceIdUpdate", device, deviceIdForMac(mac))
         if (snapshot.supportsRing) {
             invoke(callback, "onRingStateChanged", device, MiTwsStateMapper.ringing(snapshot))
@@ -95,13 +124,58 @@ class MiTwsCallbackPump(
     private fun invoke(callback: Any, methodName: String, device: BluetoothDevice?, value: Any) {
         val method = callback.javaClass.findMiTwsCallbackMethod(methodName, value)
         if (method == null) {
-            Log.w(TAG, "MiTWS callback method not found: $methodName(${value.javaClass.name}) on ${callback.javaClass.name}")
+            Log.w(TAG, "[DIAG] callback method not found: $methodName(${value.javaClass.name}) on ${callback.javaClass.name}")
             return
         }
+        Log.i(TAG, "[DIAG] invoke $methodName value=$value on ${callback.javaClass.name}")
         runCatching {
             method.invoke(callback, device, value)
+            Log.i(TAG, "[DIAG] invoke $methodName SUCCESS")
         }.onFailure { error ->
-            Log.w(TAG, "MiTWS callback ${method.name} failed", error)
+            Log.w(TAG, "[DIAG] invoke ${method.name} FAILED", error)
+        }
+    }
+
+    /**
+     * AncBatteryController only creates ancBatteryModel in onConnectMmaStateChanged(true)
+     * when pendingConnectMmaAddress matches. Our register() dispatches this callback before
+     * connectMma is called, so the model never gets created. Force-create it via reflection.
+     */
+    private fun ensureAncBatteryModel(callback: Any, device: BluetoothDevice?, mac: String) {
+        runCatching {
+            // callback is AncBatteryController$mmaCallback$1 → this$0 is AncBatteryController
+            val this0Field = callback.javaClass.getDeclaredField("this$0")
+            this0Field.isAccessible = true
+            val controller = this0Field.get(callback)
+
+            val ancModelField = controller.javaClass.getDeclaredField("ancBatteryModel")
+            ancModelField.isAccessible = true
+            val existing = ancModelField.get(controller)
+            if (existing != null) {
+                Log.i(TAG, "[DIAG] ancBatteryModel already exists: $existing")
+                return@runCatching
+            }
+
+            // Load AncBatteryModel using milink's classloader (not ours)
+            val milinkCl = callback.javaClass.classLoader
+            val modelClass = milinkCl.loadClass("com.miui.headset.runtime.AncBatteryModel")
+            val constructor = modelClass.declaredConstructors.firstOrNull { it.parameterTypes.size == 5 }
+                ?: return@runCatching
+            constructor.isAccessible = true
+            val model = constructor.newInstance(device, 0, null, 6, null)
+
+            // Also set pendingConnectMmaAddress so subsequent connectMma callback doesn't
+            // need to recreate it
+            runCatching {
+                val pendingField = controller.javaClass.getDeclaredField("pendingConnectMmaAddress")
+                pendingField.isAccessible = true
+                pendingField.set(controller, mac.normalizeMac() ?: mac)
+            }
+
+            ancModelField.set(controller, model)
+            Log.i(TAG, "[DIAG] ancBatteryModel force-created: $model")
+        }.onFailure { error ->
+            Log.w(TAG, "[DIAG] ensureAncBatteryModel failed", error)
         }
     }
 

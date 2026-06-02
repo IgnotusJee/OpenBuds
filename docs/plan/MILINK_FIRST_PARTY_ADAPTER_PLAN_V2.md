@@ -448,16 +448,46 @@ M1 真机验证发现的问题及修复（2026-06-02）：
 
 ### M2：MiTWS 只读 facade（1-2 周）
 
-- [ ] 对 allowlist 设备接管 `connectMma` / `disconnectMma`，避免触发真实 Xiaomi MMA。
-- [ ] hook `registerCallback` 并从 bridge 派发电量、佩戴、连接、deviceId 状态。
-- [ ] hook 必要状态 getter，补齐 callback 之外的同步读取。
-- [ ] 扩展 `MilinkDeviceSnapshot`：ANC 状态、ring 状态、capability flags。
+- [x] 对 allowlist 设备接管 `connectMma` / `disconnectMma`，避免触发真实 Xiaomi MMA。
+- [x] hook `registerCallback` 并从 bridge 派发电量、佩戴、连接、deviceId 状态。
+- [x] hook 必要状态 getter，补齐 callback 之外的同步读取。
+- [x] 扩展 `MilinkDeviceSnapshot`：ANC 状态、ring 状态、capability flags。
 
 验收：
 
 - 控制中心贴纸和 HeadsetDetailFragment 显示真实电量/佩戴。
 - OpenBuds App 普通进程死亡或未运行时，bridge 可重新绑定或使用 TTL 缓存；被用户强停时只要求快速降级，等待用户重新打开 App 后恢复。
 - Bridge 不可达时自然降级，不崩溃、不阻塞米链。
+
+M2 完成记录（2026-06-02）：
+
+**新增文件：**
+- `MiTwsStateMapper.kt` — bridge snapshot → MiTWS 状态映射：`batteryArray`、`ancState`、`connected`、`ringing`、`wearStatus`
+- `MiTwsCallbackPump.kt` — 捕获 `MMACallback` 实例，按 revision 去重派发 snapshot 到所有注册 callback。主线程检查（original `MiaoXiangCallbackProxy` 用 `mHandler.post`），`allowNullDevice` 支持
+- `MiTwsBridgeCache` — 增加 `knownAuthorizedMacs`、`placeholderSnapshot`、`authorizedSnapshots()`
+- `MilinkBridgeClientFacade` — 增加 `authorizedSnapshots()`、`addSnapshotListener()`/`removeSnapshotListener()`
+- `MilinkMiTwsFacadeEntry.BridgeClientHolder` — 重写为 `attach()` 模式，delegate 就绪前缓存 listener
+- `MilinkBridgeContract` — 增加 `KEY_ANC_MODE`、`KEY_RINGING`、`KEY_SUPPORTS_*`
+- `MilinkDeviceSnapshot` — 增加 `ancMode`、`ringing`、`supportsBattery`、`supportsNoiseControl`、`supportsWearing`、`supportsRing`
+- `MilinkBridgeSnapshotMapper.fromUiState()` — 映射 ANC 模式（0/1/2）、capability flags
+- 测试：`MiTwsStateMapperTest`（wearStatus 5 个 + battery/ANC/capability）、`MiTwsCallbackPumpTest`（5 个测试）
+
+**Hook 变更：**
+- `hookBatteryLevel`（M2）— 返回 `1`（触发刷新）+ `dispatchSnapshot(force=true)` 派发到 callback
+- `hookAncState`（M2）— 返回映射后的 ANC 值 + `dispatchSnapshot`
+- `hookWearStatus`（M2）— 返回 MiTWS wear status 字符串（0/1/2/3/-1）
+- `hookRegisterCallback`/`hookUnregisterCallback`（M2）— 捕获 MMACallback 实例
+- `hookMmaConnection` — `connectMma` 返回 `1`（之前为 `0`），仅派发 `onConnectMmaStateChanged(true)`；`disconnectMma` 不派发状态
+
+M2 真机验证发现的关键问题及修复（2026-06-02）：
+
+1. **`adapter=false` 导致所有 facade 不生效** — App 设置 `milinkAdapterEnabled` DataStore 默认 `false`。修复：首次启动需手动勾选 OpenBuds App 的 MiLink adapter 开关。
+2. **`register()` 初始派发用 placeholder snapshot** — `authorizedSnapshots()` 返回 `placeholderSnapshot`（`supportsBattery=false`），导致电池/ANC callback 被跳过。修复：`register()` 改回派发完整 `dispatchSnapshotLocked`。
+3. **`dispatchSnapshot` 在 bridge handler 线程执行，MMACallback 方法需主线程** — 修复：`dispatchSnapshot()` 检查 `Looper.myLooper()`，非主线程时 post 到 `mainHandler`。
+4. **`disconnectMma` 每 ~100ms 触发，持续派发 `onConnectMmaStateChanged(false)` 导致 UI 隐藏电池/ANC** — 修复：`hookMmaConnection` 只对 `connectMma` 派发 `onConnectMmaStateChanged(true)`，`disconnectMma` 不派发状态。
+5. **`ancBatteryModel` 只在 `onConnectMmaStateChanged(true)` 回调中创建，且要求 `pendingConnectMmaAddress` 匹配** — `register()` 初始派发在 `connectMma` 之前，`pendingConnectMmaAddress` 为空，模型未创建。后续 `connectMma` 虽创建模型但 UI 已渲染完毕。修复：`ensureAncBatteryModel()` 通过反射访问 `AncBatteryController$mmaCallback$1.this$0`，强制创建 `ancBatteryModel` 并设置 `pendingConnectMmaAddress`。
+
+**当前状态：** 电量和 ANC 状态已在卡面正确显示。ANC 调节不可用（M3 实现）。
 
 ### M3：反向控制闭环（1-2 周）
 
