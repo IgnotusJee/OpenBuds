@@ -26,6 +26,7 @@ class MilinkMiTwsFacadeHook(
         deviceLookup = { mac -> deviceForMac(mac) },
         deviceIdForMac = ::assignedDeviceIdFor,
         allowNullDevice = true,
+        mainHandler = runCatching { android.os.Handler(android.os.Looper.getMainLooper()) }.getOrNull(),
     )
     private val bridgeSnapshotListener: (MilinkDeviceSnapshot) -> Unit = { snapshot ->
         callbackPump.dispatchSnapshot(snapshot)

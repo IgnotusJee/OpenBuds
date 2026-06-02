@@ -3,6 +3,7 @@ package dev.ignotus.openbuds.lsposed.mitws
 import android.bluetooth.BluetoothDevice
 import android.os.Handler
 import android.os.HandlerThread
+import android.os.Looper
 import android.util.Log
 import dev.ignotus.openbuds.integration.milink.MilinkDeviceSnapshot
 import dev.ignotus.openbuds.integration.milink.normalizeMac
@@ -14,6 +15,7 @@ class MiTwsCallbackPump(
     private val deviceIdForMac: (String) -> String,
     private val asyncDispatcher: AsyncDispatcher = HandlerThreadDispatcher("OpenBuds-MiTwsCallbackPump"),
     private val allowNullDevice: Boolean = false,
+    private val mainHandler: Handler? = null,
 ) {
     private val callbacks = mutableSetOf<Any>()
     private val lastRevisionByCallback = ConcurrentHashMap<CallbackMacKey, Long>()
@@ -23,9 +25,6 @@ class MiTwsCallbackPump(
         synchronized(callbacks) {
             callbacks.add(callback)
         }
-        // Dispatch initial snapshots synchronously so the UI gets data
-        // before it finishes rendering. Subsequent dispatches use the
-        // async dispatcher to avoid blocking the caller.
         snapshots.forEach { dispatchSnapshotLocked(callback, it, force = true) }
         return true
     }
@@ -43,8 +42,16 @@ class MiTwsCallbackPump(
     }
 
     fun dispatchSnapshot(snapshot: MilinkDeviceSnapshot, force: Boolean = false) {
-        snapshotTargets().forEach { callback ->
-            dispatchSnapshotLocked(callback, snapshot, force)
+        val targets = snapshotTargets()
+        if (targets.isEmpty()) return
+        // dispatchSnapshot is called from the bridge handler thread (Binder).
+        // MMACallback methods must be invoked on the main thread — the original
+        // MiaoXiangCallbackProxy uses mHandler.post. UI updates from a background
+        // thread are silently ignored.
+        if (mainHandler != null && Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post { targets.forEach { dispatchSnapshotLocked(it, snapshot, force) } }
+        } else {
+            targets.forEach { dispatchSnapshotLocked(it, snapshot, force) }
         }
     }
 
@@ -94,7 +101,7 @@ class MiTwsCallbackPump(
         runCatching {
             method.invoke(callback, device, value)
         }.onFailure { error ->
-            Log.w(TAG, "MiTWS callback $methodName failed", error)
+            Log.w(TAG, "MiTWS callback ${method.name} failed", error)
         }
     }
 
