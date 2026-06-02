@@ -18,8 +18,7 @@ import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
  *
  * ## Lifecycle
  *
- * 1. [init] — writes a startup marker to `/sdcard/openbuds_lsposed_startup.txt`
- *    for diagnostics (process name + timestamp).
+ * 1. [init] — logs module loaded.
  * 2. [onPackageLoaded] — when `com.milink.service` loads, installs MiTWS
  *    facade hooks (M1) or trace-only hooks according to [MilinkRouteConfig].
  *
@@ -39,20 +38,8 @@ import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
 class ModuleMain : XposedModule() {
 
     init {
-        val processName = try {
-            val atClass = Class.forName("android.app.ActivityThread")
-            val method = atClass.getDeclaredMethod("currentProcessName")
-            method.invoke(null) as? String ?: "unknown"
-        } catch (_: Exception) {
-            "unknown"
-        }
-        log("loaded in process: $processName")
         instance = this
-        try {
-            val marker = java.io.File("/sdcard/openbuds_lsposed_startup.txt")
-            marker.writeText("process=$processName\ntime=${System.currentTimeMillis()}\n")
-            marker.setReadable(true, false)
-        } catch (_: Exception) {}
+        log("loaded")
     }
 
     /**
