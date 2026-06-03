@@ -30,6 +30,11 @@ class MilinkMiTwsFacadeHook(
         mainHandler = runCatching { android.os.Handler(android.os.Looper.getMainLooper()) }.getOrNull(),
     )
     private val bridgeSnapshotListener: (MilinkDeviceSnapshot) -> Unit = { snapshot ->
+        log(
+            "snapshotChanged mac=${snapshot.mac} revision=${snapshot.revision} " +
+                "ancMode=${snapshot.ancMode} connected=${snapshot.connected} " +
+                "protocolReady=${snapshot.protocolReady} supportsNoiseControl=${snapshot.supportsNoiseControl}"
+        )
         callbackPump.dispatchSnapshot(snapshot)
     }
 
@@ -358,6 +363,25 @@ class MilinkMiTwsFacadeHook(
                             CONTROL_SUCCESS_RESULT
                         } else {
                             CONTROL_FAILURE_RESULT
+                        }
+                        if (commandResult.accepted) {
+                            val targetAncMode = MiTwsControlMapper.noiseModeForAncMethod(name)
+                            if (targetAncMode != null && snapshot.ancMode != targetAncMode) {
+                                val updatedSnapshot = snapshot.copy(ancMode = targetAncMode)
+                                bridgeClient?.updateSnapshot(updatedSnapshot)
+                                callbackPump.dispatchSnapshot(updatedSnapshot, force = true)
+                                log(
+                                    "$name mac=$mac name=${safeName(device)} " +
+                                        "optimisticSnapshot=true oldAncMode=${snapshot.ancMode} " +
+                                        "newAncMode=$targetAncMode requestId=${commandResult.requestId}"
+                                )
+                            } else {
+                                log(
+                                    "$name mac=$mac name=${safeName(device)} " +
+                                        "optimisticSnapshot=skip currentAncMode=${snapshot.ancMode} " +
+                                        "targetAncMode=$targetAncMode requestId=${commandResult.requestId}"
+                                )
+                            }
                         }
                         log(
                             "$name mac=$mac name=${safeName(device)} " +

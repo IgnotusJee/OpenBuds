@@ -33,3 +33,6 @@ references
 
 # local agent tools
 tools
+
+# local extracted artifacts / temp analysis
+temp/

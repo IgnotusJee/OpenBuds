@@ -98,10 +98,14 @@ class MiTwsBridgeCache(
     fun markError(message: String?) {
         lastError = message
         if (message != null) {
-            adapterEnabled = false
-            authorizedMacs = emptySet()
-            clearSnapshots()
-            // knownAuthorizedMacs intentionally NOT cleared — survives bridge restart
+            // Soft-degrade on bridge errors. Keep adapterEnabled and the last known
+            // authorized/snapshot state so short binder/session flaps do not make
+            // this process instantly lose MiTWS classification and fall back to a
+            // third-party card.
+            //
+            // The next successful status/session refresh will replace these values.
+            // We still clear live snapshots only when the app explicitly disables
+            // the adapter via updateStatus(enabled=false).
         }
     }
 

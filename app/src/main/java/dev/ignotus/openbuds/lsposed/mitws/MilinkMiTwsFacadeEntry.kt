@@ -2,6 +2,7 @@ package dev.ignotus.openbuds.lsposed.mitws
 
 import android.app.Application
 import android.content.Context
+import android.os.Process
 import android.util.Log
 import dev.ignotus.openbuds.lsposed.ModuleMain
 import io.github.libxposed.api.XposedInterface
@@ -13,7 +14,7 @@ class MilinkMiTwsFacadeEntry(
     private var bridgeClient: MilinkBridgeClient? = null
 
     fun install() {
-        Log.i(TAG, "Installing MiLink MiTWS facade entry (M1)")
+        Log.i(TAG, "Installing MiLink MiTWS facade entry (M1) pid=${Process.myPid()} app=${currentApplication()?.packageName}")
         // Start bridge client immediately so snapshot is available before
         // MxBluetoothManager methods are first called. The Application.onCreate()
         // hook is a fallback if ActivityThread.currentApplication() isn't ready yet.
@@ -63,7 +64,11 @@ class MilinkMiTwsFacadeEntry(
             bridgeClient = client
             BridgeClientHolder.attach(client)
             client.start()
-            Log.i(TAG, "MiLink MiTWS bridge client started (M1)")
+            Log.i(
+                TAG,
+                "MiLink MiTWS bridge client started (M1) " +
+                    "pid=${Process.myPid()} context=${context.packageName} client=${System.identityHashCode(client)}"
+            )
         }
     }
 
@@ -76,6 +81,7 @@ class MilinkMiTwsFacadeEntry(
 
         fun attach(client: MilinkBridgeClient) {
             delegate = client
+            Log.i(TAG, "BridgeClientHolder.attach pid=${Process.myPid()} client=${System.identityHashCode(client)}")
             synchronized(snapshotListeners) {
                 snapshotListeners.forEach(client::addSnapshotListener)
             }

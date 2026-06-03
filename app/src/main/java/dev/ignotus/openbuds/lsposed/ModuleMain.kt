@@ -1,5 +1,6 @@
 package dev.ignotus.openbuds.lsposed
 
+import android.os.Process
 import android.util.Log
 import dev.ignotus.openbuds.lsposed.mitws.MilinkMiTwsFacadeEntry
 import dev.ignotus.openbuds.lsposed.mitws.MilinkMiTwsTraceEntry
@@ -39,7 +40,7 @@ class ModuleMain : XposedModule() {
 
     init {
         instance = this
-        log("loaded")
+        log("loaded pid=${Process.myPid()}")
     }
 
     /**
@@ -50,7 +51,11 @@ class ModuleMain : XposedModule() {
      */
     override fun onPackageLoaded(param: PackageLoadedParam) {
         super.onPackageLoaded(param)
-        log("onPackageLoaded: ${param.packageName} isFirst=${param.isFirstPackage}")
+        val processName = currentProcessName()
+        log(
+            "onPackageLoaded: package=${param.packageName} " +
+                "process=$processName pid=${Process.myPid()} isFirst=${param.isFirstPackage}"
+        )
 
         if (!param.isFirstPackage) return
 
@@ -58,6 +63,10 @@ class ModuleMain : XposedModule() {
 
         when (param.packageName) {
             "com.milink.service" -> {
+                log(
+                    "install route: package=${param.packageName} process=$processName " +
+                        "pid=${Process.myPid()} mode=${MilinkRouteConfig.mode()}"
+                )
                 when (MilinkRouteConfig.mode()) {
                     MilinkRouteMode.MITWS -> MilinkMiTwsFacadeEntry(cl).install()
                     MilinkRouteMode.TRACE_ONLY -> MilinkMiTwsTraceEntry(cl).install()
@@ -69,6 +78,13 @@ class ModuleMain : XposedModule() {
     fun log(msg: String) {
         Log.i("OpenBuds", "[LSPosed] $msg")
     }
+
+    private fun currentProcessName(): String =
+        runCatching {
+            val atClass = Class.forName("android.app.ActivityThread")
+            val currentProcessName = atClass.getDeclaredMethod("currentProcessName")
+            currentProcessName.invoke(null) as? String
+        }.getOrNull().orEmpty()
 
     companion object {
         lateinit var instance: ModuleMain
