@@ -14,18 +14,38 @@ class MilinkMiTwsFacadeEntry(
     private var bridgeClient: MilinkBridgeClient? = null
 
     fun install() {
-        Log.i(TAG, "Installing MiLink MiTWS facade entry (M1) pid=${Process.myPid()} app=${currentApplication()?.packageName}")
+        val processName = currentProcessName()
+        Log.i(
+            TAG,
+            "Installing MiLink MiTWS facade entry (M1) " +
+                "pid=${Process.myPid()} process=$processName app=${currentApplication()?.packageName} " +
+                "role=${MilinkRouteConfig.processRole(processName)}"
+        )
         // Start bridge client immediately so snapshot is available before
         // MxBluetoothManager methods are first called. The Application.onCreate()
         // hook is a fallback if ActivityThread.currentApplication() isn't ready yet.
         val app = currentApplication()
-        if (app != null) {
-            startBridgeClient(app)
+        if (MilinkRouteConfig.shouldStartBridgeForProcess(processName)) {
+            if (app != null) {
+                startBridgeClient(app)
+            } else {
+                installApplicationOnCreateFallback()
+            }
         } else {
-            installApplicationOnCreateFallback()
+            Log.i(
+                TAG,
+                "Skipping bridge client for process=$processName pid=${Process.myPid()} " +
+                    "role=${MilinkRouteConfig.processRole(processName)}"
+            )
         }
         MilinkMiTwsFacadeHook(classLoader, BridgeClientHolder).installTraceHooks()
     }
+
+    private fun currentProcessName(): String = runCatching {
+        val atClass = Class.forName("android.app.ActivityThread")
+        val method = atClass.getDeclaredMethod("currentProcessName")
+        method.invoke(null) as? String
+    }.getOrNull().orEmpty()
 
     private fun currentApplication(): Application? = runCatching {
         val atClass = Class.forName("android.app.ActivityThread")

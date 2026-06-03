@@ -65,8 +65,15 @@ class ModuleMain : XposedModule() {
             "com.milink.service" -> {
                 log(
                     "install route: package=${param.packageName} process=$processName " +
-                        "pid=${Process.myPid()} mode=${MilinkRouteConfig.mode()}"
+                        "pid=${Process.myPid()} mode=${MilinkRouteConfig.mode()} role=${MilinkRouteConfig.processRole(processName)}"
                 )
+                if (!MilinkRouteConfig.shouldInstallFacadeForProcess(processName)) {
+                    log(
+                        "skip install: package=${param.packageName} process=$processName " +
+                            "pid=${Process.myPid()} role=${MilinkRouteConfig.processRole(processName)}"
+                    )
+                    return
+                }
                 when (MilinkRouteConfig.mode()) {
                     MilinkRouteMode.MITWS -> MilinkMiTwsFacadeEntry(cl).install()
                     MilinkRouteMode.TRACE_ONLY -> MilinkMiTwsTraceEntry(cl).install()

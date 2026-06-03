@@ -4,12 +4,36 @@ object MilinkRouteConfig {
     const val MITWS_ENABLE_PROPERTY = "debug.openbuds.milink_mitws_enable"
     const val MITWS_DEVICE_ID_PROPERTY = "debug.openbuds.milink_mitws_device_id"
     const val MITWS_MMA_PASSTHROUGH_PROPERTY = "debug.openbuds.milink_mitws_mma_passthrough"
+    private const val BASE_PROCESS = "com.milink.service"
+    private val FACADE_ALLOWED_PROCESSES = setOf(
+        "com.milink.service:ui",
+        "com.milink.service:core",
+    )
+    private val BRIDGE_ALLOWED_PROCESSES = setOf(
+        "com.milink.service:ui",
+        "com.milink.service:core",
+    )
 
     fun mode(): MilinkRouteMode =
         if (isSystemFacadeEnabled()) MilinkRouteMode.MITWS else MilinkRouteMode.TRACE_ONLY
 
     fun canUseFacade(bridgeClient: MilinkBridgeClientFacade?): Boolean =
         isSystemFacadeEnabled() && bridgeClient?.adapterEnabled == true
+
+    fun shouldInstallFacadeForProcess(processName: String): Boolean =
+        processName in FACADE_ALLOWED_PROCESSES
+
+    fun shouldStartBridgeForProcess(processName: String): Boolean =
+        processName in BRIDGE_ALLOWED_PROCESSES
+
+    fun processRole(processName: String): String =
+        when {
+            processName in BRIDGE_ALLOWED_PROCESSES -> "bridge+facade"
+            processName in FACADE_ALLOWED_PROCESSES -> "facade-only"
+            processName == BASE_PROCESS -> "skip-main"
+            processName.startsWith("$BASE_PROCESS:") -> "skip-subprocess"
+            else -> "unknown"
+        }
 
     fun selectedDeviceIdTemplate(): MiTwsDeviceIdTemplate =
         MiTwsDeviceIdPolicy.templateForConfigValue(

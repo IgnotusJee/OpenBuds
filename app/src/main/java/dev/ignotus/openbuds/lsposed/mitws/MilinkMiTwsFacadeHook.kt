@@ -2,6 +2,7 @@ package dev.ignotus.openbuds.lsposed.mitws
 
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
+import android.os.Process
 import android.util.Log
 import dev.ignotus.openbuds.integration.milink.MilinkBridgeContract
 import dev.ignotus.openbuds.integration.milink.MilinkDeviceSnapshot
@@ -626,7 +627,12 @@ class MilinkMiTwsFacadeHook(
         private val assignedDeviceIds = ConcurrentHashMap<String, String>()
 
         fun log(message: String) {
-            Log.i(TAG, "[MiLinkMiTWS] $message")
+            val processName = runCatching {
+                val atClass = Class.forName("android.app.ActivityThread")
+                val currentProcessName = atClass.getDeclaredMethod("currentProcessName")
+                currentProcessName.invoke(null) as? String
+            }.getOrNull().orEmpty()
+            Log.i(TAG, "[MiLinkMiTWS] process=$processName pid=${Process.myPid()} $message")
         }
     }
 }
