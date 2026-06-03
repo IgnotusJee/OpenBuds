@@ -29,6 +29,8 @@ import androidx.lifecycle.lifecycleScope
 import dev.ignotus.openbuds.data.HeadphoneRepository
 import dev.ignotus.openbuds.data.HeadphoneUiState
 import dev.ignotus.openbuds.data.settings.AppSettingsStore
+import dev.ignotus.openbuds.headphones.HeadphoneFeature
+import dev.ignotus.openbuds.protocol.NoiseControlMode
 import dev.ignotus.openbuds.service.SonyControlService
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -47,6 +49,11 @@ class MainActivity : ComponentActivity() {
     private lateinit var scanStateText: TextView
     private lateinit var scanBtn: Button
     private lateinit var disconnectBtn: Button
+    private lateinit var ancNcBtn: Button
+    private lateinit var ancAmbientBtn: Button
+    private lateinit var ancOffBtn: Button
+    private lateinit var ancLabel: TextView
+    private lateinit var ancRow: LinearLayout
     private lateinit var milinkAdapterCheck: CheckBox
     private lateinit var milinkStatusText: TextView
     private lateinit var deviceListContainer: LinearLayout
@@ -127,6 +134,38 @@ class MainActivity : ComponentActivity() {
         buttonRow.addView(scanBtn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = 8 })
         buttonRow.addView(disconnectBtn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = 8 })
 
+        // ---- ANC toggle ----
+        ancLabel = TextView(this).apply {
+            textSize = 12f
+            setTextColor(Color.parseColor("#AA88CC"))
+            setPadding(8, 8, 8, 2)
+            text = "ANC Debug Controls:"
+            visibility = View.GONE
+        }
+        ancRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            visibility = View.GONE
+        }
+        ancNcBtn = Button(this).apply {
+            text = "Noise Canc."
+            textSize = 11f
+            setOnClickListener { repository.setNoiseControlMode(NoiseControlMode.NOISE_CANCELLING) }
+        }
+        ancAmbientBtn = Button(this).apply {
+            text = "Ambient"
+            textSize = 11f
+            setOnClickListener { repository.setNoiseControlMode(NoiseControlMode.AMBIENT_SOUND) }
+        }
+        ancOffBtn = Button(this).apply {
+            text = "ANC Off"
+            textSize = 11f
+            setOnClickListener { repository.setNoiseControlMode(NoiseControlMode.OFF) }
+        }
+        ancRow.addView(ancNcBtn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = 4 })
+        ancRow.addView(ancAmbientBtn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = 4; marginEnd = 4 })
+        ancRow.addView(ancOffBtn, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = 4 })
+
         // ---- Device list header ----
         val deviceHeader = TextView(this).apply {
             textSize = 14f
@@ -148,6 +187,8 @@ class MainActivity : ComponentActivity() {
                 addView(statusText)
                 addView(scanStateText)
                 addView(buttonRow)
+                addView(ancLabel)
+                addView(ancRow)
                 addView(milinkAdapterCheck)
                 addView(milinkStatusText)
                 addView(deviceHeader)
@@ -231,6 +272,17 @@ class MainActivity : ComponentActivity() {
 
         // Disconnect button
         disconnectBtn.visibility = if (dev != null) View.VISIBLE else View.GONE
+
+        // ANC toggle visibility
+        val showAnc = dev != null
+            && state.deviceInfo.protocolReady
+            && state.connectedProfile?.supports(HeadphoneFeature.NOISE_CONTROL) == true
+        val ancVis = if (showAnc) View.VISIBLE else View.GONE
+        ancLabel.visibility = ancVis
+        ancRow.visibility = ancVis
+        if (showAnc) {
+            ancLabel.text = "ANC Controls [${state.noiseControlState.controlMode ?: "?"}]:"
+        }
 
         // Device list
         deviceListContainer.removeAllViews()

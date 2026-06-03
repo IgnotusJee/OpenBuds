@@ -85,7 +85,7 @@ class SonyTandemV2Table1ProtocolTest {
     @Test
     fun ncAsmSetStatus_ncOn_matchesExportedCommandShape() {
         assertArrayEquals(
-            byteArrayOf(0x0E, 0x68, 0x17, 0x01, 0x00, 0x00, 0x00, 0x0A),
+            byteArrayOf(0x0E, 0x68, 0x17, 0x01, 0x01, 0x00, 0x00, 0x0A),
             SonyTandemV2Table1Protocol.buildSetNoiseControlMode(NoiseControlMode.NOISE_CANCELLING),
         )
     }
@@ -93,7 +93,7 @@ class SonyTandemV2Table1ProtocolTest {
     @Test
     fun ncAsmSetParam_ambientLevel_matchesReverseCommandShape() {
         assertArrayEquals(
-            byteArrayOf(0x0E, 0x68, 0x17, 0x01, 0x00, 0x01, 0x01, 0x0C),
+            byteArrayOf(0x0E, 0x68, 0x17, 0x01, 0x01, 0x01, 0x01, 0x0C),
             SonyTandemV2Table1Protocol.buildSetNoiseControlMode(
                 NoiseControlMode.AMBIENT_SOUND,
                 ambientLevel = 12,
@@ -105,7 +105,7 @@ class SonyTandemV2Table1ProtocolTest {
     @Test
     fun ncAsmSetParam_off_matchesReverseCommandShape() {
         assertArrayEquals(
-            byteArrayOf(0x0E, 0x68, 0x17, 0x01, 0x01, 0x00, 0x00, 0x0A),
+            byteArrayOf(0x0E, 0x68, 0x17, 0x01, 0x00, 0x00, 0x00, 0x0A),
             SonyTandemV2Table1Protocol.buildSetNoiseControlMode(NoiseControlMode.OFF),
         )
     }
@@ -113,7 +113,7 @@ class SonyTandemV2Table1ProtocolTest {
     @Test
     fun ncAsmSetParam_ncModeSwitchAmbient_matchesReverseCommandShape() {
         assertArrayEquals(
-            byteArrayOf(0x0E, 0x68, 0x14, 0x01, 0x00, 0x00, 0x00, 0x0B),
+            byteArrayOf(0x0E, 0x68, 0x14, 0x01, 0x01, 0x00, 0x00, 0x0B),
             SonyTandemV2Table1Protocol.buildSetNcModeSwitchAndAmbientLevel(
                 NoiseControlMode.AMBIENT_SOUND,
                 ambientLevel = 12,
@@ -124,7 +124,7 @@ class SonyTandemV2Table1ProtocolTest {
     @Test
     fun ncAsmSetParam_ncModeSwitchNcDual_matchesReverseCommandShape() {
         assertArrayEquals(
-            byteArrayOf(0x0E, 0x68, 0x14, 0x01, 0x00, 0x02, 0x00, 0x00),
+            byteArrayOf(0x0E, 0x68, 0x14, 0x01, 0x01, 0x02, 0x00, 0x00),
             SonyTandemV2Table1Protocol.buildSetNcModeSwitchAndAmbientLevel(NoiseControlMode.NOISE_CANCELLING),
         )
     }
@@ -353,7 +353,7 @@ class SonyTandemV2Table1ProtocolTest {
 
     @Test
     fun parser_ambientLevelResponse_extractsLevel() {
-        val raw = byteArrayOf(0x0E, 0x67, 0x17, 0x01, 0x00, 0x01, 0x00, 0x0C)
+        val raw = byteArrayOf(0x0E, 0x67, 0x17, 0x01, 0x01, 0x01, 0x00, 0x0C)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
         assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.NoiseControl)
@@ -378,7 +378,7 @@ class SonyTandemV2Table1ProtocolTest {
 
     @Test
     fun parser_asmSeamlessResponse_extractsHeadsetAmbientLevel() {
-        val raw = byteArrayOf(0x0E, 0x67, 0x22, 0x01, 0x00, 0x00, 0x0C)
+        val raw = byteArrayOf(0x0E, 0x67, 0x22, 0x01, 0x01, 0x00, 0x0C)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
         assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.NoiseControl)
@@ -390,7 +390,7 @@ class SonyTandemV2Table1ProtocolTest {
 
     @Test
     fun parser_ncModeSwitchAsmSeamlessResponse_extractsXm4AmbientLevel() {
-        val raw = byteArrayOf(0x0E, 0x67, 0x14, 0x01, 0x00, 0x00, 0x00, 0x0B)
+        val raw = byteArrayOf(0x0E, 0x67, 0x14, 0x01, 0x01, 0x00, 0x00, 0x0B)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
         assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.NoiseControl)
@@ -403,7 +403,7 @@ class SonyTandemV2Table1ProtocolTest {
 
     @Test
     fun parser_ncModeSwitchAsmSeamlessResponse_extractsXm4NcDual() {
-        val raw = byteArrayOf(0x0E, 0x67, 0x14, 0x01, 0x00, 0x02, 0x00, 0x00)
+        val raw = byteArrayOf(0x0E, 0x67, 0x14, 0x01, 0x01, 0x02, 0x00, 0x00)
         val parsed = SonyTandemV2Table1Protocol.parse(raw)
 
         assertTrue(parsed is ParsedHeadphoneResponse.SonyTandem.NoiseControl)

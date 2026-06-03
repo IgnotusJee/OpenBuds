@@ -3,6 +3,7 @@ package dev.ignotus.openbuds.lsposed.mitws
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.util.Log
+import dev.ignotus.openbuds.integration.milink.MilinkBridgeContract
 import dev.ignotus.openbuds.integration.milink.MilinkDeviceSnapshot
 import dev.ignotus.openbuds.integration.milink.normalizeMac
 import dev.ignotus.openbuds.lsposed.ModuleMain
@@ -43,9 +44,12 @@ class MilinkMiTwsFacadeHook(
         hookBatteryLevel(manager)
         hookAncState(manager)
         hookWearStatus(manager)
-        hookControlNoOp(manager, "openAnc")
-        hookControlNoOp(manager, "openTransparent")
-        hookControlNoOp(manager, "closeAnc")
+        hookAncControl(manager, MiTwsControlMapper.METHOD_OPEN_ANC)
+        hookAncControl(manager, MiTwsControlMapper.METHOD_OPEN_TRANSPARENT)
+        hookAncControl(manager, MiTwsControlMapper.METHOD_CLOSE_ANC)
+        installMiuiHeadsetTraceHooks()
+        installAncControllerDiagnosticHooks()
+        installProfileImplHooks()
 
         val callback = loadClass(MMA_CALLBACK)
         if (callback != null) {
@@ -318,10 +322,10 @@ class MilinkMiTwsFacadeHook(
         log("hooked M2 callback release: ${manager.name}.${method.name}")
     }
 
-    private fun hookControlNoOp(manager: Class<*>, name: String) {
+    private fun hookAncControl(manager: Class<*>, name: String) {
         val method = findMethod(manager, name, BluetoothDevice::class.java)
         if (method == null) {
-            log("missing M1 control trace: ${manager.name}.$name(BluetoothDevice)")
+            log("missing M3 ANC control: ${manager.name}.$name(BluetoothDevice)")
             return
         }
         ModuleMain.instance.hook(method)
@@ -332,22 +336,150 @@ class MilinkMiTwsFacadeHook(
                     val mac = safeMac(device)
                     val snapshot = facadeSnapshot(mac)
                     if (snapshot != null) {
+                        val command = MiTwsControlMapper.buildAncCommand(name, snapshot)
+                        if (command == null) {
+                            log(
+                                "$name mac=$mac name=${safeName(device)} " +
+                                    "facadeTarget=true commandAccepted=false reason=${MilinkBridgeContract.REASON_UNSUPPORTED_CAPABILITY} " +
+                                    "result=$CONTROL_FAILURE_RESULT supportsNoiseControl=${snapshot.supportsNoiseControl} " +
+                                    "gate=${facadeGateSummary()}"
+                            )
+                            return CONTROL_FAILURE_RESULT
+                        }
+                        val commandResult = bridgeClient?.executeCommand(
+                            mac = snapshot.mac,
+                            command = command,
+                            timeoutMs = BRIDGE_COMMAND_TIMEOUT_MS,
+                        ) ?: MiTwsBridgeCommandResult.failed(
+                            reason = MilinkBridgeContract.REASON_BRIDGE_UNAVAILABLE,
+                            requestId = command.getString(MilinkBridgeContract.KEY_REQUEST_ID),
+                        )
+                        val facadeResult = if (commandResult.accepted) {
+                            CONTROL_SUCCESS_RESULT
+                        } else {
+                            CONTROL_FAILURE_RESULT
+                        }
                         log(
                             "$name mac=$mac name=${safeName(device)} " +
-                                "facadeTarget=true controlCommandUnavailable noOpResult=$CONTROL_NO_OP_RESULT " +
+                                "facadeTarget=true commandType=${MiTwsControlMapper.commandType(command)} " +
+                                "noiseMode=${MiTwsControlMapper.noiseMode(command)} " +
+                                "requestId=${commandResult.requestId} accepted=${commandResult.accepted} " +
+                                "reason=${commandResult.reason} result=$facadeResult " +
                                 "gate=${facadeGateSummary()}"
                         )
-                        return CONTROL_NO_OP_RESULT
+                        return facadeResult
                     }
+                    // Facade not active — fall through to original
                     val result = chain.proceed()
                     log(
                         "trace $name mac=$mac name=${safeName(device)} " +
-                            "facadeTarget=false result=${resultSummary(result)} gate=${facadeGateSummary()}"
+                            "facadeTarget=false gate=${facadeGateSummary()} " +
+                            "result=${resultSummary(result)}"
                     )
                     return result
                 }
             })
-        log("hooked M1 control trace: ${manager.name}.${method.name}")
+        log("hooked M3 ANC control: ${manager.name}.${method.name}")
+    }
+
+    private fun installMiuiHeadsetTraceHooks() {
+        val headsetService = loadClass(MIUI_HEADSET_SERVICE_PROXY) ?: return
+        hookTrace(headsetService, "changeAncMode", Int::class.javaPrimitiveType ?: Int::class.java, BluetoothDevice::class.java)
+        hookTrace(headsetService, "changeAncLevel", String::class.java, BluetoothDevice::class.java)
+        hookTrace(headsetService, "changePlayStatus", Int::class.javaPrimitiveType ?: Int::class.java, BluetoothDevice::class.java)
+        hookTrace(headsetService, "setCommonCommand", Int::class.javaPrimitiveType ?: Int::class.java, String::class.java, BluetoothDevice::class.java)
+        hookTrace(headsetService, "ringFindForAirPods", String::class.java, Boolean::class.javaPrimitiveType ?: Boolean::class.java)
+    }
+
+    private fun installProfileImplHooks() {
+        // ProfileImpl.updateHeadsetMode(String hostId, String address, String deviceId, int opAncMode)
+        // is the entry point for ANC switching from the Circulate API control center.
+        // The Circulate layer can't find OpenBuds devices in its device registry, so
+        // the call fails before reaching AncBatteryController.setAncStateBlock().
+        // Hook here to intercept and route to our bridge command.
+        val profileImpl = loadClass(PROFILE_IMPL) ?: return
+        val method = findMethod(profileImpl, "updateHeadsetMode",
+            String::class.java, String::class.java, String::class.java, Int::class.javaPrimitiveType ?: Int::class.java)
+        if (method == null) {
+            log("missing M3 ANC control: ${profileImpl.name}.updateHeadsetMode(String, String, String, int)")
+            return
+        }
+        ModuleMain.instance.hook(method)
+            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+            .intercept(object : XposedInterface.Hooker {
+                override fun intercept(chain: XposedInterface.Chain): Any? {
+                    val args = chain.args
+                    val hostId = args.getOrNull(0) as? String ?: ""
+                    val address = args.getOrNull(1) as? String ?: ""
+                    val deviceId = args.getOrNull(2) as? String ?: ""
+                    val opAncMode = (args.getOrNull(3) as? Int) ?: -1
+                    val mac = address.normalizeMac() ?: ""
+                    val snapshot = facadeSnapshot(mac)
+                    if (snapshot != null) {
+                        val methodName = when (opAncMode) {
+                            0 -> MiTwsControlMapper.METHOD_CLOSE_ANC
+                            1 -> MiTwsControlMapper.METHOD_OPEN_ANC
+                            2 -> MiTwsControlMapper.METHOD_OPEN_TRANSPARENT
+                            else -> null
+                        }
+                        if (methodName != null) {
+                            val command = MiTwsControlMapper.buildAncCommand(methodName, snapshot)
+                            if (command != null) {
+                                val commandResult = bridgeClient?.executeCommand(
+                                    mac = snapshot.mac,
+                                    command = command,
+                                    timeoutMs = BRIDGE_COMMAND_TIMEOUT_MS,
+                                ) ?: MiTwsBridgeCommandResult.failed(
+                                    reason = MilinkBridgeContract.REASON_BRIDGE_UNAVAILABLE,
+                                )
+                                if (commandResult.accepted) {
+                                    log("updateHeadsetMode mac=$mac name=${snapshot.name} opAncMode=$opAncMode facadeTarget=true result=100 (accepted)")
+                                    return 100
+                                }
+                                log("updateHeadsetMode mac=$mac name=${snapshot.name} opAncMode=$opAncMode facadeTarget=true result=201 (command rejected: ${commandResult.reason})")
+                                return 201
+                            }
+                        }
+                        log("updateHeadsetMode mac=$mac name=${snapshot.name} opAncMode=$opAncMode facadeTarget=true result=201 (unsupported mode)")
+                        return 201
+                    }
+                    val result = chain.proceed()
+                    log("trace updateHeadsetMode hostId=$hostId address=$address deviceId=$deviceId opAncMode=$opAncMode facadeTarget=false result=$result")
+                    return result
+                }
+            })
+        log("hooked M3 ANC control: ${profileImpl.name}.${method.name}")
+    }
+
+    private fun installAncControllerDiagnosticHooks() {
+        // Hook AncBatteryController.setAncStateBlock to trace the ANC switching entry point
+        val controller = loadClass(ANC_BATTERY_CONTROLLER) ?: return
+        // setAncStateBlock(BluetoothDevice, int) → int
+        hookTrace(controller, "setAncStateBlock", BluetoothDevice::class.java, Int::class.javaPrimitiveType ?: Int::class.java)
+        // isSupportOpAnc(BluetoothDevice, int) → int (private, use declared method)
+        val isSupportMethod = findMethod(controller, "isSupportOpAnc", BluetoothDevice::class.java, Int::class.javaPrimitiveType ?: Int::class.java)
+        if (isSupportMethod != null) {
+            hookTraceMethod(isSupportMethod)
+            log("hooked diagnostic: ${controller.name}.isSupportOpAnc")
+        } else {
+            log("missing diagnostic: ${controller.name}.isSupportOpAnc(BluetoothDevice, int)")
+        }
+        // getAncState(BluetoothDevice) on AncBatteryController (not MxBluetoothManager)
+        val getAncMethod = findMethod(controller, "getAncState", BluetoothDevice::class.java)
+        if (getAncMethod != null) {
+            hookTraceMethod(getAncMethod)
+            log("hooked diagnostic: ${controller.name}.getAncState")
+        } else {
+            log("missing diagnostic: ${controller.name}.getAncState(BluetoothDevice)")
+        }
+        // getWearStatus(BluetoothDevice) on AncBatteryController
+        val getWearMethod = findMethod(controller, "getWearStatus", BluetoothDevice::class.java)
+        if (getWearMethod != null) {
+            hookTraceMethod(getWearMethod)
+            log("hooked diagnostic: ${controller.name}.getWearStatus")
+        } else {
+            log("missing diagnostic: ${controller.name}.getWearStatus(BluetoothDevice)")
+        }
     }
 
     private fun hookTrace(clazz: Class<*>, name: String, vararg parameterTypes: Class<*>) {
@@ -366,7 +498,7 @@ class MilinkMiTwsFacadeHook(
             .intercept(object : XposedInterface.Hooker {
                 override fun intercept(chain: XposedInterface.Chain): Any? {
                     val result = chain.proceed()
-                    val device = chain.args.firstOrNull() as? BluetoothDevice
+                    val device = chain.args.firstOrNull { it is BluetoothDevice } as? BluetoothDevice
                     rememberDevice(device)
                     val mac = safeMac(device)
                     log(
@@ -449,11 +581,16 @@ class MilinkMiTwsFacadeHook(
         const val MX_BLUETOOTH_MANAGER = "com.xiaomi.mxbluetoothsdk.manager.MxBluetoothManager"
         const val MX_BLUETOOTH_SERVICE = "com.xiaomi.mxbluetoothsdk.service.MxBluetoothService"
         const val MMA_CALLBACK = "com.xiaomi.mxbluetoothsdk.manager.MxBluetoothManager\$MMACallback"
+        const val MIUI_HEADSET_SERVICE_PROXY = "com.android.bluetooth.ble.app.IMiuiHeadsetService\$Stub\$Proxy"
+        const val ANC_BATTERY_CONTROLLER = "com.miui.headset.runtime.AncBatteryController"
+        const val PROFILE_IMPL = "com.miui.headset.runtime.ProfileImpl"
 
         private const val MITWS_RESULT_TRUE = 1
         private const val MMA_FACADE_SUCCESS_RESULT = 1
         private const val BATTERY_REQUEST_SUCCESS_RESULT = 1
-        private const val CONTROL_NO_OP_RESULT = 0
+        private const val CONTROL_SUCCESS_RESULT = 1
+        private const val CONTROL_FAILURE_RESULT = 0
+        private const val BRIDGE_COMMAND_TIMEOUT_MS = 50L
         private const val TAG = "OpenBuds"
         private val assignedDeviceIds = ConcurrentHashMap<String, String>()
 

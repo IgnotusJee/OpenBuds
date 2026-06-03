@@ -43,7 +43,11 @@ class MiTwsStateMapperTest {
         assertEquals(0, MiTwsStateMapper.ancState(snapshot(ancMode = 0)))
         assertEquals(1, MiTwsStateMapper.ancState(snapshot(ancMode = 1)))
         assertEquals(2, MiTwsStateMapper.ancState(snapshot(ancMode = 2)))
-        assertEquals(-1, MiTwsStateMapper.ancState(snapshot(ancMode = null)))
+        // When ancMode is null but supportsNoiseControl=true, return OFF (0)
+        // to avoid poisoning AncBatteryModel with -1 which blocks ANC switching.
+        assertEquals(0, MiTwsStateMapper.ancState(snapshot(ancMode = null)))
+        // When ancMode is null and supportsNoiseControl=false, return -1.
+        assertEquals(-1, MiTwsStateMapper.ancState(snapshot(ancMode = null, supportsNoiseControl = false)))
     }
 
     @Test
@@ -92,21 +96,21 @@ class MiTwsStateMapperTest {
     }
 
     @Test
-    fun wearStatus_mapsBothWorn() {
+    fun wearStatus_mapsBothWorn_toAllowed() {
         val snapshot = snapshot(leftWearing = true, rightWearing = true)
-        assertEquals("2", MiTwsStateMapper.wearStatus(snapshot))
+        assertEquals("1", MiTwsStateMapper.wearStatus(snapshot))
     }
 
     @Test
-    fun wearStatus_mapsLeftOnly() {
+    fun wearStatus_mapsLeftOnly_toAllowed() {
         val snapshot = snapshot(leftWearing = true, rightWearing = false)
         assertEquals("1", MiTwsStateMapper.wearStatus(snapshot))
     }
 
     @Test
-    fun wearStatus_mapsRightOnly() {
+    fun wearStatus_mapsRightOnly_toAllowed() {
         val snapshot = snapshot(leftWearing = false, rightWearing = true)
-        assertEquals("3", MiTwsStateMapper.wearStatus(snapshot))
+        assertEquals("1", MiTwsStateMapper.wearStatus(snapshot))
     }
 
     @Test
@@ -117,8 +121,13 @@ class MiTwsStateMapperTest {
 
     @Test
     fun wearStatus_mapsUnknown() {
+        // When wearing is unknown but supportsNoiseControl=true, return "1"
+        // to avoid blocking ANC switching in isSupportOpAnc().
         val snapshot = snapshot(leftWearing = null, rightWearing = null)
-        assertEquals("-1", MiTwsStateMapper.wearStatus(snapshot))
+        assertEquals("1", MiTwsStateMapper.wearStatus(snapshot))
+        // When wearing is unknown and supportsNoiseControl=false, return "-1".
+        val noAnc = snapshot(leftWearing = null, rightWearing = null, supportsNoiseControl = false)
+        assertEquals("-1", MiTwsStateMapper.wearStatus(noAnc))
     }
 
     private fun snapshot(
@@ -129,6 +138,7 @@ class MiTwsStateMapperTest {
         ancMode: Int? = null,
         leftWearing: Boolean? = null,
         rightWearing: Boolean? = null,
+        supportsNoiseControl: Boolean = true,
     ): MilinkDeviceSnapshot =
         MilinkDeviceSnapshot(
             mac = "AA:BB:CC:DD:EE:FF",
@@ -150,7 +160,7 @@ class MiTwsStateMapperTest {
             ancMode = ancMode,
             ringing = false,
             supportsBattery = true,
-            supportsNoiseControl = true,
+            supportsNoiseControl = supportsNoiseControl,
             supportsWearing = true,
             supportsRing = false,
             revision = 1L,

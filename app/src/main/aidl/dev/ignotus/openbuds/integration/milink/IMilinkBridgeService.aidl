@@ -8,6 +8,7 @@ interface IMilinkBridgeService {
     Bundle getAdapterStatus(String token);
     Bundle getAuthorizedDevices(String token);
     Bundle getDeviceSnapshot(String token, String mac);
+    Bundle executeCommand(String token, String mac, in Bundle command);
     void registerCallback(String token, IMilinkBridgeCallback callback);
     void unregisterCallback(String token, IMilinkBridgeCallback callback);
 }

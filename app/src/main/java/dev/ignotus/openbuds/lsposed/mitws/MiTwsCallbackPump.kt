@@ -22,12 +22,12 @@ class MiTwsCallbackPump(
 
     fun register(callback: Any?, snapshots: List<MilinkDeviceSnapshot> = emptyList()): Boolean {
         if (callback == null) return false
-        Log.i(TAG, "[DIAG] register callback=${callback.javaClass.name} snapshotCount=${snapshots.size}")
+        logI("[DIAG] register callback=${callback.javaClass.name} snapshotCount=${snapshots.size}")
         synchronized(callbacks) {
             callbacks.add(callback)
         }
         snapshots.forEach { snapshot ->
-            Log.i(TAG, "[DIAG] register dispatch mac=${snapshot.mac} supportsBattery=${snapshot.supportsBattery} supportsNoiseControl=${snapshot.supportsNoiseControl} connected=${snapshot.connected} ancMode=${snapshot.ancMode} leftBattery=${snapshot.leftBattery} isPlaceholder=${snapshot.protocolReady == false && snapshot.name == ""}")
+            logI("[DIAG] register dispatch mac=${snapshot.mac} supportsBattery=${snapshot.supportsBattery} supportsNoiseControl=${snapshot.supportsNoiseControl} connected=${snapshot.connected} ancMode=${snapshot.ancMode} leftBattery=${snapshot.leftBattery} isPlaceholder=${snapshot.protocolReady == false && snapshot.name == ""}")
             dispatchSnapshotLocked(callback, snapshot, force = true)
         }
         return true
@@ -48,13 +48,13 @@ class MiTwsCallbackPump(
     fun dispatchSnapshot(snapshot: MilinkDeviceSnapshot, force: Boolean = false) {
         val targets = snapshotTargets()
         if (targets.isEmpty()) return
-        Log.i(TAG, "[DIAG] dispatchSnapshot mac=${snapshot.mac} supportsBattery=${snapshot.supportsBattery} supportsNoiseControl=${snapshot.supportsNoiseControl} callbacks=${targets.size} thread=${Thread.currentThread().name}")
+        logI("[DIAG] dispatchSnapshot mac=${snapshot.mac} supportsBattery=${snapshot.supportsBattery} supportsNoiseControl=${snapshot.supportsNoiseControl} callbacks=${targets.size} thread=${Thread.currentThread().name}")
         // dispatchSnapshot is called from the bridge handler thread (Binder).
         // MMACallback methods must be invoked on the main thread — the original
         // MiaoXiangCallbackProxy uses mHandler.post. UI updates from a background
         // thread are silently ignored.
         if (mainHandler != null && Looper.myLooper() != Looper.getMainLooper()) {
-            Log.i(TAG, "[DIAG] dispatchSnapshot posting to main thread")
+            logI("[DIAG] dispatchSnapshot posting to main thread")
             mainHandler.post { targets.forEach { dispatchSnapshotLocked(it, snapshot, force) } }
         } else {
             targets.forEach { dispatchSnapshotLocked(it, snapshot, force) }
@@ -79,17 +79,17 @@ class MiTwsCallbackPump(
         val mac = snapshot.mac.normalizeMac() ?: return
         val key = CallbackMacKey(System.identityHashCode(callback), mac)
         if (!force && lastRevisionByCallback[key] == snapshot.revision) {
-            Log.i(TAG, "[DIAG] skip dispatch: same revision=${snapshot.revision}")
+            logI("[DIAG] skip dispatch: same revision=${snapshot.revision}")
             return
         }
         val device = deviceLookup(mac)
         if (device == null && !allowNullDevice) {
-            Log.i(TAG, "[DIAG] skip dispatch: device null for mac=$mac")
+            logI("[DIAG] skip dispatch: device null for mac=$mac")
             return
         }
-        Log.i(TAG, "[DIAG] dispatchSnapshotLocked mac=$mac revision=${snapshot.revision} force=$force device=${device != null}")
+        logI("[DIAG] dispatchSnapshotLocked mac=$mac revision=${snapshot.revision} force=$force device=${device != null}")
 
-        Log.i(TAG, "[DIAG] -> onConnectMmaStateChanged(${MiTwsStateMapper.connected(snapshot)})")
+        logI("[DIAG] -> onConnectMmaStateChanged(${MiTwsStateMapper.connected(snapshot)})")
         invoke(callback, "onConnectMmaStateChanged", device, MiTwsStateMapper.connected(snapshot))
         // Ensure ancBatteryModel is created on the AncBatteryController.
         // The controller only creates the model in onConnectMmaStateChanged(true)
@@ -100,20 +100,20 @@ class MiTwsCallbackPump(
         }
         if (snapshot.supportsBattery) {
             val batt = MiTwsStateMapper.batteryArray(snapshot)
-            Log.i(TAG, "[DIAG] -> onBatteryLevel(${batt.joinToString()})")
+            logI("[DIAG] -> onBatteryLevel(${batt.joinToString()})")
             invoke(callback, "onBatteryLevel", device, batt)
         } else {
-            Log.i(TAG, "[DIAG] -> SKIP onBatteryLevel: supportsBattery=false")
+            logI("[DIAG] -> SKIP onBatteryLevel: supportsBattery=false")
         }
         if (snapshot.supportsNoiseControl) {
             val anc = MiTwsStateMapper.ancState(snapshot)
-            Log.i(TAG, "[DIAG] -> onAncStateChanged($anc) onReportAncState($anc)")
+            logI("[DIAG] -> onAncStateChanged($anc) onReportAncState($anc)")
             invoke(callback, "onAncStateChanged", device, anc)
             invoke(callback, "onReportAncState", device, anc)
         } else {
-            Log.i(TAG, "[DIAG] -> SKIP onAncStateChanged: supportsNoiseControl=false")
+            logI("[DIAG] -> SKIP onAncStateChanged: supportsNoiseControl=false")
         }
-        Log.i(TAG, "[DIAG] -> onDeviceIdUpdate(${deviceIdForMac(mac)})")
+        logI("[DIAG] -> onDeviceIdUpdate(${deviceIdForMac(mac)})")
         invoke(callback, "onDeviceIdUpdate", device, deviceIdForMac(mac))
         if (snapshot.supportsRing) {
             invoke(callback, "onRingStateChanged", device, MiTwsStateMapper.ringing(snapshot))
@@ -124,15 +124,15 @@ class MiTwsCallbackPump(
     private fun invoke(callback: Any, methodName: String, device: BluetoothDevice?, value: Any) {
         val method = callback.javaClass.findMiTwsCallbackMethod(methodName, value)
         if (method == null) {
-            Log.w(TAG, "[DIAG] callback method not found: $methodName(${value.javaClass.name}) on ${callback.javaClass.name}")
+            logW("[DIAG] callback method not found: $methodName(${value.javaClass.name}) on ${callback.javaClass.name}")
             return
         }
-        Log.i(TAG, "[DIAG] invoke $methodName value=$value on ${callback.javaClass.name}")
+        logI("[DIAG] invoke $methodName value=$value on ${callback.javaClass.name}")
         runCatching {
             method.invoke(callback, device, value)
-            Log.i(TAG, "[DIAG] invoke $methodName SUCCESS")
+            logI("[DIAG] invoke $methodName SUCCESS")
         }.onFailure { error ->
-            Log.w(TAG, "[DIAG] invoke ${method.name} FAILED", error)
+            logW("[DIAG] invoke ${method.name} FAILED", error)
         }
     }
 
@@ -152,12 +152,12 @@ class MiTwsCallbackPump(
             ancModelField.isAccessible = true
             val existing = ancModelField.get(controller)
             if (existing != null) {
-                Log.i(TAG, "[DIAG] ancBatteryModel already exists: $existing")
+                logI("[DIAG] ancBatteryModel already exists: $existing")
                 return@runCatching
             }
 
             // Load AncBatteryModel using milink's classloader (not ours)
-            val milinkCl = callback.javaClass.classLoader
+            val milinkCl = callback.javaClass.classLoader ?: return@runCatching
             val modelClass = milinkCl.loadClass("com.miui.headset.runtime.AncBatteryModel")
             val constructor = modelClass.declaredConstructors.firstOrNull { it.parameterTypes.size == 5 }
                 ?: return@runCatching
@@ -173,9 +173,23 @@ class MiTwsCallbackPump(
             }
 
             ancModelField.set(controller, model)
-            Log.i(TAG, "[DIAG] ancBatteryModel force-created: $model")
+            logI("[DIAG] ancBatteryModel force-created: $model")
         }.onFailure { error ->
-            Log.w(TAG, "[DIAG] ensureAncBatteryModel failed", error)
+            logW("[DIAG] ensureAncBatteryModel failed", error)
+        }
+    }
+
+    private fun logI(message: String) {
+        runCatching { Log.i(TAG, message) }
+    }
+
+    private fun logW(message: String, error: Throwable? = null) {
+        runCatching {
+            if (error == null) {
+                Log.w(TAG, message)
+            } else {
+                Log.w(TAG, message, error)
+            }
         }
     }
 

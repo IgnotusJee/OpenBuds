@@ -103,6 +103,12 @@ class MilinkMiTwsFacadeEntry(
             }
             delegate?.removeSnapshotListener(listener)
         }
+
+        override fun executeCommand(mac: String, command: android.os.Bundle, timeoutMs: Long): MiTwsBridgeCommandResult =
+            delegate?.executeCommand(mac, command, timeoutMs)
+                ?: MiTwsBridgeCommandResult.failed(
+                    reason = dev.ignotus.openbuds.integration.milink.MilinkBridgeContract.REASON_BRIDGE_UNAVAILABLE,
+                )
     }
 
     private companion object {

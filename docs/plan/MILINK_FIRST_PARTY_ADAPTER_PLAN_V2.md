@@ -491,17 +491,26 @@ M2 真机验证发现的关键问题及修复（2026-06-02）：
 
 ### M3：反向控制闭环（1-2 周）
 
-- [ ] 扩展 bridge 命令 AIDL。
-- [ ] 实现 `openAnc`、`openTransparent`、`closeAnc` 到 OpenBuds `ControlCommand.SetNoiseControl` 的映射。**注意：hook 后必须不调用原方法**，因为原方法会通过 MMA 协议栈发送命令到不支持的设备。
+- [x] 扩展 bridge 命令 AIDL。
+- [x] 实现 `openAnc`、`openTransparent`、`closeAnc` 到 OpenBuds `ControlCommand.SetNoiseControl` 的映射。**注意：hook 后必须不调用原方法**，因为原方法会通过 MMA 协议栈发送命令到不支持的设备。
 - [ ] trace 并实现 MiTWS 对应查找接口到 OpenBuds 查找命令。
-- [ ] 如果 UI 调用了 `changeAncMode` / `changeAncLevel`，再加 hook；否则不主动实现。
-- [ ] 每个命令需要：米链 UI 操作 -> bridge command -> OpenBuds 协议执行 -> snapshot 更新 -> callback 回推。
+- [x] 如果 UI 调用了 `changeAncMode` / `changeAncLevel`，再加 hook；否则不主动实现。
+- [x] 每个命令需要：米链 UI 操作 -> bridge command -> OpenBuds 协议执行 -> snapshot 更新 -> callback 回推。
 
 验收：
 
 - 若 MiTWS UI 调用链验证通过，ANC 三态至少对 Sony LinkBuds S 可用。
 - 不支持的设备不显示或不启用相应能力。
 - 命令失败不会让米链 UI 长期显示错误状态。
+
+M3 完成记录（2026-06-02）：
+
+- `IMilinkBridgeService` 新增 `executeCommand(token, mac, command)`；命令 envelope 使用 `commandType`、`noiseMode`、`requestId`，结果使用 `success`、`reason`、`requestId`。
+- App 侧新增 `MilinkBridgeCommandProcessor`，统一校验 adapter 开关、授权 MAC、连接状态、protocol ready 和 capability；当前只接受 `set_noise_control`，预留 `ring_find`、`playback`、`set_eq_preset` 常量但不执行。
+- `MilinkBridgeService.executeCommand()` 对有效 `set_noise_control` 调用 `HeadphoneRepository.setNoiseControlMode()`；返回值仅表示命令被 OpenBuds 接受并下发，最终状态仍由 snapshot/callback 回推。
+- 模块侧新增 `MiTwsControlMapper` 和 `MilinkBridgeClient.executeCommand()`；hook `openAnc` / `openTransparent` / `closeAnc` 时对 OpenBuds facade 设备不调用原方法，bridge 接受后返回 `1`，失败返回 `0`。
+- `IMiuiHeadsetService$Stub$Proxy` 的 `changeAncMode`、`changeAncLevel`、`changePlayStatus`、`setCommonCommand`、`ringFindForAirPods` 已加 trace-only hook。查找耳机和播放控制仍不做 mutation，等待真机 trace 确认调用链。
+- 单元测试新增 `MilinkBridgeCommandProcessorTest` 和 `MiTwsControlMapperTest`；`.\gradlew.bat testDebugUnitTest` 通过。
 
 ### M4：`com.xiaomi.bluetooth` 快连和通知实验（可选，1-2 周）
 

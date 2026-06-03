@@ -127,6 +127,30 @@ class MilinkBridgeService : Service() {
             }
         }
 
+        override fun executeCommand(token: String?, mac: String?, command: Bundle?): Bundle {
+            verifySession(token)
+            val targetMac = mac?.normalizeMac()
+            if (targetMac == null) {
+                Log.w(TAG, "[ANC_CMD] executeCommand rejected: invalid mac")
+                return MilinkBridgeCommandDecision.rejected(
+                    reason = MilinkBridgeContract.REASON_INVALID_MAC,
+                    requestId = command?.getString(MilinkBridgeContract.KEY_REQUEST_ID),
+                ).toBundle()
+            }
+            val envelope = command.toMilinkBridgeCommandEnvelope()
+            val decision = MilinkBridgeCommandProcessor.evaluate(
+                adapterEnabled = adapterEnabled,
+                snapshot = snapshots[targetMac]?.takeIf(::isAuthorized),
+                command = envelope,
+            )
+            Log.i(TAG, "[ANC_CMD] evaluate mac=$targetMac adapterEnabled=$adapterEnabled snapshotExists=${snapshots[targetMac] != null} mode=${envelope.noiseMode} requestId=${envelope.requestId} success=${decision.success} reason=${decision.reason}")
+            val action = decision.action
+            if (decision.success && action != null) {
+                executeAcceptedCommand(action)
+            }
+            return decision.toBundle()
+        }
+
         override fun registerCallback(token: String?, callback: IMilinkBridgeCallback?) {
             verifySession(token)
             if (callback == null) return
@@ -142,6 +166,14 @@ class MilinkBridgeService : Service() {
         override fun unregisterCallback(token: String?, callback: IMilinkBridgeCallback?) {
             verifySession(token)
             if (callback != null) callbacks.unregister(callback)
+        }
+    }
+
+    private fun executeAcceptedCommand(action: MilinkBridgeCommandAction) {
+        when (action) {
+            is MilinkBridgeCommandAction.SetNoiseControl -> {
+                repository.setNoiseControlMode(action.mode)
+            }
         }
     }
 

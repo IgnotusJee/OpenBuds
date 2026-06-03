@@ -36,7 +36,7 @@ object MiTwsDeviceIdPolicy {
         experimental = true,
     )
 
-    fun defaultTemplateForMac(mac: String?): MiTwsDeviceIdTemplate = floraEarbudTemplate
+    fun defaultTemplateForMac(mac: String?): MiTwsDeviceIdTemplate = genericEarbudTemplate
 
     fun deviceIdForMac(mac: String?): String = defaultTemplateForMac(mac).deviceId
 

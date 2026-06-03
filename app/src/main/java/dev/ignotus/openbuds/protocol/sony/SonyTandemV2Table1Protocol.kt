@@ -54,8 +54,8 @@ object SonyTandemV2Table1Protocol {
     private const val VALUE_ENABLE: Byte = 0x00
     private const val VALUE_CHANGED: Byte = 0x01
     private const val NCASM_EFFECT_OFF: Byte = 0x00
-    private const val NCASM_ON: Byte = 0x00
-    private const val NCASM_OFF: Byte = 0x01
+    private const val NCASM_ON: Byte = 0x01
+    private const val NCASM_OFF: Byte = 0x00
     private const val NCASM_MODE_NC: Byte = 0x00
     private const val NCASM_MODE_ASM: Byte = 0x01
     private const val NC_VALUE_OFF: Byte = 0x00

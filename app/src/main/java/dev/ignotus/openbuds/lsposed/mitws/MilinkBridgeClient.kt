@@ -9,6 +9,7 @@ import android.os.Handler
 import android.os.HandlerThread
 import android.os.IBinder
 import android.os.RemoteException
+import android.os.SystemClock
 import android.util.Log
 import dev.ignotus.openbuds.integration.milink.IMilinkBridgeCallback
 import dev.ignotus.openbuds.integration.milink.IMilinkBridgeService
@@ -114,6 +115,69 @@ class MilinkBridgeClient(
     override fun removeSnapshotListener(listener: (MilinkDeviceSnapshot) -> Unit) {
         handler.post {
             snapshotListeners.remove(listener)
+        }
+    }
+
+    override fun executeCommand(
+        mac: String,
+        command: Bundle,
+        timeoutMs: Long,
+    ): MiTwsBridgeCommandResult {
+        val normalized = mac.normalizeMac()
+            ?: return MiTwsBridgeCommandResult.failed(MilinkBridgeContract.REASON_INVALID_MAC)
+        val bridge = service
+            ?: return MiTwsBridgeCommandResult.failed(MilinkBridgeContract.REASON_BRIDGE_UNAVAILABLE)
+                .also { Log.w(TAG, "[ANC_CMD] executeCommand failed: bridge service not bound") }
+        val openedToken = token
+            ?: return MiTwsBridgeCommandResult.failed(MilinkBridgeContract.REASON_BRIDGE_UNAVAILABLE)
+                .also { Log.w(TAG, "[ANC_CMD] executeCommand failed: no session token") }
+        if (android.os.Looper.myLooper() == worker.looper) {
+            return runCatching {
+                MiTwsControlMapper.parseResult(
+                    bridge.executeCommand(openedToken, normalized, command),
+                ).also { result ->
+                    Log.i(TAG, "[ANC_CMD] bridge call result accepted=${result.accepted} reason=${result.reason} requestId=${result.requestId}")
+                }
+            }.getOrElse { error ->
+                handleBridgeError(error)
+                MiTwsBridgeCommandResult.failed(
+                    reason = error.message ?: MilinkBridgeContract.REASON_REMOTE_ERROR,
+                    requestId = command.getString(MilinkBridgeContract.KEY_REQUEST_ID),
+                ).also { Log.w(TAG, "[ANC_CMD] bridge call exception: ${error.message}") }
+            }
+        }
+        val deadline = SystemClock.uptimeMillis() + timeoutMs.coerceAtLeast(1L)
+        val result = arrayOfNulls<MiTwsBridgeCommandResult>(1)
+        val complete = java.util.concurrent.CountDownLatch(1)
+        handler.post {
+            result[0] = runCatching {
+                MiTwsControlMapper.parseResult(
+                    bridge.executeCommand(openedToken, normalized, command),
+                )
+            }.getOrElse { error ->
+                handleBridgeError(error)
+                val reason = if (error is RemoteException) {
+                    MilinkBridgeContract.REASON_REMOTE_ERROR
+                } else {
+                    error.message ?: MilinkBridgeContract.REASON_REMOTE_ERROR
+                }
+                MiTwsBridgeCommandResult.failed(
+                    reason = reason,
+                    requestId = command.getString(MilinkBridgeContract.KEY_REQUEST_ID),
+                )
+            }.also { r ->
+                Log.i(TAG, "[ANC_CMD] bridge call result accepted=${r.accepted} reason=${r.reason} requestId=${r.requestId}")
+            }
+            complete.countDown()
+        }
+        val waitMs = (deadline - SystemClock.uptimeMillis()).coerceAtLeast(1L)
+        return if (complete.await(waitMs, java.util.concurrent.TimeUnit.MILLISECONDS)) {
+            result[0] ?: MiTwsBridgeCommandResult.failed(MilinkBridgeContract.REASON_REMOTE_ERROR)
+        } else {
+            MiTwsBridgeCommandResult.failed(
+                reason = MilinkBridgeContract.REASON_TIMEOUT,
+                requestId = command.getString(MilinkBridgeContract.KEY_REQUEST_ID),
+            )
         }
     }
 
@@ -262,4 +326,13 @@ interface MilinkBridgeClientFacade {
     fun authorizedSnapshots(): List<MilinkDeviceSnapshot> = emptyList()
     fun addSnapshotListener(listener: (MilinkDeviceSnapshot) -> Unit) = Unit
     fun removeSnapshotListener(listener: (MilinkDeviceSnapshot) -> Unit) = Unit
+    fun executeCommand(
+        mac: String,
+        command: Bundle,
+        timeoutMs: Long = 50L,
+    ): MiTwsBridgeCommandResult =
+        MiTwsBridgeCommandResult.failed(
+            reason = MilinkBridgeContract.REASON_BRIDGE_UNAVAILABLE,
+            requestId = command.getString(MilinkBridgeContract.KEY_REQUEST_ID),
+        )
 }
