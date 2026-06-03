@@ -1,6 +1,6 @@
 # MiLink MiTWS First-Party Equivalence Implementation Checklist
 
-Updated: 2026-06-03
+Updated: 2026-06-04
 
 This document turns the equivalence analysis into an implementation checklist for reaching a stronger first-party MiTWS replacement inside `com.milink.service`.
 
@@ -16,10 +16,15 @@ It is a staged engineering plan to close the most relevant gaps.
 
 ### Checklist
 
-- [ ] Preserve the current working MiTWS facade path as the stable baseline
-- [ ] Keep `TRACE_ONLY` mode usable for diagnostics
-- [ ] Document the currently validated runtime properties on test devices
-- [ ] Record the system properties used to enable facade mode and template selection
+- [x] Preserve the current working MiTWS facade path as the stable baseline
+- [x] Keep `TRACE_ONLY` mode usable for diagnostics
+- [x] Document the currently validated runtime properties on test devices
+- [x] Record the system properties used to enable facade mode and template selection
+- [x] Confirm that `com.milink.service:ui` and `com.milink.service:core` are the
+  only currently validated critical MiTWS mainline processes
+- [x] Exclude `:audio`, `:provider`, `persistent`, `com.milink.runtime`,
+  `com.milink.crossdeviceservice`, and other non-critical subprocesses from the
+  MiTWS mainline install path
 
 ### Current files
 
@@ -31,6 +36,15 @@ It is a staged engineering plan to close the most relevant gaps.
 ### Expected outcome
 
 Current working behavior remains reproducible while deeper equivalence work proceeds.
+
+### Current validated runtime notes
+
+- `:ui` and `:core` must both keep `bridge + facade`
+- removing bridge from `:core` causes the headset card to disappear
+- after narrowing process scope, card disappearance and heavy style jitter are
+  significantly reduced
+- remaining low-frequency jitter/no-op behavior is currently most correlated
+  with `:core` high-frequency `disconnectMma` polling
 
 ## Stage 1: Expand bridge snapshot to cover missing first-party state
 
@@ -148,6 +162,13 @@ Specifically:
 
 Current hook coverage is strong for ANC but incomplete elsewhere.
 
+Known current behavior:
+
+- ANC switching is usable
+- card/detail behavior is much more stable after process narrowing
+- low-frequency residual shrink/no-op still exists and should be treated as a
+  `:core` runtime stability issue before expanding control surface further
+
 ### ANC
 
 Already present:
@@ -192,6 +213,8 @@ Need to add:
 
 - [ ] No control falls through to native Xiaomi protocol for OpenBuds devices
 - [ ] Real Xiaomi first-party devices still pass through original logic unchanged
+- [ ] `:ui` and `:core` continue to agree on snapshot and control state under
+  long-running use
 
 ## Stage 5: Replace query-surface gaps
 
@@ -360,24 +383,29 @@ This is the highest-value missing capability after ANC.
 - [ ] OpenBuds service reconnect recovers snapshot feed
 - [ ] Missing bridge does not crash MiLink
 - [ ] Unauthorized or disconnected devices are not misclassified as MiTWS
+- [ ] `:core` high-frequency `disconnectMma` polling no longer produces visible
+  card shrink or ANC no-op behavior in ordinary use
 
 ## Prioritized execution order
 
 Recommended order:
 
-1. Ring capability
-2. Volume control
-3. Audio effect state and control
-4. Runtime projection on `ProfileContext + DiscoveryImpl`
-5. Query-surface replacement where still needed
-6. Optional deeper `HeadsetDeviceInfo` parity
+1. Runtime stabilization inside `:core` (`disconnectMma` polling / runtime target consistency)
+2. Runtime projection on `ProfileContext + DiscoveryImpl`
+3. Ring capability
+4. Volume control
+5. Audio effect state and control
+6. Query-surface replacement where still needed
+7. Optional deeper `HeadsetDeviceInfo` parity
 
 Why this order:
 
-- Ring is currently the clearest missing first-party capability
-- Volume and audio effect are the next visible user-facing gaps
-- Runtime projection is the preferred structural fix for reducing point-hook
-  maintenance in native profile control paths
+- current user-visible instability is no longer broad process misclassification,
+  but low-frequency `:core` runtime jitter
+- runtime stabilization should come before adding more first-party control
+  surface
+- runtime projection remains the preferred structural fix for reducing
+  point-hook maintenance in native profile control paths
 - Query-surface work should be driven by observed failures, not expanded blindly
 
 ## Non-goals unless evidence demands them

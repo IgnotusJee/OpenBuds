@@ -1,6 +1,6 @@
 # MiLink MiTWS First-Party Equivalence Checklist
 
-Updated: 2026-06-03
+Updated: 2026-06-04
 
 This document evaluates whether the current OpenBuds MiLink hook path is already equivalent to a real first-party MiTWS device from the perspective of `com.milink.service`.
 
@@ -32,6 +32,13 @@ The standard here is strict:
 Current mainline is the MiTWS facade path inside `com.milink.service`.  
 This checklist evaluates that path as currently implemented, without repeating
 the design rationale already consolidated in the main V2 plan.
+
+Current validated process roles:
+
+- `com.milink.service:ui` — card/detail UI-facing process, must keep `bridge + facade`
+- `com.milink.service:core` — headset runtime/session process, must keep `bridge + facade`
+- other `com.milink.service*` subprocesses are currently excluded from the MiTWS
+  mainline path unless later evidence proves they are required
 
 ## A. Device classification and entry conditions
 
@@ -107,6 +114,21 @@ the design rationale already consolidated in the main V2 plan.
   - `MiTwsCallbackPump` captures and drives callback instances
 - Conclusion:
   - The core callback surface used by MiLink is actively replaced.
+
+### B4. Process scoping is narrowed to the two proven critical processes
+
+- Status: `Satisfied`
+- Current implementation:
+  - facade installation is limited to `com.milink.service:ui` and
+    `com.milink.service:core`
+  - bridge startup is also enabled for those two critical processes
+- Why it matters:
+  - broad multi-process injection caused state competition and card instability
+  - excluding non-critical processes reduced high-frequency card disappearance
+    and style jitter
+- Remaining caveat:
+  - `:core` still shows high-frequency `disconnectMma` polling and remains the
+    main suspect for low-frequency residual jitter
 
 ## C. State surface consumed by MiLink headset UI
 
@@ -362,13 +384,22 @@ It is **not yet**:
 
 > a full first-party MiTWS-equivalent replacement across all MiLink logic surfaces
 
+Operationally, as of 2026-06-04:
+
+- card disappearance caused by wrong process scoping has been mitigated
+- heavy card jitter has been reduced substantially
+- low-frequency residual card shrink / ANC no-op behavior still remains and is
+  most strongly associated with `:core` runtime polling, especially
+  `disconnectMma`
+
 ## Highest-priority equivalence gaps
 
 1. Ring / find-earbud state and command surface
 2. Audio effect / spatial-audio state and command surface
 3. Volume command surface
 4. Runtime target naturalness inside `ProfileContext + DiscoveryImpl`
-5. Remaining query-surface differences (`getSupportAncMode`, `isMmaHeadset`, bond state, settings-related queries)
+5. `:core` runtime stability under high-frequency `disconnectMma` polling
+6. Remaining query-surface differences (`getSupportAncMode`, `isMmaHeadset`, bond state, settings-related queries)
 
 For the implementation order and structural fix strategy, use the V2 main plan
 and target implementation checklist instead of extending this document.

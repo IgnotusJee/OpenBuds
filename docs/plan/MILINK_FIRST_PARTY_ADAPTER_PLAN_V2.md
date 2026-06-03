@@ -1,6 +1,6 @@
 # OpenBuds 米链第一方耳机适配器集成方案 V2
 
-更新日期：2026-06-03
+更新日期：2026-06-04
 
 本文是 V2 草案的可行性修订版，基于对 `com.milink.service` 和 `com.xiaomi.bluetooth` 反编译源码的交叉验证。结论先行：**把 OpenBuds 设备伪装成 MiTWS 并让米链用第一方耳机页面渲染是可行的，且 MiTWS 路径是主线。** AirPods 伪装路径（V1）已废弃，不再维护。
 
@@ -17,7 +17,7 @@
 | `com.xiaomi.bluetooth` GATT/SPP/MMA 代理 | 低到中 | 技术上可 hook，但服务/特征 UUID、SPP UUID、MMA 帧、注册门控和 Sony 默认路径都不匹配；不能作为 M2 前置 | M5 实验 |
 | 完整 MMA 协议栈或 Xiaomi 蓝牙插件仿真 | 低 | 工作量接近逆向一套 Mi Headset 协议，且蓝牙进程稳定性风险高 | 暂不承诺 |
 
-**推荐路线**：MiTWS 作为主线。M2 已证明第一方页面、状态和降级基本稳定；主线下一步优先补齐 `ProfileContext + DiscoveryImpl` 的 runtime projection，让 `ProfileImpl` / `Query` / `HeadsetDetailFragment` 走更自然的第一方运行时路径，再补 ring / volume / audio effect 和剩余 query 面。`com.xiaomi.bluetooth` 的 FastConnect、GATT 或 SPP/MMA 仍是后续实验，不作为当前主线阻塞项。
+**推荐路线**：MiTWS 作为主线。M2 已证明第一方页面、状态和降级基本稳定；截至 2026-06-04，经过进程筛选后，卡片消失和高频抖动问题已大幅缓解，主线已收敛到 `com.milink.service:ui` 和 `com.milink.service:core` 两个关键进程。下一步仍然优先补齐 `ProfileContext + DiscoveryImpl` 的 runtime projection，让 `ProfileImpl` / `Query` / `HeadsetDetailFragment` 走更自然的第一方运行时路径，再补 ring / volume / audio effect 和剩余 query 面。`com.xiaomi.bluetooth` 的 FastConnect、GATT 或 SPP/MMA 仍是后续实验，不作为当前主线阻塞项。
 
 ## 1. 对原 V2 草案的关键修正
 
@@ -609,7 +609,34 @@ M2 真机验证发现的关键问题及修复（2026-06-02）：
 4. **`disconnectMma` 每 ~100ms 触发，持续派发 `onConnectMmaStateChanged(false)` 导致 UI 隐藏电池/ANC** — 修复：`hookMmaConnection` 只对 `connectMma` 派发 `onConnectMmaStateChanged(true)`，`disconnectMma` 不派发状态。
 5. **`ancBatteryModel` 只在 `onConnectMmaStateChanged(true)` 回调中创建，且要求 `pendingConnectMmaAddress` 匹配** — `register()` 初始派发在 `connectMma` 之前，`pendingConnectMmaAddress` 为空，模型未创建。后续 `connectMma` 虽创建模型但 UI 已渲染完毕。修复：`ensureAncBatteryModel()` 通过反射访问 `AncBatteryController$mmaCallback$1.this$0`，强制创建 `ancBatteryModel` 并设置 `pendingConnectMmaAddress`。
 
-**当前状态（2026-06-03）：** 电量和 ANC 状态已在卡面正确显示，ANC 调节已通过 bridge 闭环可用；但当前 ANC 路径仍部分依赖 `ProfileImpl.updateHeadsetMode(...)` 的定点特判，这说明 `com.miui.headset.runtime` 的 active headset 运行时视图尚未自然成立。
+**当前状态（2026-06-04）：** 电量和 ANC 状态已在卡面正确显示，ANC 调节已通过 bridge 闭环可用；关键运行时进程已确认是 `com.milink.service:ui` 和 `com.milink.service:core`，二者都必须持有 facade，其中 `:core` 还必须接入 bridge，否则耳机卡片会消失。进程筛选后，卡片缩小/样式抽搐和 ANC 偶发点不动已从高频问题降为低频余留问题；当前最主要的嫌疑是 `:core` 内 `disconnectMma` 的高频轮询会扰动 headset runtime，但该链路暂只做观测，不再主动做行为性干预。与此同时，当前 ANC 路径仍部分依赖 `ProfileImpl.updateHeadsetMode(...)` 的定点特判，这说明 `com.miui.headset.runtime` 的 active headset 运行时视图尚未自然成立。
+
+#### 附录：`:core` 中 `disconnectMma` 高频轮询的当前证据
+
+截至 2026-06-04 的真机日志，`com.milink.service:core` 已被确认是耳机卡片和
+headset runtime 的关键进程之一。当前已确认的现象如下：
+
+- `:core` 会持续高频调用：
+  - `getDeviceId(...)`
+  - `getAncState(...)`
+  - `registerCallback(...)`
+  - `disconnectMma(...)`
+- `:ui` 更接近展示层，主要跟随接收 `snapshotChanged(...)`，而不是承担 runtime
+  维护主链。
+- `:core` 中的 `disconnectMma(...)` 调用频率约为 100ms 级别反复出现，明显高于
+  用户操作频率。
+
+当前工作结论：
+
+1. `:core` 不是噪声进程，而是 `HeadsetLocalService` /
+   `HeadsetCirculateSessionService` / `AncBatteryController` 所在的关键运行时进程。
+2. 之前将 `:core` 设为 facade-only 会直接导致耳机卡片消失，因此当前已修正为
+   `bridge + facade`。
+3. 当前低频余留问题（卡片偶发缩小、ANC 偶发点不动）更接近 `:core`
+   内部高频 runtime 维护动作的副作用，而不是桥接状态完全丢失或设备真实断开。
+4. 由于直接对 `disconnectMma` 做 UI 强推或会话语义改写曾显著放大卡片抽搐，
+   当前策略改为：保留诊断日志，只做观察，不对 `disconnectMma` 增加新的行为
+   性 UI 干预。
 
 ### M3：反向控制闭环（1-2 周）
 
@@ -636,12 +663,16 @@ M3 完成记录（2026-06-02）：
 
 ### M3+：MiTWS runtime projection 和剩余主线能力（1-2 周）
 
+- [x] 通过真机日志确认当前关键进程为 `com.milink.service:ui` 和 `com.milink.service:core`；前者更贴近卡片/详情页 UI，后者承载 `HeadsetLocalService` / `HeadsetCirculateSessionService` / `AncBatteryController` 等 headset runtime。
+- [x] 收紧进程筛选：仅在 `:ui` 和 `:core` 安装 MiTWS facade，排除 `:audio`、`:provider`、`persistent`、`com.milink.runtime`、`com.milink.crossdeviceservice` 等非关键进程。
+- [x] 将 bridge client 限制到 `:ui` + `:core` 两个关键进程；验证 `:core` 若缺 bridge 会导致耳机卡片消失。
 - [ ] 新增 `ProfileContext + DiscoveryImpl` runtime projection，让 OpenBuds 授权设备在 `com.miui.headset.runtime` 中表现为自然的 `activeHeadset`，而不是只在 facade 层看起来像 MiTWS。
 - [ ] 让 `ProfileImpl.getHeadsetProperty(...)`、`updateHeadsetMode(...)` 在不依赖定点旁路 hook 的情况下通过 native target matching。
 - [ ] 在 runtime projection 稳定后，评估是否下调或删除 `ProfileImpl.updateHeadsetMode(...)` 特判 hook，避免继续为每条控制链单独加 bypass。
 - [ ] 扩展 bridge snapshot：volume、audio effect、ring 状态；明确 `DiscoveryImpl.assembleHeadsetInfo()` 所需字段的 OpenBuds 映射来源。
 - [ ] 扩展 bridge 命令：`ringFind`、`setVolume`、`setAudioEffect`；`playback` 仅在 MiLink 真机确认通过 MiTWS 控制面调用时再纳入主线。
 - [ ] 仅在 runtime projection 后仍存在 native query 差异时，再定向补 `getSupportAncMode` / `isMmaHeadset` / `getBondStateWithTargetHost`。
+- [ ] 继续观测 `:core` 内 `disconnectMma` 高频轮询对耳机卡片 runtime 的扰动；若低频卡片缩小/ANC 点不动仍残留，再做更窄的 `disconnectMma` 调用侧治理，而不是直接做 UI 强推或会话语义改写。
 
 验收：
 
@@ -653,6 +684,7 @@ M3 完成记录（2026-06-02）：
 设计说明：
 
 - 这里的 runtime projection 不等于完整 `HeadsetHostSupervisor / MultipointProcessor` host graph 仿真；只有当 `ProfileContext + DiscoveryImpl` 投影后仍存在阻断性缺口时，才继续下钻到完整 host graph。
+- 当前进程结论已经明确：`com.milink.service:ui` 与 `com.milink.service:core` 是主线关键进程；`com.milink.service:audio`、`com.milink.service:provider`、`com.milink.service.persistent`、`com.milink.runtime`、`com.milink.crossdeviceservice` 目前不是 MiTWS 耳机卡片主链关键宿主。
 
 ### M4：`com.xiaomi.bluetooth` 快连和通知实验（可选，1-2 周）
 
@@ -708,6 +740,8 @@ M3 完成记录（2026-06-02）：
 |------|----------|------|
 | 分类成功但页面无状态 | 只 hook `checkIsMiTWS` | M2 接管 callback/getter |
 | 米链触发真实 MMA 连接导致超时 | `connectMma` 透传到 Xiaomi 栈 | M1 对 OpenBuds 默认 no-op，M2 接管并返回安全码 |
+| 进程筛选过度导致耳机卡片消失 | `:core` 未接入 bridge 或关键 facade 不在实际运行时进程中 | 以真机日志反证进程职责；当前确认 `:ui + :core` 必须保留，其他进程再排除 |
+| `:core` 内高频 `disconnectMma` 扰动卡片 runtime | `AncBatteryController` / headset runtime 轮询过密 | 当前先只保留观测日志，不再对 `disconnectMma` 做主动 UI 推送；后续若仍有低频问题，再做更窄的调用侧治理 |
 | 控制路径持续依赖单点旁路 hook | `ProfileImpl` / `DiscoveryImpl` 没有把 OpenBuds 视为自然 active headset | M3+ 优先做 `ProfileContext + DiscoveryImpl` runtime projection，再减少单点 bypass |
 | deviceId 触发错误能力 UI | 使用过强 Flora 模板 | 默认 `01010101`，Flora 模板只在实验开关下使用 |
 | 真实小米耳机被误 hook | allowlist 过宽或原方法结果被覆盖 | 原结果为真永远透传，MAC + bridge snapshot 双重校验 |
