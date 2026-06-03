@@ -101,6 +101,11 @@ class MilinkBridgeClient(
         return snapshot
     }
 
+    override fun updateSnapshot(snapshot: MilinkDeviceSnapshot) {
+        cache.updateSnapshot(snapshot)
+        notifySnapshotListeners(snapshot)
+    }
+
     override fun isAuthorized(mac: String?): Boolean = snapshotFor(mac) != null
 
     override fun authorizedSnapshots(): List<MilinkDeviceSnapshot> = cache.authorizedSnapshots()
@@ -326,6 +331,7 @@ interface MilinkBridgeClientFacade {
     fun authorizedSnapshots(): List<MilinkDeviceSnapshot> = emptyList()
     fun addSnapshotListener(listener: (MilinkDeviceSnapshot) -> Unit) = Unit
     fun removeSnapshotListener(listener: (MilinkDeviceSnapshot) -> Unit) = Unit
+    fun updateSnapshot(snapshot: MilinkDeviceSnapshot) = Unit
     fun executeCommand(
         mac: String,
         command: Bundle,

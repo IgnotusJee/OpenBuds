@@ -433,7 +433,14 @@ class MilinkMiTwsFacadeHook(
                                     reason = MilinkBridgeContract.REASON_BRIDGE_UNAVAILABLE,
                                 )
                                 if (commandResult.accepted) {
-                                    log("updateHeadsetMode mac=$mac name=${snapshot.name} opAncMode=$opAncMode facadeTarget=true result=100 (accepted)")
+                                    // Optimistic state update: immediately update the cached
+                                    // snapshot's ancMode so subsequent getAncState() calls and
+                                    // callback dispatches reflect the new state without waiting
+                                    // for the full SPP round trip + bridge snapshot push.
+                                    val updatedSnapshot = snapshot.copy(ancMode = opAncMode)
+                                    bridgeClient?.updateSnapshot(updatedSnapshot)
+                                    callbackPump.dispatchSnapshot(updatedSnapshot, force = true)
+                                    log("updateHeadsetMode mac=$mac name=${snapshot.name} opAncMode=$opAncMode facadeTarget=true result=100 (accepted, optimistic)")
                                     return 100
                                 }
                                 log("updateHeadsetMode mac=$mac name=${snapshot.name} opAncMode=$opAncMode facadeTarget=true result=201 (command rejected: ${commandResult.reason})")
