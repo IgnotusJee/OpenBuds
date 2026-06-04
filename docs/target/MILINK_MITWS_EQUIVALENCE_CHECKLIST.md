@@ -234,37 +234,37 @@ Current validated process roles:
 
 ### D1. `getSupportAncMode(...)`
 
-- Status: `Partially satisfied`
+- Status: `Mostly satisfied`
 - MiLink native path:
   - `C4737b0.m19891p() -> Query.getSupportAncMode(targetAddress, vidPid)`
   - `QueryLocal` largely resolves this by `deviceId`
 - Current implementation:
-  - No dedicated hook on `QueryLocal.getSupportAncMode`
-  - Current behavior mostly relies on the supplied `deviceId` template passing MiLink's native capability map
+  - A dedicated `getSupportAncMode` replacement now exists for live OpenBuds targets
+  - Latest local adjustments are aimed at keeping three-state ANC devices on the first-party three-state branch
 - Conclusion:
-  - Functionally workable
-  - Not a fully replaced query path
+  - Functionally much closer to first-party behavior
+  - Still needs device-side confirmation for three-state ANC models
 
 ### D2. `isMmaHeadset(...)`
 
-- Status: `Partially satisfied`
+- Status: `Mostly satisfied`
 - MiLink native path:
   - `C4737b0.m19861q() -> Query.isMmaHeadset(...)`
   - `QueryLocal` depends on multipoint host structures and support-control state
 - Current implementation:
-  - No explicit hook on `QueryLocal.isMmaHeadset`
-  - Higher-level facade success likely makes this non-fatal in current UI paths
+  - A dedicated `isMmaHeadset` replacement now exists for live active OpenBuds targets
 - Conclusion:
-  - Not fully replaced
-  - Survives because upstream runtime behavior is already bent into a MiTWS-like shape
+  - Native dependence is reduced substantially
+  - Still depends on active/live runtime matching rather than full model parity
 
 ### D3. `getBondStateWithTargetHost(...)`
 
-- Status: `Not satisfied`
+- Status: `Partially satisfied`
 - Current implementation:
-  - No replacement hook identified
+  - A dedicated replacement now exists for live OpenBuds targets
 - Conclusion:
-  - Still native behavior.
+  - Local active-host flows are now covered
+  - Remote-host and broader multipoint semantics still need more validation
 
 ### D4. `switchToHeadsetActivity(...)`
 

@@ -63,11 +63,11 @@ class MilinkMiTwsFacadeHook(
         }
         installRuntimeProjectionHooks()
         installMiuiHeadsetTraceHooks()
-        installHeadsetServiceControllerHooks()
         installRemoteProtocolTraceHooks()
         installAncControllerDiagnosticHooks()
         installProfileImplHooks()
-        installQueryTraceHooks()
+        installQueryHooks()
+        installFirstSnapshotBoostHooks()
 
         val callback = loadClass(MMA_CALLBACK)
         if (manager != null && callback != null) {
@@ -812,72 +812,6 @@ class MilinkMiTwsFacadeHook(
         hookProfileControlTrace(profileImpl, "updateHeadsetAudioEffect")
     }
 
-    private fun installHeadsetServiceControllerHooks() {
-        val controller = loadClass(HEADSET_SERVICE_CONTROLLER) ?: return
-        hookRingCapability(controller, "m19876K")
-        hookRingCapability(controller, "m19890m")
-        hookRingVoidGuard(controller, "m19886c0")
-        hookRingVoidGuard(controller, "m19887d0")
-        hookRingUnregister(controller, "m19889f0")
-    }
-
-    private fun hookRingCapability(controller: Class<*>, name: String) {
-        val headsetDeviceInfo = loadClass(HEADSET_DEVICE_INFO) ?: return
-        val method = findMethod(controller, name, headsetDeviceInfo) ?: return
-        ModuleMain.instance.hook(method)
-            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
-            .intercept(object : XposedInterface.Hooker {
-                override fun intercept(chain: XposedInterface.Chain): Any? {
-                    val headSetInfo = chain.args.firstOrNull()
-                    val mac = headsetDeviceInfoMac(headSetInfo).orEmpty()
-                    val snapshot = facadeSnapshot(mac)
-                    if (snapshot != null) {
-                        log("guard $name mac=$mac supportsRing=${snapshot.supportsRing} result=false gate=${facadeGateSummary()}")
-                        return false
-                    }
-                    return chain.proceed()
-                }
-            })
-        log("hooked ring guard: ${controller.name}.${method.name}")
-    }
-
-    private fun hookRingVoidGuard(controller: Class<*>, name: String) {
-        val headsetDeviceInfo = loadClass(HEADSET_DEVICE_INFO) ?: return
-        val method = controller.declaredMethods.firstOrNull { method ->
-            method.name == name &&
-                method.parameterTypes.isNotEmpty() &&
-                method.parameterTypes[0] == headsetDeviceInfo
-        }?.also { it.isAccessible = true } ?: return
-        ModuleMain.instance.hook(method)
-            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
-            .intercept(object : XposedInterface.Hooker {
-                override fun intercept(chain: XposedInterface.Chain): Any? {
-                    val headSetInfo = chain.args.firstOrNull()
-                    val mac = headsetDeviceInfoMac(headSetInfo).orEmpty()
-                    val snapshot = facadeSnapshot(mac)
-                    if (snapshot != null) {
-                        log("guard $name mac=$mac supportsRing=${snapshot.supportsRing} skip=true gate=${facadeGateSummary()}")
-                        return null
-                    }
-                    return chain.proceed()
-                }
-            })
-        log("hooked ring guard: ${controller.name}.${method.name}")
-    }
-
-    private fun hookRingUnregister(controller: Class<*>, name: String) {
-        val method = controller.declaredMethods.firstOrNull { method ->
-            method.name == name && method.parameterTypes.size == 1
-        }?.also { it.isAccessible = true } ?: return
-        ModuleMain.instance.hook(method)
-            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
-            .intercept(object : XposedInterface.Hooker {
-                override fun intercept(chain: XposedInterface.Chain): Any? {
-                    return chain.proceed()
-                }
-            })
-    }
-
     private fun hookProfileGetHeadsetProperty(profileImpl: Class<*>) {
         val method = findMethod(
             profileImpl,
@@ -1091,18 +1025,18 @@ class MilinkMiTwsFacadeHook(
         )
     }
 
-    private fun installQueryTraceHooks() {
+    private fun installQueryHooks() {
         listOf(QUERY_LOCAL, QUERY_SERVER).forEach { className ->
             val queryClass = loadClass(className) ?: return@forEach
-            hookQueryTrace(queryClass, "getSupportAncMode")
-            hookQueryTrace(queryClass, "isMmaHeadset")
-            hookQueryTrace(queryClass, "getBondStateWithTargetHost")
+            hookGetSupportAncMode(queryClass)
+            hookIsMmaHeadset(queryClass)
+            hookGetBondStateWithTargetHost(queryClass)
         }
     }
 
-    private fun hookQueryTrace(queryClass: Class<*>, name: String) {
-        val method = findMethod(queryClass, name, String::class.java, String::class.java) ?: run {
-            log("missing query trace: ${queryClass.name}.$name(String, String)")
+    private fun hookGetSupportAncMode(queryClass: Class<*>) {
+        val method = findMethod(queryClass, "getSupportAncMode", String::class.java, String::class.java) ?: run {
+            log("missing query hook: ${queryClass.name}.getSupportAncMode(String, String)")
             return
         }
         ModuleMain.instance.hook(method)
@@ -1110,19 +1044,112 @@ class MilinkMiTwsFacadeHook(
             .intercept(object : XposedInterface.Hooker {
                 override fun intercept(chain: XposedInterface.Chain): Any? {
                     val targetAddress = chain.args.getOrNull(0) as? String ?: ""
-                    val second = chain.args.getOrNull(1) as? String ?: ""
+                    val deviceId = chain.args.getOrNull(1) as? String ?: ""
                     val mac = targetAddress.normalizeMac() ?: ""
                     val snapshot = facadeSnapshot(mac)
+                    if (snapshot != null) {
+                        val result = if (snapshot.supportsNoiseControl) {
+                            QUERY_SUPPORT_ANC_MODE_THREE_STATE
+                        } else {
+                            QUERY_SUPPORT_ANC_MODE_TWO_STATE
+                        }
+                        log(
+                            "query ${queryClass.simpleName}.getSupportAncMode target=$targetAddress deviceId=$deviceId " +
+                                "facadeTarget=true supportsNoiseControl=${snapshot.supportsNoiseControl} result=$result"
+                        )
+                        return result
+                    }
+                    return chain.proceed()
+                }
+            })
+        log("hooked query: ${queryClass.name}.${method.name}")
+    }
+
+    private fun hookIsMmaHeadset(queryClass: Class<*>) {
+        val method = findMethod(queryClass, "isMmaHeadset", String::class.java, String::class.java) ?: run {
+            log("missing query hook: ${queryClass.name}.isMmaHeadset(String, String)")
+            return
+        }
+        ModuleMain.instance.hook(method)
+            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+            .intercept(object : XposedInterface.Hooker {
+                override fun intercept(chain: XposedInterface.Chain): Any? {
+                    val targetAddress = chain.args.getOrNull(0) as? String ?: ""
+                    val targetHostId = chain.args.getOrNull(1) as? String ?: ""
+                    val mac = targetAddress.normalizeMac() ?: ""
+                    val snapshot = facadeSnapshot(mac)
+                    if (snapshot != null) {
+                        val result = targetHostId == LOCAL_DEVICE_ID ||
+                            runtimeProjection.targetMatchesActive(targetAddress, assignedDeviceIdFor(mac))
+                        log(
+                            "query ${queryClass.simpleName}.isMmaHeadset target=$targetAddress hostId=$targetHostId " +
+                                "facadeTarget=true result=$result"
+                        )
+                        return result
+                    }
+                    return chain.proceed()
+                }
+            })
+        log("hooked query: ${queryClass.name}.${method.name}")
+    }
+
+    private fun hookGetBondStateWithTargetHost(queryClass: Class<*>) {
+        val method = findMethod(queryClass, "getBondStateWithTargetHost", String::class.java, String::class.java) ?: run {
+            log("missing query hook: ${queryClass.name}.getBondStateWithTargetHost(String, String)")
+            return
+        }
+        ModuleMain.instance.hook(method)
+            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+            .intercept(object : XposedInterface.Hooker {
+                override fun intercept(chain: XposedInterface.Chain): Any? {
+                    val targetAddress = chain.args.getOrNull(0) as? String ?: ""
+                    val targetHostId = chain.args.getOrNull(1) as? String ?: ""
+                    val mac = targetAddress.normalizeMac() ?: ""
+                    val snapshot = facadeSnapshot(mac)
+                    if (snapshot != null) {
+                        val result = if (targetHostId == LOCAL_DEVICE_ID) {
+                            QUERY_BOND_STATE_BONDED
+                        } else {
+                            QUERY_BOND_STATE_NOT_BONDED
+                        }
+                        log(
+                            "query ${queryClass.simpleName}.getBondStateWithTargetHost target=$targetAddress hostId=$targetHostId " +
+                                "facadeTarget=true result=$result"
+                        )
+                        return result
+                    }
+                    return chain.proceed()
+                }
+            })
+        log("hooked query: ${queryClass.name}.${method.name}")
+    }
+
+    private fun installFirstSnapshotBoostHooks() {
+        val discoveryImpl = loadClass(DISCOVERY_IMPL) ?: return
+        val headsetInfoClass = loadClass(HEADSET_INFO) ?: return
+        val method = findMethod(
+            discoveryImpl,
+            "notifyHeadsetInfoUpdate",
+            Int::class.javaPrimitiveType ?: Int::class.java,
+            headsetInfoClass,
+            String::class.java,
+        ) ?: return
+        ModuleMain.instance.hook(method)
+            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+            .intercept(object : XposedInterface.Hooker {
+                override fun intercept(chain: XposedInterface.Chain): Any? {
                     val result = chain.proceed()
-                    log(
-                        "trace ${queryClass.simpleName}.$name target=$targetAddress arg2=$second " +
-                            "facadeTarget=${snapshot != null} supportsAnc=${snapshot?.supportsNoiseControl} " +
-                            "result=${resultSummary(result)} gate=${facadeGateSummary()}"
-                    )
+                    val status = chain.args.getOrNull(0) as? Int ?: -1
+                    val headsetInfo = chain.args.getOrNull(1)
+                    val mac = runtimeProjection.headsetInfoAddress(headsetInfo).orEmpty()
+                    val snapshot = facadeSnapshot(mac)
+                    if (snapshot != null && snapshot.supportsNoiseControl && status == HEADSET_NOTIFY_PROPERTY_CHANGED) {
+                        callbackPump.dispatchSnapshot(snapshot, force = true)
+                    }
                     return result
                 }
             })
-        log("hooked query trace: ${queryClass.name}.${method.name}")
+        log("hooked runtime boost: ${discoveryImpl.name}.${method.name}")
     }
 
     private fun installAncControllerDiagnosticHooks() {
@@ -1230,13 +1257,6 @@ class MilinkMiTwsFacadeHook(
         return bridgeClient?.isClassificationEligible(mac) == true
     }
 
-    private fun headsetDeviceInfoMac(headsetDeviceInfo: Any?): String? =
-        runCatching {
-            headsetDeviceInfo?.javaClass?.getDeclaredField("mac")
-                ?.apply { isAccessible = true }
-                ?.get(headsetDeviceInfo) as? String
-        }.getOrNull()?.normalizeMac()
-
     private fun facadeGateSummary(): String =
         "system=${MilinkRouteConfig.isSystemFacadeEnabled()},adapter=${bridgeClient?.adapterEnabled == true}"
 
@@ -1276,8 +1296,6 @@ class MilinkMiTwsFacadeHook(
         const val MX_BLUETOOTH_SERVICE = "com.xiaomi.mxbluetoothsdk.service.MxBluetoothService"
         const val MMA_CALLBACK = "com.xiaomi.mxbluetoothsdk.manager.MxBluetoothManager\$MMACallback"
         const val MIUI_HEADSET_SERVICE_PROXY = "com.android.bluetooth.ble.app.IMiuiHeadsetService\$Stub\$Proxy"
-        const val HEADSET_SERVICE_CONTROLLER = "com.miui.circulate.api.protocol.headset.C4737b0"
-        const val HEADSET_DEVICE_INFO = "com.miui.circulate.api.protocol.headset.HeadsetDeviceInfo"
         const val ANC_BATTERY_CONTROLLER = "com.miui.headset.runtime.AncBatteryController"
         const val DISCOVERY_IMPL = "com.miui.headset.runtime.DiscoveryImpl"
         const val HEADSET_INFO = "com.miui.headset.api.HeadsetInfo"
@@ -1294,6 +1312,12 @@ class MilinkMiTwsFacadeHook(
         private const val CONTROL_FAILURE_RESULT = 0
         private const val PROFILE_FAILURE_RESULT = 201
         private const val BRIDGE_COMMAND_TIMEOUT_MS = 50L
+        private const val QUERY_SUPPORT_ANC_MODE_TWO_STATE = 3
+        private const val QUERY_SUPPORT_ANC_MODE_THREE_STATE = 7
+        private const val QUERY_BOND_STATE_BONDED = 306
+        private const val QUERY_BOND_STATE_NOT_BONDED = 307
+        private const val LOCAL_DEVICE_ID = "local_device_id"
+        private const val HEADSET_NOTIFY_PROPERTY_CHANGED = 4
         private const val TAG = "OpenBuds"
         private val assignedDeviceIds = ConcurrentHashMap<String, String>()
 

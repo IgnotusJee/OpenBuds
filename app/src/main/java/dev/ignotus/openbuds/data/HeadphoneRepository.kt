@@ -602,9 +602,7 @@ class HeadphoneRepository private constructor(context: Context) : HeadphoneTrans
                 null
             }
             val resolvedDeviceInfo = deviceInfo.withProfileFallback(profile)
-            val systemBattery = if (connected && device != null &&
-                profile?.capabilities?.formFactor == HeadphoneFormFactor.HEADSET
-            ) {
+            val systemBattery = if (connected && device != null) {
                 readSystemBatteryLevel(device.address)
             } else {
                 null
@@ -620,7 +618,12 @@ class HeadphoneRepository private constructor(context: Context) : HeadphoneTrans
                 connectedProfile = profile,
                 deviceInfo = resolvedDeviceInfo,
                 batteryState = if (connected) {
-                    systemBattery?.let { level -> BatteryState(single = level, raw = listOf(level)) } ?: it.batteryState
+                    val currentBattery = it.batteryState
+                    if (currentBattery.hasKnownLevel()) {
+                        currentBattery
+                    } else {
+                        systemBattery?.let { level -> BatteryState(single = level, raw = listOf(level)) } ?: currentBattery
+                    }
                 } else {
                     BatteryState()
                 },
@@ -1307,6 +1310,9 @@ private fun NoiseControlState.forMode(mode: NoiseControlMode): NoiseControlState
         noiseCancellingEnabled = mode == NoiseControlMode.NOISE_CANCELLING,
         ambientSoundEnabled = mode == NoiseControlMode.AMBIENT_SOUND,
     )
+
+private fun BatteryState.hasKnownLevel(): Boolean =
+    single != null || left != null || right != null || cradle != null
 
 private fun EqState.bandEditPreset(): EqPresetId =
     when (preset) {

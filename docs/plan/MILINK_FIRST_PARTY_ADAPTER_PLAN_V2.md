@@ -629,6 +629,9 @@ M2 真机验证发现的关键问题及修复（2026-06-02）：
    不再把 OpenBuds 真无线设备误投到 AirPods 专用 `type == 5` 分支。
 5. volume / audio effect 仍未实现，但 runtime 投影已改为“有真实支持值才 override；否则保留 original 值或原链路”，不再伪造默认值。
 6. ring 路径仍未实现；当前策略是避免让 OpenBuds 设备误落入 AirPods/ring 专用分支，而不是伪造支持状态。
+7. `getSupportAncMode`、`isMmaHeadset`、`getBondStateWithTargetHost` 已从 trace-only 升级为最小 query replacement，仅在 live OpenBuds snapshot 命中时覆写返回值；`switchToHeadsetActivity(...)` 仍保持原状。
+8. 为减少首屏纯空状态，OpenBuds App 侧增加了 TWS 设备的系统电量 fallback：当仓库尚未收到真实 left/right/case battery 时，优先使用系统 `BluetoothDevice.getBatteryLevel()` 填充单电量 fallback，而不是立即把 `HeadsetInfo.powers` 全部投影为 `-1`。
+9. ANC 支持 query 已改回三态设备分支；当前仍需继续用真机确认 LinkBuds S 等设备在详情页里持续显示“通透 / 降噪 / 关闭”三态，而不是回退为双态。
 
 #### 附录：`:core` 中 `disconnectMma` 高频轮询的当前证据
 
@@ -687,11 +690,11 @@ M3 完成记录（2026-06-02）：
 - [x] 将 bridge client 限制到 `:ui` + `:core` 两个关键进程；验证 `:core` 若缺 bridge 会导致耳机卡片消失。
 - [x] 新增 `ProfileContext + DiscoveryImpl` runtime projection，让 OpenBuds 授权设备在 `com.miui.headset.runtime` 中表现为自然的 `activeHeadset`，而不是只在 facade 层看起来像 MiTWS。当前已覆盖 active device、connected devices、battery/ANC/switch/deviceType、`assembleHeadsetInfo` 与基础 `ProfileImpl` 路径。
 - [x] 让 `ProfileImpl.getHeadsetProperty(...)`、`updateHeadsetMode(...)` 在不依赖定点旁路 hook 的情况下通过 native target matching。ANC 仍保留 bridge command 闭环与最小 optimistic snapshot。
+- [x] 在 runtime projection 后补齐最关键 query 差异：`getSupportAncMode`、`isMmaHeadset`、`getBondStateWithTargetHost` 已有最小替换，仅在 live OpenBuds snapshot 命中时覆写。
 - [ ] 收敛首屏时序：进一步确认 `HeadSetsDetail` 首次展开时的 ANC 卡片显示路径，减少依赖后续异步刷新才显现的情况。
 - [ ] 在 runtime projection 稳定后，评估是否下调或删除 `ProfileImpl.updateHeadsetMode(...)` 特判 hook，避免继续为每条控制链单独加 bypass。
 - [ ] 扩展 bridge snapshot：volume、audio effect、ring 状态；明确 `DiscoveryImpl.assembleHeadsetInfo()` 所需字段的 OpenBuds 映射来源。
 - [ ] 扩展 bridge 命令：`ringFind`、`setVolume`、`setAudioEffect`；`playback` 仅在 MiLink 真机确认通过 MiTWS 控制面调用时再纳入主线。
-- [ ] 仅在 runtime projection 后仍存在 native query 差异时，再定向补 `getSupportAncMode` / `isMmaHeadset` / `getBondStateWithTargetHost`。
 - [ ] 继续观测 `:core` 内 `disconnectMma` 高频轮询对耳机卡片 runtime 的扰动；若低频卡片缩小/ANC 点不动仍残留，再做更窄的 `disconnectMma` 调用侧治理，而不是直接做 UI 强推或会话语义改写。
 
 验收：
@@ -700,6 +703,7 @@ M3 完成记录（2026-06-02）：
 - `ProfileImpl.getHeadsetProperty(...)` 对同一设备也能通过 native path。
 - `HeadsetInfo.powers` 与米链 first-party runtime 兼容，不再触发 `HeadSetsDetail` 越界访问。
 - 真无线设备的 `deviceType` 投影不再误落到 AirPods/ring 专用分支。
+- `getSupportAncMode`、`isMmaHeadset`、`getBondStateWithTargetHost` 对当前 active OpenBuds 设备不再依赖 native luck path。
 - 后续 `updateHeadsetVolume(...)` / `updateHeadsetAudioEffect(...)` 可以复用同一 runtime target，而不是再做新的单点特判。
 - OpenBuds 仍不触发真实 Xiaomi MMA 连接，不跨到 `com.xiaomi.bluetooth` 或 `com.android.bluetooth` 做主线协议代理。
 

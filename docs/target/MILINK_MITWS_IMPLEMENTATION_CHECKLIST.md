@@ -50,6 +50,10 @@ Current working behavior remains reproducible while deeper equivalence work proc
   first-open ANC timing still needs more verification
 - `HeadsetInfo.powers` must remain the 6-slot first-party shape used by
   `RemoteCodecKt`
+- minimal query replacement now exists for `getSupportAncMode`,
+  `isMmaHeadset`, and `getBondStateWithTargetHost`, but the latest
+  three-state ANC and first-paint battery fallback changes still need
+  device-side verification
 
 ## Stage 1: Expand bridge snapshot to cover missing first-party state
 
@@ -239,9 +243,9 @@ That is good enough for current UI paths, but not for stricter equivalence.
 
 ### Query gaps to address
 
-- [ ] `getSupportAncMode(...)`
-- [ ] `isMmaHeadset(...)`
-- [ ] `getBondStateWithTargetHost(...)`
+- [x] `getSupportAncMode(...)`
+- [x] `isMmaHeadset(...)`
+- [x] `getBondStateWithTargetHost(...)`
 - [ ] `switchToHeadsetActivity(...)` only if required for first-party settings parity
 
 ### Recommended approach
@@ -260,7 +264,7 @@ Prefer the narrowest stable replacement:
 
 ### Target outputs
 
-- [ ] OpenBuds devices always report expected ANC capability
+- [ ] OpenBuds devices always report expected ANC capability, including three-state ANC devices
 - [ ] OpenBuds devices always satisfy "is MMA headset" checks where MiLink needs them
 - [ ] Bond-state-dependent flows do not regress
 
