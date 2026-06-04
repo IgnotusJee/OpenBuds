@@ -30,6 +30,12 @@ class MilinkMiTwsFacadeHook(
         allowNullDevice = true,
         mainHandler = runCatching { android.os.Handler(android.os.Looper.getMainLooper()) }.getOrNull(),
     )
+    private val runtimeProjection = MiTwsRuntimeProjection(
+        classLoader = classLoader,
+        bridgeClient = bridgeClient,
+        deviceLookup = ::deviceForMac,
+        deviceIdForMac = ::assignedDeviceIdFor,
+    )
     private val bridgeSnapshotListener: (MilinkDeviceSnapshot) -> Unit = { snapshot ->
         log(
             "snapshotChanged mac=${snapshot.mac} revision=${snapshot.revision} " +
@@ -40,25 +46,31 @@ class MilinkMiTwsFacadeHook(
     }
 
     fun installTraceHooks() {
-        val manager = loadClass(MX_BLUETOOTH_MANAGER) ?: return
         bridgeClient?.addSnapshotListener(bridgeSnapshotListener)
 
-        hookCheckIsMiTws(manager)
-        hookGetDeviceId(manager)
-        hookMmaConnection(manager, "connectMma")
-        hookMmaConnection(manager, "disconnectMma")
-        hookBatteryLevel(manager)
-        hookAncState(manager)
-        hookWearStatus(manager)
-        hookAncControl(manager, MiTwsControlMapper.METHOD_OPEN_ANC)
-        hookAncControl(manager, MiTwsControlMapper.METHOD_OPEN_TRANSPARENT)
-        hookAncControl(manager, MiTwsControlMapper.METHOD_CLOSE_ANC)
+        val manager = loadClass(MX_BLUETOOTH_MANAGER)
+        if (manager != null) {
+            hookCheckIsMiTws(manager)
+            hookGetDeviceId(manager)
+            hookMmaConnection(manager, "connectMma")
+            hookMmaConnection(manager, "disconnectMma")
+            hookBatteryLevel(manager)
+            hookAncState(manager)
+            hookWearStatus(manager)
+            hookAncControl(manager, MiTwsControlMapper.METHOD_OPEN_ANC)
+            hookAncControl(manager, MiTwsControlMapper.METHOD_OPEN_TRANSPARENT)
+            hookAncControl(manager, MiTwsControlMapper.METHOD_CLOSE_ANC)
+        }
+        installRuntimeProjectionHooks()
         installMiuiHeadsetTraceHooks()
+        installHeadsetServiceControllerHooks()
+        installRemoteProtocolTraceHooks()
         installAncControllerDiagnosticHooks()
         installProfileImplHooks()
+        installQueryTraceHooks()
 
         val callback = loadClass(MMA_CALLBACK)
-        if (callback != null) {
+        if (manager != null && callback != null) {
             hookRegisterCallback(manager, callback)
             hookUnregisterCallback(manager, callback)
         } else {
@@ -79,8 +91,8 @@ class MilinkMiTwsFacadeHook(
                     val original = chain.proceed()
                     val device = chain.args.firstOrNull() as? BluetoothDevice
                     val mac = safeMac(device)
-                    val snapshot = facadeSnapshot(mac)
-                    val finalResult = if (original == MITWS_RESULT_TRUE || snapshot == null) {
+                    val classificationEligible = facadeClassificationEligible(mac)
+                    val finalResult = if (original == MITWS_RESULT_TRUE || !classificationEligible) {
                         original
                     } else {
                         MITWS_RESULT_TRUE
@@ -88,7 +100,7 @@ class MilinkMiTwsFacadeHook(
                     log(
                         "checkIsMiTWS mac=$mac name=${safeName(device)} " +
                             "original=${resultSummary(original)} final=${resultSummary(finalResult)} " +
-                            "facadeTarget=${snapshot != null} gate=${facadeGateSummary()}"
+                            "classificationEligible=$classificationEligible gate=${facadeGateSummary()}"
                     )
                     return finalResult
                 }
@@ -109,21 +121,21 @@ class MilinkMiTwsFacadeHook(
                     val original = chain.proceed()
                     val device = chain.args.firstOrNull() as? BluetoothDevice
                     val mac = safeMac(device)
-                    val snapshot = facadeSnapshot(mac)
-                    if (snapshot == null) {
+                    val classificationEligible = facadeClassificationEligible(mac)
+                    if (!classificationEligible) {
                         log(
                             "getDeviceId mac=$mac name=${safeName(device)} " +
                                 "original=${resultSummary(original)} final=${resultSummary(original)} " +
-                                "facadeTarget=false gate=${facadeGateSummary()}"
+                                "classificationEligible=false gate=${facadeGateSummary()}"
                         )
                         return original
                     }
                     val assignedDeviceId = assignedDeviceIdFor(mac)
                     log(
                         "getDeviceId mac=$mac name=${safeName(device)} " +
-                            "original=${resultSummary(original)} snapshot=${snapshot.deviceId} " +
+                            "original=${resultSummary(original)} " +
                             "final=$assignedDeviceId template=${MilinkRouteConfig.selectedDeviceIdTemplate().label} " +
-                            "facadeTarget=true gate=${facadeGateSummary()}"
+                            "classificationEligible=true gate=${facadeGateSummary()}"
                     )
                     return assignedDeviceId
                 }
@@ -416,6 +428,377 @@ class MilinkMiTwsFacadeHook(
         hookTrace(headsetService, "ringFindForAirPods", String::class.java, Boolean::class.javaPrimitiveType ?: Boolean::class.java)
     }
 
+    private fun installRuntimeProjectionHooks() {
+        hookDiscoveryProjection()
+        hookProfileContextProjection()
+    }
+
+    private fun hookDiscoveryProjection() {
+        val discoveryImpl = loadClass(DISCOVERY_IMPL) ?: return
+        findMethod(discoveryImpl, "getActiveHeadset")?.let { method ->
+            ModuleMain.instance.hook(method)
+                .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+                .intercept(object : XposedInterface.Hooker {
+                    override fun intercept(chain: XposedInterface.Chain): Any? {
+                        val original = chain.proceed()
+                        val originalMac = runtimeProjection.headsetDeviceAddress(original)
+                        if (runtimeProjection.shouldSuppressRuntimeDevice(originalMac)) {
+                            log(
+                                "runtime getActiveHeadset suppress original=$originalMac " +
+                                    "active=${runtimeProjection.activeSnapshot()?.mac} gate=${facadeGateSummary()}"
+                            )
+                            return null
+                        }
+                        if (!runtimeProjection.shouldProjectActiveHeadset(original)) {
+                            return original
+                        }
+                        val projected = runtimeProjection.projectedActiveHeadset()
+                        log(
+                            "runtime getActiveHeadset original=${runtimeProjection.headsetDeviceAddress(original)} " +
+                                "projected=${runtimeProjection.headsetDeviceAddress(projected)} " +
+                                "active=${runtimeProjection.activeSnapshot()?.mac} gate=${facadeGateSummary()}"
+                        )
+                        return projected ?: original
+                    }
+                })
+            log("hooked runtime projection: ${discoveryImpl.name}.${method.name}")
+        } ?: log("missing runtime projection: ${discoveryImpl.name}.getActiveHeadset()")
+
+        findMethod(discoveryImpl, "assembleHeadsetInfo")?.let { method ->
+            ModuleMain.instance.hook(method)
+                .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+                .intercept(object : XposedInterface.Hooker {
+                    override fun intercept(chain: XposedInterface.Chain): Any? {
+                        val original = chain.proceed()
+                        val originalMac = runtimeProjection.headsetInfoAddress(original)
+                        if (runtimeProjection.shouldSuppressRuntimeDevice(originalMac)) {
+                            log(
+                                "runtime assembleHeadsetInfo suppress original=$originalMac " +
+                                    "gate=${facadeGateSummary()}"
+                            )
+                            return null
+                        }
+                        val snapshot = when {
+                            originalMac != null -> runtimeProjection.snapshotFor(originalMac)
+                            else -> runtimeProjection.activeSnapshot()
+                        }
+                        val projected = snapshot?.let { runtimeProjection.buildHeadsetInfo(it, original) }
+                        log(
+                            "runtime assembleHeadsetInfo original=$originalMac " +
+                                "projected=${runtimeProjection.headsetInfoAddress(projected)} " +
+                                "snapshot=${snapshot?.mac} gate=${facadeGateSummary()}"
+                        )
+                        return projected ?: original
+                    }
+                })
+            log("hooked runtime projection: ${discoveryImpl.name}.${method.name}")
+        } ?: log("missing runtime projection: ${discoveryImpl.name}.assembleHeadsetInfo()")
+
+        val headsetInfo = loadClass(HEADSET_INFO)
+        if (headsetInfo != null) {
+            hookTrace(discoveryImpl, "notifyHeadsetInfoUpdate",
+                Int::class.javaPrimitiveType ?: Int::class.java,
+                headsetInfo,
+                String::class.java,
+            )
+        }
+    }
+
+    private fun hookProfileContextProjection() {
+        val profileContext = loadClass(PROFILE_CONTEXT) ?: return
+        hookProfileContextConnectedDevices(profileContext)
+        hookProfileContextActiveDevice(profileContext)
+        hookProfileContextDeviceBoolean(profileContext, "isConnected")
+        hookProfileContextDeviceBoolean(profileContext, "isActive")
+        hookProfileContextDeviceId(profileContext)
+        hookProfileContextBattery(profileContext)
+        hookProfileContextAncState(profileContext)
+        hookProfileContextVolume(profileContext)
+        hookProfileContextAudioEffect(profileContext)
+        hookProfileContextSwitchState(profileContext)
+        hookProfileContextDeviceType(profileContext)
+        hookProfileContextGetterTrace(profileContext, "getHeadsetProperty", BluetoothDevice::class.java)
+        hookProfileContextGetterTrace(profileContext, "setAncState",
+            BluetoothDevice::class.java,
+            Int::class.javaPrimitiveType ?: Int::class.java,
+        )
+    }
+
+    private fun hookProfileContextConnectedDevices(profileContext: Class<*>) {
+        val method = findMethod(profileContext, "getConnectedDevices") ?: run {
+            log("missing runtime projection: ${profileContext.name}.getConnectedDevices()")
+            return
+        }
+        ModuleMain.instance.hook(method)
+            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+            .intercept(object : XposedInterface.Hooker {
+                override fun intercept(chain: XposedInterface.Chain): Any? {
+                    val original = chain.proceed()
+                    val projected = runtimeProjection.projectConnectedDevices(original)
+                    log(
+                        "runtime getConnectedDevices original=${iterableSize(original)} " +
+                            "projected=${projected.size} active=${runtimeProjection.activeSnapshot()?.mac} " +
+                            "gate=${facadeGateSummary()}"
+                    )
+                    return projected
+                }
+            })
+        log("hooked runtime projection: ${profileContext.name}.${method.name}")
+    }
+
+    private fun hookProfileContextActiveDevice(profileContext: Class<*>) {
+        val method = findMethod(profileContext, "getActiveDevice") ?: run {
+            log("missing runtime projection: ${profileContext.name}.getActiveDevice()")
+            return
+        }
+        ModuleMain.instance.hook(method)
+            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+            .intercept(object : XposedInterface.Hooker {
+                override fun intercept(chain: XposedInterface.Chain): Any? {
+                    val original = chain.proceed()
+                    val originalDevice = original as? BluetoothDevice
+                    val originalMac = safeMac(originalDevice).normalizeMac()
+                    if (runtimeProjection.shouldSuppressRuntimeDevice(originalMac)) {
+                        log(
+                            "runtime getActiveDevice suppress original=$originalMac " +
+                                "gate=${facadeGateSummary()}"
+                        )
+                        return null
+                    }
+                    if (originalMac != null && runtimeProjection.snapshotFor(originalMac) == null) {
+                        return original
+                    }
+                    val snapshot = runtimeProjection.activeSnapshot() ?: return original
+                    val projected = deviceForMac(snapshot.mac) ?: return original
+                    rememberDevice(projected)
+                    log(
+                        "runtime getActiveDevice original=$originalMac projected=${snapshot.mac} " +
+                            "gate=${facadeGateSummary()}"
+                    )
+                    return projected
+                }
+            })
+        log("hooked runtime projection: ${profileContext.name}.${method.name}")
+    }
+
+    private fun hookProfileContextDeviceBoolean(profileContext: Class<*>, name: String) {
+        val method = findMethod(profileContext, name, BluetoothDevice::class.java) ?: run {
+            log("missing runtime projection: ${profileContext.name}.$name(BluetoothDevice)")
+            return
+        }
+        ModuleMain.instance.hook(method)
+            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+            .intercept(object : XposedInterface.Hooker {
+                override fun intercept(chain: XposedInterface.Chain): Any? {
+                    val device = chain.args.firstOrNull() as? BluetoothDevice
+                    rememberDevice(device)
+                    val mac = safeMac(device)
+                    val snapshot = runtimeProjection.snapshotForDevice(device)
+                    if (snapshot != null) {
+                        val projected = when (name) {
+                            "isConnected" -> runtimeProjection.isConnectedDevice(device)
+                            "isActive" -> runtimeProjection.isActiveDevice(device)
+                            else -> true
+                        }
+                        log("runtime $name mac=${snapshot.mac} projected=$projected gate=${facadeGateSummary()}")
+                        return projected
+                    }
+                    if (runtimeProjection.isClassificationEligible(mac)) {
+                        log("runtime $name mac=$mac classificationOnly=false gate=${facadeGateSummary()}")
+                        return false
+                    }
+                    return chain.proceed()
+                }
+            })
+        log("hooked runtime projection: ${profileContext.name}.${method.name}")
+    }
+
+    private fun hookProfileContextDeviceId(profileContext: Class<*>) {
+        val method = findMethod(profileContext, "getDeviceId", BluetoothDevice::class.java) ?: run {
+            log("missing runtime projection: ${profileContext.name}.getDeviceId(BluetoothDevice)")
+            return
+        }
+        ModuleMain.instance.hook(method)
+            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+            .intercept(object : XposedInterface.Hooker {
+                override fun intercept(chain: XposedInterface.Chain): Any? {
+                    val device = chain.args.firstOrNull() as? BluetoothDevice
+                    rememberDevice(device)
+                    val snapshot = runtimeProjection.snapshotForDevice(device)
+                    if (snapshot != null) {
+                        val assigned = assignedDeviceIdFor(snapshot.mac)
+                        log(
+                            "runtime getDeviceId mac=${snapshot.mac} snapshot=${snapshot.deviceId} " +
+                                "projected=$assigned gate=${facadeGateSummary()}"
+                        )
+                        return assigned
+                    }
+                    return chain.proceed()
+                }
+            })
+        log("hooked runtime projection: ${profileContext.name}.${method.name}")
+    }
+
+    private fun hookProfileContextBattery(profileContext: Class<*>) {
+        val method = findMethod(profileContext, "getBatteryLevel", BluetoothDevice::class.java) ?: run {
+            log("missing runtime projection: ${profileContext.name}.getBatteryLevel(BluetoothDevice)")
+            return
+        }
+        ModuleMain.instance.hook(method)
+            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+            .intercept(object : XposedInterface.Hooker {
+                override fun intercept(chain: XposedInterface.Chain): Any? {
+                    val device = chain.args.firstOrNull() as? BluetoothDevice
+                    rememberDevice(device)
+                    val snapshot = runtimeProjection.snapshotForDevice(device)
+                    if (snapshot != null) {
+                        val battery = MiTwsStateMapper.headsetInfoPowers(snapshot)
+                        log("runtime getBatteryLevel mac=${snapshot.mac} projected=$battery gate=${facadeGateSummary()}")
+                        return battery
+                    }
+                    return chain.proceed()
+                }
+            })
+        log("hooked runtime projection: ${profileContext.name}.${method.name}")
+    }
+
+    private fun hookProfileContextAncState(profileContext: Class<*>) {
+        val method = findMethod(profileContext, "getAncState", BluetoothDevice::class.java) ?: run {
+            log("missing runtime projection: ${profileContext.name}.getAncState(BluetoothDevice)")
+            return
+        }
+        ModuleMain.instance.hook(method)
+            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+            .intercept(object : XposedInterface.Hooker {
+                override fun intercept(chain: XposedInterface.Chain): Any? {
+                    val device = chain.args.firstOrNull() as? BluetoothDevice
+                    rememberDevice(device)
+                    val snapshot = runtimeProjection.snapshotForDevice(device)
+                    if (snapshot != null) {
+                        val ancState = MiTwsStateMapper.ancState(snapshot)
+                        log("runtime getAncState mac=${snapshot.mac} projected=$ancState gate=${facadeGateSummary()}")
+                        return ancState
+                    }
+                    return chain.proceed()
+                }
+            })
+        log("hooked runtime projection: ${profileContext.name}.${method.name}")
+    }
+
+    private fun hookProfileContextVolume(profileContext: Class<*>) {
+        val method = findMethod(profileContext, "getVolume") ?: run {
+            log("missing runtime projection: ${profileContext.name}.getVolume()")
+            return
+        }
+        ModuleMain.instance.hook(method)
+            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+            .intercept(object : XposedInterface.Hooker {
+                override fun intercept(chain: XposedInterface.Chain): Any? {
+                    val snapshot = runtimeProjection.activeSnapshot()
+                    if (snapshot?.supportsVolumeControl == true && snapshot.currentVolume != null) {
+                        log("runtime getVolume mac=${snapshot.mac} projected=${snapshot.currentVolume} gate=${facadeGateSummary()}")
+                        return snapshot.currentVolume
+                    }
+                    return chain.proceed()
+                }
+            })
+        log("hooked runtime projection: ${profileContext.name}.${method.name}")
+    }
+
+    private fun hookProfileContextAudioEffect(profileContext: Class<*>) {
+        val method = findMethod(profileContext, "getAudioSpatialEffectState", BluetoothDevice::class.java) ?: run {
+            log("missing runtime projection: ${profileContext.name}.getAudioSpatialEffectState(BluetoothDevice)")
+            return
+        }
+        ModuleMain.instance.hook(method)
+            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+            .intercept(object : XposedInterface.Hooker {
+                override fun intercept(chain: XposedInterface.Chain): Any? {
+                    val device = chain.args.firstOrNull() as? BluetoothDevice
+                    rememberDevice(device)
+                    val snapshot = runtimeProjection.snapshotForDevice(device)
+                    if (snapshot?.supportsAudioEffect == true && snapshot.currentAudioEffectState != null) {
+                        val state = snapshot.currentAudioEffectState
+                        log("runtime getAudioSpatialEffectState mac=${snapshot.mac} projected=$state gate=${facadeGateSummary()}")
+                        return state
+                    }
+                    return chain.proceed()
+                }
+            })
+        log("hooked runtime projection: ${profileContext.name}.${method.name}")
+    }
+
+    private fun hookProfileContextSwitchState(profileContext: Class<*>) {
+        val method = findMethod(profileContext, "getSwitchState", String::class.java) ?: run {
+            log("missing runtime projection: ${profileContext.name}.getSwitchState(String)")
+            return
+        }
+        ModuleMain.instance.hook(method)
+            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+            .intercept(object : XposedInterface.Hooker {
+                override fun intercept(chain: XposedInterface.Chain): Any? {
+                    val address = chain.args.firstOrNull() as? String
+                    val snapshot = runtimeProjection.snapshotFor(address)
+                    if (snapshot != null) {
+                        log("runtime getSwitchState mac=${snapshot.mac} projected=0 gate=${facadeGateSummary()}")
+                        return 0
+                    }
+                    return chain.proceed()
+                }
+            })
+        log("hooked runtime projection: ${profileContext.name}.${method.name}")
+    }
+
+    private fun hookProfileContextDeviceType(profileContext: Class<*>) {
+        val method = findMethod(profileContext, "getDeviceType", BluetoothDevice::class.java) ?: run {
+            log("missing runtime projection: ${profileContext.name}.getDeviceType(BluetoothDevice)")
+            return
+        }
+        ModuleMain.instance.hook(method)
+            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+            .intercept(object : XposedInterface.Hooker {
+                override fun intercept(chain: XposedInterface.Chain): Any? {
+                    val device = chain.args.firstOrNull() as? BluetoothDevice
+                    val snapshot = runtimeProjection.snapshotForDevice(device)
+                    if (snapshot != null) {
+                        val projected = runtimeProjection.resolvedHeadsetInfoType(snapshot, original = null)
+                        log("runtime getDeviceType mac=${snapshot.mac} projected=$projected formFactor=${snapshot.formFactor} gate=${facadeGateSummary()}")
+                        return projected
+                    }
+                    return chain.proceed()
+                }
+            })
+        log("hooked runtime projection: ${profileContext.name}.${method.name}")
+    }
+
+    private fun hookProfileContextGetterTrace(
+        profileContext: Class<*>,
+        name: String,
+        vararg parameterTypes: Class<*>,
+    ) {
+        val method = findMethod(profileContext, name, *parameterTypes) ?: run {
+            log("missing runtime trace: ${profileContext.name}.$name")
+            return
+        }
+        ModuleMain.instance.hook(method)
+            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+            .intercept(object : XposedInterface.Hooker {
+                override fun intercept(chain: XposedInterface.Chain): Any? {
+                    val result = chain.proceed()
+                    val device = chain.args.firstOrNull { it is BluetoothDevice } as? BluetoothDevice
+                    rememberDevice(device)
+                    val mac = safeMac(device)
+                    log(
+                        "runtime trace $name mac=$mac args=${argumentSummary(chain.args)} " +
+                            "facadeTarget=${facadeSnapshot(mac) != null} result=${resultSummary(result)} " +
+                            "gate=${facadeGateSummary()}"
+                    )
+                    return result
+                }
+            })
+        log("hooked runtime trace: ${profileContext.name}.${method.name}")
+    }
+
     private fun installProfileImplHooks() {
         // ProfileImpl.updateHeadsetMode(String hostId, String address, String deviceId, int opAncMode)
         // is the entry point for ANC switching from the Circulate API control center.
@@ -423,9 +806,130 @@ class MilinkMiTwsFacadeHook(
         // the call fails before reaching AncBatteryController.setAncStateBlock().
         // Hook here to intercept and route to our bridge command.
         val profileImpl = loadClass(PROFILE_IMPL) ?: return
-        val method = findMethod(profileImpl, "updateHeadsetMode",
-            String::class.java, String::class.java, String::class.java, Int::class.javaPrimitiveType ?: Int::class.java)
-        if (method == null) {
+        hookProfileGetHeadsetProperty(profileImpl)
+        hookProfileUpdateHeadsetMode(profileImpl)
+        hookProfileControlTrace(profileImpl, "updateHeadsetVolume")
+        hookProfileControlTrace(profileImpl, "updateHeadsetAudioEffect")
+    }
+
+    private fun installHeadsetServiceControllerHooks() {
+        val controller = loadClass(HEADSET_SERVICE_CONTROLLER) ?: return
+        hookRingCapability(controller, "m19876K")
+        hookRingCapability(controller, "m19890m")
+        hookRingVoidGuard(controller, "m19886c0")
+        hookRingVoidGuard(controller, "m19887d0")
+        hookRingUnregister(controller, "m19889f0")
+    }
+
+    private fun hookRingCapability(controller: Class<*>, name: String) {
+        val headsetDeviceInfo = loadClass(HEADSET_DEVICE_INFO) ?: return
+        val method = findMethod(controller, name, headsetDeviceInfo) ?: return
+        ModuleMain.instance.hook(method)
+            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+            .intercept(object : XposedInterface.Hooker {
+                override fun intercept(chain: XposedInterface.Chain): Any? {
+                    val headSetInfo = chain.args.firstOrNull()
+                    val mac = headsetDeviceInfoMac(headSetInfo).orEmpty()
+                    val snapshot = facadeSnapshot(mac)
+                    if (snapshot != null) {
+                        log("guard $name mac=$mac supportsRing=${snapshot.supportsRing} result=false gate=${facadeGateSummary()}")
+                        return false
+                    }
+                    return chain.proceed()
+                }
+            })
+        log("hooked ring guard: ${controller.name}.${method.name}")
+    }
+
+    private fun hookRingVoidGuard(controller: Class<*>, name: String) {
+        val headsetDeviceInfo = loadClass(HEADSET_DEVICE_INFO) ?: return
+        val method = controller.declaredMethods.firstOrNull { method ->
+            method.name == name &&
+                method.parameterTypes.isNotEmpty() &&
+                method.parameterTypes[0] == headsetDeviceInfo
+        }?.also { it.isAccessible = true } ?: return
+        ModuleMain.instance.hook(method)
+            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+            .intercept(object : XposedInterface.Hooker {
+                override fun intercept(chain: XposedInterface.Chain): Any? {
+                    val headSetInfo = chain.args.firstOrNull()
+                    val mac = headsetDeviceInfoMac(headSetInfo).orEmpty()
+                    val snapshot = facadeSnapshot(mac)
+                    if (snapshot != null) {
+                        log("guard $name mac=$mac supportsRing=${snapshot.supportsRing} skip=true gate=${facadeGateSummary()}")
+                        return null
+                    }
+                    return chain.proceed()
+                }
+            })
+        log("hooked ring guard: ${controller.name}.${method.name}")
+    }
+
+    private fun hookRingUnregister(controller: Class<*>, name: String) {
+        val method = controller.declaredMethods.firstOrNull { method ->
+            method.name == name && method.parameterTypes.size == 1
+        }?.also { it.isAccessible = true } ?: return
+        ModuleMain.instance.hook(method)
+            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+            .intercept(object : XposedInterface.Hooker {
+                override fun intercept(chain: XposedInterface.Chain): Any? {
+                    return chain.proceed()
+                }
+            })
+    }
+
+    private fun hookProfileGetHeadsetProperty(profileImpl: Class<*>) {
+        val method = findMethod(
+            profileImpl,
+            "getHeadsetProperty",
+            String::class.java,
+            String::class.java,
+            String::class.java,
+        ) ?: run {
+            log("missing runtime profile: ${profileImpl.name}.getHeadsetProperty(String, String, String)")
+            return
+        }
+        ModuleMain.instance.hook(method)
+            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+            .intercept(object : XposedInterface.Hooker {
+                override fun intercept(chain: XposedInterface.Chain): Any? {
+                    val hostId = chain.args.getOrNull(0) as? String ?: ""
+                    val address = chain.args.getOrNull(1) as? String ?: ""
+                    val deviceId = chain.args.getOrNull(2) as? String ?: ""
+                    val mac = address.normalizeMac() ?: ""
+                    val projectedTarget = runtimeProjection.targetMatchesActive(address, deviceId)
+                    val result = chain.proceed()
+                    if (facadeSnapshot(mac) != null &&
+                        projectedTarget &&
+                        result == MiTwsRuntimeProjection.PROFILE_TARGET_NOT_MATCH
+                    ) {
+                        log(
+                            "getHeadsetProperty hostId=$hostId address=$address deviceId=$deviceId " +
+                                "facadeTarget=true projectedTarget=true original=$result " +
+                                "fallback=${MiTwsRuntimeProjection.PROFILE_SUCCESS}"
+                        )
+                        return MiTwsRuntimeProjection.PROFILE_SUCCESS
+                    }
+                    log(
+                        "trace getHeadsetProperty hostId=$hostId address=$address deviceId=$deviceId " +
+                            "facadeTarget=${facadeSnapshot(mac) != null} projectedTarget=$projectedTarget " +
+                            "result=${resultSummary(result)} gate=${facadeGateSummary()}"
+                    )
+                    return result
+                }
+            })
+        log("hooked runtime profile: ${profileImpl.name}.${method.name}")
+    }
+
+    private fun hookProfileUpdateHeadsetMode(profileImpl: Class<*>) {
+        val method = findMethod(
+            profileImpl,
+            "updateHeadsetMode",
+            String::class.java,
+            String::class.java,
+            String::class.java,
+            Int::class.javaPrimitiveType ?: Int::class.java,
+        ) ?: run {
             log("missing M3 ANC control: ${profileImpl.name}.updateHeadsetMode(String, String, String, int)")
             return
         }
@@ -440,40 +944,35 @@ class MilinkMiTwsFacadeHook(
                     val opAncMode = (args.getOrNull(3) as? Int) ?: -1
                     val mac = address.normalizeMac() ?: ""
                     val snapshot = facadeSnapshot(mac)
+                    if (snapshot == null && facadeClassificationEligible(mac)) {
+                        log(
+                            "updateHeadsetMode hostId=$hostId mac=$mac deviceId=$deviceId opAncMode=$opAncMode " +
+                                "classificationOnly=true result=$PROFILE_FAILURE_RESULT gate=${facadeGateSummary()}"
+                        )
+                        return PROFILE_FAILURE_RESULT
+                    }
                     if (snapshot != null) {
-                        val methodName = when (opAncMode) {
-                            0 -> MiTwsControlMapper.METHOD_CLOSE_ANC
-                            1 -> MiTwsControlMapper.METHOD_OPEN_ANC
-                            2 -> MiTwsControlMapper.METHOD_OPEN_TRANSPARENT
-                            else -> null
+                        val projectedTarget = runtimeProjection.targetMatchesActive(address, deviceId)
+                        val validationResult = if (MilinkRouteConfig.allowOpenBudsMmaPassthrough()) {
+                            chain.proceed()
+                        } else {
+                            null
                         }
-                        if (methodName != null) {
-                            val command = MiTwsControlMapper.buildAncCommand(methodName, snapshot)
-                            if (command != null) {
-                                val commandResult = bridgeClient?.executeCommand(
-                                    mac = snapshot.mac,
-                                    command = command,
-                                    timeoutMs = BRIDGE_COMMAND_TIMEOUT_MS,
-                                ) ?: MiTwsBridgeCommandResult.failed(
-                                    reason = MilinkBridgeContract.REASON_BRIDGE_UNAVAILABLE,
-                                )
-                                if (commandResult.accepted) {
-                                    // Optimistic state update: immediately update the cached
-                                    // snapshot's ancMode so subsequent getAncState() calls and
-                                    // callback dispatches reflect the new state without waiting
-                                    // for the full SPP round trip + bridge snapshot push.
-                                    val updatedSnapshot = snapshot.copy(ancMode = opAncMode)
-                                    bridgeClient?.updateSnapshot(updatedSnapshot)
-                                    callbackPump.dispatchSnapshot(updatedSnapshot, force = true)
-                                    log("updateHeadsetMode mac=$mac name=${snapshot.name} opAncMode=$opAncMode facadeTarget=true result=100 (accepted, optimistic)")
-                                    return 100
-                                }
-                                log("updateHeadsetMode mac=$mac name=${snapshot.name} opAncMode=$opAncMode facadeTarget=true result=201 (command rejected: ${commandResult.reason})")
-                                return 201
-                            }
+                        val commandResult = executeAncBridgeCommand(snapshot, opAncMode)
+                        val facadeResult = if (commandResult.accepted) {
+                            updateOptimisticAncSnapshot(snapshot, opAncMode, commandResult.requestId)
+                            MiTwsRuntimeProjection.PROFILE_SUCCESS
+                        } else {
+                            PROFILE_FAILURE_RESULT
                         }
-                        log("updateHeadsetMode mac=$mac name=${snapshot.name} opAncMode=$opAncMode facadeTarget=true result=201 (unsupported mode)")
-                        return 201
+                        log(
+                            "updateHeadsetMode hostId=$hostId mac=$mac name=${snapshot.name} " +
+                                "deviceId=$deviceId opAncMode=$opAncMode facadeTarget=true " +
+                                "projectedTarget=$projectedTarget nativeValidation=${resultSummary(validationResult)} " +
+                                "accepted=${commandResult.accepted} reason=${commandResult.reason} " +
+                                "requestId=${commandResult.requestId} result=$facadeResult gate=${facadeGateSummary()}"
+                        )
+                        return facadeResult
                     }
                     val result = chain.proceed()
                     log("trace updateHeadsetMode hostId=$hostId address=$address deviceId=$deviceId opAncMode=$opAncMode facadeTarget=false result=$result")
@@ -481,6 +980,149 @@ class MilinkMiTwsFacadeHook(
                 }
             })
         log("hooked M3 ANC control: ${profileImpl.name}.${method.name}")
+    }
+
+    private fun hookProfileControlTrace(profileImpl: Class<*>, name: String) {
+        val method = findMethod(
+            profileImpl,
+            name,
+            String::class.java,
+            String::class.java,
+            String::class.java,
+            Int::class.javaPrimitiveType ?: Int::class.java,
+        ) ?: run {
+            log("missing runtime profile trace: ${profileImpl.name}.$name(String, String, String, int)")
+            return
+        }
+        ModuleMain.instance.hook(method)
+            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+            .intercept(object : XposedInterface.Hooker {
+                override fun intercept(chain: XposedInterface.Chain): Any? {
+                    val hostId = chain.args.getOrNull(0) as? String ?: ""
+                    val address = chain.args.getOrNull(1) as? String ?: ""
+                    val deviceId = chain.args.getOrNull(2) as? String ?: ""
+                    val value = (chain.args.getOrNull(3) as? Int) ?: -1
+                    val mac = address.normalizeMac() ?: ""
+                    val snapshot = facadeSnapshot(mac)
+                    if (snapshot == null && facadeClassificationEligible(mac)) {
+                        log(
+                            "guard $name hostId=$hostId mac=$mac deviceId=$deviceId value=$value " +
+                                "classificationOnly=true result=$PROFILE_FAILURE_RESULT gate=${facadeGateSummary()}"
+                        )
+                        return PROFILE_FAILURE_RESULT
+                    }
+                    if (snapshot != null) {
+                        log(
+                            "guard $name hostId=$hostId mac=$mac deviceId=$deviceId value=$value " +
+                                "facadeTarget=true projectedTarget=${runtimeProjection.targetMatchesActive(address, deviceId)} " +
+                                "capability(volume=${snapshot.supportsVolumeControl},audio=${snapshot.supportsAudioEffect}) " +
+                                "result=$PROFILE_FAILURE_RESULT gate=${facadeGateSummary()}"
+                        )
+                        return PROFILE_FAILURE_RESULT
+                    }
+                    val result = chain.proceed()
+                    log(
+                        "trace $name hostId=$hostId address=$address deviceId=$deviceId value=$value " +
+                            "facadeTarget=false result=${resultSummary(result)} gate=${facadeGateSummary()}"
+                    )
+                    return result
+                }
+            })
+        log("hooked runtime profile trace: ${profileImpl.name}.${method.name}")
+    }
+
+    private fun executeAncBridgeCommand(
+        snapshot: MilinkDeviceSnapshot,
+        opAncMode: Int,
+    ): MiTwsBridgeCommandResult {
+        val command = MiTwsControlMapper.buildAncCommandForMode(opAncMode, snapshot)
+            ?: return MiTwsBridgeCommandResult.failed(MilinkBridgeContract.REASON_UNSUPPORTED_CAPABILITY)
+        return bridgeClient?.executeCommand(
+            mac = snapshot.mac,
+            command = command,
+            timeoutMs = BRIDGE_COMMAND_TIMEOUT_MS,
+        ) ?: MiTwsBridgeCommandResult.failed(
+            reason = MilinkBridgeContract.REASON_BRIDGE_UNAVAILABLE,
+            requestId = command.getString(MilinkBridgeContract.KEY_REQUEST_ID),
+        )
+    }
+
+    private fun updateOptimisticAncSnapshot(
+        snapshot: MilinkDeviceSnapshot,
+        opAncMode: Int,
+        requestId: String?,
+    ) {
+        if (snapshot.ancMode == opAncMode) {
+            log(
+                "updateHeadsetMode mac=${snapshot.mac} optimisticSnapshot=skip " +
+                    "currentAncMode=${snapshot.ancMode} requestId=$requestId"
+            )
+            return
+        }
+        val updatedSnapshot = snapshot.copy(ancMode = opAncMode)
+        bridgeClient?.updateSnapshot(updatedSnapshot)
+        callbackPump.dispatchSnapshot(updatedSnapshot, force = true)
+        log(
+            "updateHeadsetMode mac=${snapshot.mac} optimisticSnapshot=true " +
+                "oldAncMode=${snapshot.ancMode} newAncMode=$opAncMode requestId=$requestId"
+        )
+    }
+
+    private fun installRemoteProtocolTraceHooks() {
+        val proxy = loadClass(REMOTE_PROTOCOL_PROXY) ?: return
+        hookTrace(proxy, "getHeadsetProperty", String::class.java, String::class.java, String::class.java)
+        hookTrace(proxy, "updateHeadsetMode",
+            String::class.java,
+            String::class.java,
+            String::class.java,
+            Int::class.javaPrimitiveType ?: Int::class.java,
+        )
+        hookTrace(proxy, "updateHeadsetVolume",
+            String::class.java,
+            String::class.java,
+            String::class.java,
+            Int::class.javaPrimitiveType ?: Int::class.java,
+        )
+        hookTrace(proxy, "updateHeadsetAudioEffect",
+            String::class.java,
+            String::class.java,
+            String::class.java,
+            Int::class.javaPrimitiveType ?: Int::class.java,
+        )
+    }
+
+    private fun installQueryTraceHooks() {
+        listOf(QUERY_LOCAL, QUERY_SERVER).forEach { className ->
+            val queryClass = loadClass(className) ?: return@forEach
+            hookQueryTrace(queryClass, "getSupportAncMode")
+            hookQueryTrace(queryClass, "isMmaHeadset")
+            hookQueryTrace(queryClass, "getBondStateWithTargetHost")
+        }
+    }
+
+    private fun hookQueryTrace(queryClass: Class<*>, name: String) {
+        val method = findMethod(queryClass, name, String::class.java, String::class.java) ?: run {
+            log("missing query trace: ${queryClass.name}.$name(String, String)")
+            return
+        }
+        ModuleMain.instance.hook(method)
+            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+            .intercept(object : XposedInterface.Hooker {
+                override fun intercept(chain: XposedInterface.Chain): Any? {
+                    val targetAddress = chain.args.getOrNull(0) as? String ?: ""
+                    val second = chain.args.getOrNull(1) as? String ?: ""
+                    val mac = targetAddress.normalizeMac() ?: ""
+                    val snapshot = facadeSnapshot(mac)
+                    val result = chain.proceed()
+                    log(
+                        "trace ${queryClass.simpleName}.$name target=$targetAddress arg2=$second " +
+                            "facadeTarget=${snapshot != null} supportsAnc=${snapshot?.supportsNoiseControl} " +
+                            "result=${resultSummary(result)} gate=${facadeGateSummary()}"
+                    )
+                    return result
+                }
+            })
+        log("hooked query trace: ${queryClass.name}.${method.name}")
     }
 
     private fun installAncControllerDiagnosticHooks() {
@@ -583,6 +1225,18 @@ class MilinkMiTwsFacadeHook(
         return bridgeClient?.snapshotFor(mac)
     }
 
+    private fun facadeClassificationEligible(mac: String): Boolean {
+        if (!MilinkRouteConfig.canUseFacade(bridgeClient)) return false
+        return bridgeClient?.isClassificationEligible(mac) == true
+    }
+
+    private fun headsetDeviceInfoMac(headsetDeviceInfo: Any?): String? =
+        runCatching {
+            headsetDeviceInfo?.javaClass?.getDeclaredField("mac")
+                ?.apply { isAccessible = true }
+                ?.get(headsetDeviceInfo) as? String
+        }.getOrNull()?.normalizeMac()
+
     private fun facadeGateSummary(): String =
         "system=${MilinkRouteConfig.isSystemFacadeEnabled()},adapter=${bridgeClient?.adapterEnabled == true}"
 
@@ -609,19 +1263,36 @@ class MilinkMiTwsFacadeHook(
             else -> result.toString()
         }
 
+    private fun iterableSize(value: Any?): String =
+        when (value) {
+            is Collection<*> -> value.size.toString()
+            is Iterable<*> -> value.count().toString()
+            null -> "null"
+            else -> value.javaClass.simpleName
+        }
+
     companion object {
         const val MX_BLUETOOTH_MANAGER = "com.xiaomi.mxbluetoothsdk.manager.MxBluetoothManager"
         const val MX_BLUETOOTH_SERVICE = "com.xiaomi.mxbluetoothsdk.service.MxBluetoothService"
         const val MMA_CALLBACK = "com.xiaomi.mxbluetoothsdk.manager.MxBluetoothManager\$MMACallback"
         const val MIUI_HEADSET_SERVICE_PROXY = "com.android.bluetooth.ble.app.IMiuiHeadsetService\$Stub\$Proxy"
+        const val HEADSET_SERVICE_CONTROLLER = "com.miui.circulate.api.protocol.headset.C4737b0"
+        const val HEADSET_DEVICE_INFO = "com.miui.circulate.api.protocol.headset.HeadsetDeviceInfo"
         const val ANC_BATTERY_CONTROLLER = "com.miui.headset.runtime.AncBatteryController"
+        const val DISCOVERY_IMPL = "com.miui.headset.runtime.DiscoveryImpl"
+        const val HEADSET_INFO = "com.miui.headset.api.HeadsetInfo"
+        const val PROFILE_CONTEXT = "com.miui.headset.runtime.ProfileContext"
         const val PROFILE_IMPL = "com.miui.headset.runtime.ProfileImpl"
+        const val QUERY_LOCAL = "com.miui.headset.runtime.QueryLocal"
+        const val QUERY_SERVER = "com.miui.headset.runtime.QueryServer"
+        const val REMOTE_PROTOCOL_PROXY = "com.miui.headset.runtime.RemoteProtocol\$Proxy"
 
         private const val MITWS_RESULT_TRUE = 1
         private const val MMA_FACADE_SUCCESS_RESULT = 1
         private const val BATTERY_REQUEST_SUCCESS_RESULT = 1
         private const val CONTROL_SUCCESS_RESULT = 1
         private const val CONTROL_FAILURE_RESULT = 0
+        private const val PROFILE_FAILURE_RESULT = 201
         private const val BRIDGE_COMMAND_TIMEOUT_MS = 50L
         private const val TAG = "OpenBuds"
         private val assignedDeviceIds = ConcurrentHashMap<String, String>()

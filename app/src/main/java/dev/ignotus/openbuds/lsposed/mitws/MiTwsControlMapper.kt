@@ -65,6 +65,20 @@ object MiTwsControlMapper {
         )
     }
 
+    fun buildAncCommandForMode(
+        noiseMode: Int,
+        snapshot: MilinkDeviceSnapshot,
+        requestId: String = newRequestId(),
+    ): Bundle? {
+        val methodName = when (noiseMode) {
+            0 -> METHOD_CLOSE_ANC
+            1 -> METHOD_OPEN_ANC
+            2 -> METHOD_OPEN_TRANSPARENT
+            else -> return null
+        }
+        return buildAncCommand(methodName, snapshot, requestId)
+    }
+
     fun commandType(command: Bundle): String? =
         command.getString(MilinkBridgeContract.KEY_COMMAND_TYPE)
 

@@ -45,6 +45,11 @@ Current working behavior remains reproducible while deeper equivalence work proc
   significantly reduced
 - remaining low-frequency jitter/no-op behavior is currently most correlated
   with `:core` high-frequency `disconnectMma` polling
+- runtime projection now exists for active device / connected devices /
+  battery / ANC / switch state / device type / `HeadsetInfo` assembly, but
+  first-open ANC timing still needs more verification
+- `HeadsetInfo.powers` must remain the 6-slot first-party shape used by
+  `RemoteCodecKt`
 
 ## Stage 1: Expand bridge snapshot to cover missing first-party state
 
@@ -60,6 +65,8 @@ Current snapshot only covers:
 
 ### Checklist
 
+- [x] Preserve correct first-party battery payload shape for `HeadsetInfo`
+- [x] Project OpenBuds form factor into MiLink runtime `deviceType`
 - [ ] Add `supportsVolumeControl`
 - [ ] Add current volume value
 - [ ] Add `supportsAudioEffect`
@@ -67,6 +74,12 @@ Current snapshot only covers:
 - [ ] Add `supportsRing`
 - [ ] Add current ring state
 - [ ] Add any additional headset subtype/state needed by MiLink UI branches
+
+Current interim rule:
+
+- keep `volume`, `audio effect`, and `ring` hidden or unsupported until they
+  are backed by real OpenBuds state
+- do not project fake default values for these fields through runtime hooks
 
 ### Target files
 
@@ -168,15 +181,18 @@ Known current behavior:
 - card/detail behavior is much more stable after process narrowing
 - low-frequency residual shrink/no-op still exists and should be treated as a
   `:core` runtime stability issue before expanding control surface further
+- bridge loss may preserve MiTWS classification, but must not preserve active
+  runtime projection or unsupported first-party control semantics
 
 ### ANC
 
 Already present:
 
-- [ ] `openAnc`
-- [ ] `openTransparent`
-- [ ] `closeAnc`
-- [ ] `ProfileImpl.updateHeadsetMode(...)`
+- [x] `openAnc`
+- [x] `openTransparent`
+- [x] `closeAnc`
+- [x] `ProfileImpl.updateHeadsetMode(...)`
+- [ ] verify first-open ANC card visibility does not wait for a later async refresh
 
 ### Volume
 

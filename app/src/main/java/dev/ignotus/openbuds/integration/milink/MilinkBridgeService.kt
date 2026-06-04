@@ -146,7 +146,10 @@ class MilinkBridgeService : Service() {
             Log.i(TAG, "[ANC_CMD] evaluate mac=$targetMac adapterEnabled=$adapterEnabled snapshotExists=${snapshots[targetMac] != null} mode=${envelope.noiseMode} requestId=${envelope.requestId} success=${decision.success} reason=${decision.reason}")
             val action = decision.action
             if (decision.success && action != null) {
-                executeAcceptedCommand(action)
+                val execution = executeAcceptedCommand(action, decision.requestId)
+                if (!execution.success) {
+                    return execution.toBundle()
+                }
             }
             return decision.toBundle()
         }
@@ -169,13 +172,23 @@ class MilinkBridgeService : Service() {
         }
     }
 
-    private fun executeAcceptedCommand(action: MilinkBridgeCommandAction) {
+    private fun executeAcceptedCommand(
+        action: MilinkBridgeCommandAction,
+        requestId: String?,
+    ): MilinkBridgeCommandDecision =
         when (action) {
             is MilinkBridgeCommandAction.SetNoiseControl -> {
                 repository.setNoiseControlMode(action.mode)
+                MilinkBridgeCommandDecision.accepted(requestId, action)
             }
+            is MilinkBridgeCommandAction.SetVolume,
+            is MilinkBridgeCommandAction.SetAudioEffect,
+            MilinkBridgeCommandAction.StartRing,
+            MilinkBridgeCommandAction.StopRing -> MilinkBridgeCommandDecision.rejected(
+                reason = MilinkBridgeContract.REASON_UNSUPPORTED_COMMAND,
+                requestId = requestId,
+            )
         }
-    }
 
     private fun verifyCaller(): Int {
         val uid = Binder.getCallingUid()

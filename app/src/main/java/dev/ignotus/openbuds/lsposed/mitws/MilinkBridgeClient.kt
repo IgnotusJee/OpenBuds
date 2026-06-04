@@ -106,7 +106,7 @@ class MilinkBridgeClient(
         notifySnapshotListeners(snapshot)
     }
 
-    override fun isAuthorized(mac: String?): Boolean = snapshotFor(mac) != null
+    override fun isAuthorized(mac: String?): Boolean = cache.isClassificationEligible(mac)
 
     override fun authorizedSnapshots(): List<MilinkDeviceSnapshot> = cache.authorizedSnapshots()
 
@@ -328,6 +328,7 @@ interface MilinkBridgeClientFacade {
     val adapterEnabled: Boolean
     fun snapshotFor(mac: String?): MilinkDeviceSnapshot?
     fun isAuthorized(mac: String?): Boolean
+    fun isClassificationEligible(mac: String?): Boolean = isAuthorized(mac)
     fun authorizedSnapshots(): List<MilinkDeviceSnapshot> = emptyList()
     fun addSnapshotListener(listener: (MilinkDeviceSnapshot) -> Unit) = Unit
     fun removeSnapshotListener(listener: (MilinkDeviceSnapshot) -> Unit) = Unit

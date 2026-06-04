@@ -39,6 +39,41 @@ class MiTwsStateMapperTest {
     }
 
     @Test
+    fun headsetInfoPowers_mapsBatteryAndChargingSlotsInMiLinkOrder() {
+        val snapshot = snapshot(
+            leftBattery = 70,
+            rightBattery = 80,
+            caseBattery = 90,
+            leftCharging = true,
+            rightCharging = false,
+            caseCharging = true,
+        )
+
+        assertEquals(
+            listOf(90, 70, 80, 1, 1, 0),
+            MiTwsStateMapper.headsetInfoPowers(snapshot),
+        )
+    }
+
+    @Test
+    fun headsetInfoPowers_defaultsUnknownBatteryAndChargingToSafeValues() {
+        val snapshot = snapshot(
+            leftBattery = null,
+            rightBattery = null,
+            caseBattery = null,
+            singleBattery = 55,
+            leftCharging = null,
+            rightCharging = null,
+            caseCharging = null,
+        )
+
+        assertEquals(
+            listOf(-1, 55, 55, 0, 0, 0),
+            MiTwsStateMapper.headsetInfoPowers(snapshot),
+        )
+    }
+
+    @Test
     fun ancState_mapsKnownAndUnknownModes() {
         assertEquals(0, MiTwsStateMapper.ancState(snapshot(ancMode = 0)))
         assertEquals(1, MiTwsStateMapper.ancState(snapshot(ancMode = 1)))
@@ -138,6 +173,9 @@ class MiTwsStateMapperTest {
         ancMode: Int? = null,
         leftWearing: Boolean? = null,
         rightWearing: Boolean? = null,
+        leftCharging: Boolean? = null,
+        rightCharging: Boolean? = null,
+        caseCharging: Boolean? = null,
         supportsNoiseControl: Boolean = true,
     ): MilinkDeviceSnapshot =
         MilinkDeviceSnapshot(
@@ -146,6 +184,7 @@ class MiTwsStateMapperTest {
             brand = "Sony",
             model = "LinkBuds S",
             deviceId = MiTwsDeviceIdPolicy.GENERIC_EARBUD_DEVICE_ID,
+            formFactor = MiTwsRuntimeProjection.FORM_FACTOR_TRUE_WIRELESS,
             connected = true,
             protocolReady = true,
             leftBattery = leftBattery,
@@ -154,15 +193,19 @@ class MiTwsStateMapperTest {
             singleBattery = singleBattery,
             leftWearing = leftWearing,
             rightWearing = rightWearing,
-            leftCharging = null,
-            rightCharging = null,
-            caseCharging = null,
+            leftCharging = leftCharging,
+            rightCharging = rightCharging,
+            caseCharging = caseCharging,
             ancMode = ancMode,
             ringing = false,
+            currentVolume = null,
+            currentAudioEffectState = null,
             supportsBattery = true,
             supportsNoiseControl = supportsNoiseControl,
             supportsWearing = true,
             supportsRing = false,
+            supportsVolumeControl = false,
+            supportsAudioEffect = false,
             revision = 1L,
             updatedAt = 2L,
         )

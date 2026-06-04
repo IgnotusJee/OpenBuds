@@ -15,6 +15,27 @@ object MiTwsStateMapper {
         return intArrayOf(left.coerceBattery(), right.coerceBattery(), case.coerceBattery())
     }
 
+    /**
+     * MiLink first-party runtime uses a 6-slot power list in this order:
+     * [boxPower, leftPower, rightPower, isBoxCharging, isLeftCharging, isRightCharging]
+     *
+     * Battery values use -1 when unknown; charging flags use 0/1 and default to 0.
+     */
+    fun headsetInfoPowers(snapshot: MilinkDeviceSnapshot): List<Int> {
+        val single = snapshot.singleBattery
+        val left = snapshot.leftBattery ?: single ?: UNKNOWN_INT
+        val right = snapshot.rightBattery ?: single ?: UNKNOWN_INT
+        val box = snapshot.caseBattery ?: UNKNOWN_INT
+        return listOf(
+            box.coerceBattery(),
+            left.coerceBattery(),
+            right.coerceBattery(),
+            snapshot.caseCharging.toMiLinkChargingFlag(),
+            snapshot.leftCharging.toMiLinkChargingFlag(),
+            snapshot.rightCharging.toMiLinkChargingFlag(),
+        )
+    }
+
     fun ancState(snapshot: MilinkDeviceSnapshot): Int {
         val mode = snapshot.ancMode
         if (mode != null && mode in ANC_OFF..ANC_TRANSPARENT) return mode
@@ -61,4 +82,7 @@ object MiTwsStateMapper {
 
     private fun Int.coerceBattery(): Int =
         if (this == UNKNOWN_INT) UNKNOWN_INT else coerceIn(0, 100)
+
+    private fun Boolean?.toMiLinkChargingFlag(): Int =
+        if (this == true) 1 else 0
 }

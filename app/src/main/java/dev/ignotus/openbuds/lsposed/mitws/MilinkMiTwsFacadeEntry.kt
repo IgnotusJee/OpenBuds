@@ -114,6 +114,9 @@ class MilinkMiTwsFacadeEntry(
 
         override fun isAuthorized(mac: String?) = delegate?.isAuthorized(mac) == true
 
+        override fun isClassificationEligible(mac: String?) =
+            delegate?.isClassificationEligible(mac) == true
+
         override fun authorizedSnapshots() = delegate?.authorizedSnapshots().orEmpty()
 
         override fun addSnapshotListener(listener: (dev.ignotus.openbuds.integration.milink.MilinkDeviceSnapshot) -> Unit) {

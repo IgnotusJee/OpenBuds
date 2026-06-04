@@ -1,6 +1,7 @@
 package dev.ignotus.openbuds.integration.milink
 
 import dev.ignotus.openbuds.lsposed.mitws.MiTwsDeviceIdPolicy
+import dev.ignotus.openbuds.lsposed.mitws.MiTwsRuntimeProjection
 import dev.ignotus.openbuds.protocol.NoiseControlMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -67,14 +68,169 @@ class MilinkBridgeCommandProcessorTest {
     fun evaluate_rejectsUnsupportedCommand() {
         val decision = evaluate(
             command = MilinkBridgeCommandEnvelope(
-                commandType = MilinkBridgeContract.COMMAND_RING_FIND,
-                noiseMode = null,
+                commandType = "unknown_command",
                 requestId = "req-1",
             ),
         )
 
         assertFalse(decision.success)
         assertEquals(MilinkBridgeContract.REASON_UNSUPPORTED_COMMAND, decision.reason)
+    }
+
+    @Test
+    fun evaluate_rejectsVolumeWhenCapabilityDisabledByDefault() {
+        val decision = evaluate(
+            command = MilinkBridgeCommandEnvelope(
+                commandType = MilinkBridgeContract.COMMAND_SET_VOLUME,
+                volume = 50,
+                requestId = "req-volume",
+            ),
+        )
+
+        assertFalse(decision.success)
+        assertEquals(MilinkBridgeContract.REASON_UNSUPPORTED_CAPABILITY, decision.reason)
+    }
+
+    @Test
+    fun evaluate_rejectsInvalidVolumeWhenCapabilityEnabled() {
+        val decision = evaluate(
+            snapshot = snapshot(supportsVolumeControl = true),
+            command = MilinkBridgeCommandEnvelope(
+                commandType = MilinkBridgeContract.COMMAND_SET_VOLUME,
+                volume = 101,
+                requestId = "req-volume",
+            ),
+        )
+
+        assertFalse(decision.success)
+        assertEquals(MilinkBridgeContract.REASON_INVALID_VOLUME, decision.reason)
+    }
+
+    @Test
+    fun evaluate_acceptsVolumeWhenCapabilityEnabled() {
+        val decision = evaluate(
+            snapshot = snapshot(supportsVolumeControl = true),
+            command = MilinkBridgeCommandEnvelope(
+                commandType = MilinkBridgeContract.COMMAND_SET_VOLUME,
+                volume = 60,
+                requestId = "req-volume",
+            ),
+        )
+
+        assertTrue(decision.success)
+        val action = decision.action as MilinkBridgeCommandAction.SetVolume
+        assertEquals(60, action.volume)
+    }
+
+    @Test
+    fun evaluate_rejectsAudioEffectWhenCapabilityDisabledByDefault() {
+        val decision = evaluate(
+            command = MilinkBridgeCommandEnvelope(
+                commandType = MilinkBridgeContract.COMMAND_SET_AUDIO_EFFECT,
+                audioEffectState = 1,
+                requestId = "req-audio",
+            ),
+        )
+
+        assertFalse(decision.success)
+        assertEquals(MilinkBridgeContract.REASON_UNSUPPORTED_CAPABILITY, decision.reason)
+    }
+
+    @Test
+    fun evaluate_rejectsInvalidAudioEffectWhenCapabilityEnabled() {
+        val decision = evaluate(
+            snapshot = snapshot(supportsAudioEffect = true),
+            command = MilinkBridgeCommandEnvelope(
+                commandType = MilinkBridgeContract.COMMAND_SET_AUDIO_EFFECT,
+                audioEffectState = -2,
+                requestId = "req-audio",
+            ),
+        )
+
+        assertFalse(decision.success)
+        assertEquals(MilinkBridgeContract.REASON_INVALID_AUDIO_EFFECT, decision.reason)
+    }
+
+    @Test
+    fun evaluate_acceptsAudioEffectWhenCapabilityEnabled() {
+        val decision = evaluate(
+            snapshot = snapshot(supportsAudioEffect = true),
+            command = MilinkBridgeCommandEnvelope(
+                commandType = MilinkBridgeContract.COMMAND_SET_AUDIO_EFFECT,
+                audioEffectState = 2,
+                requestId = "req-audio",
+            ),
+        )
+
+        assertTrue(decision.success)
+        val action = decision.action as MilinkBridgeCommandAction.SetAudioEffect
+        assertEquals(2, action.state)
+    }
+
+    @Test
+    fun evaluate_rejectsRingWhenCapabilityDisabledByDefault() {
+        val decision = evaluate(
+            command = MilinkBridgeCommandEnvelope(
+                commandType = MilinkBridgeContract.COMMAND_START_RING,
+                requestId = "req-ring",
+            ),
+        )
+
+        assertFalse(decision.success)
+        assertEquals(MilinkBridgeContract.REASON_UNSUPPORTED_CAPABILITY, decision.reason)
+    }
+
+    @Test
+    fun evaluate_acceptsStartRingWhenCapabilityEnabled() {
+        val decision = evaluate(
+            snapshot = snapshot(supportsRing = true),
+            command = MilinkBridgeCommandEnvelope(
+                commandType = MilinkBridgeContract.COMMAND_START_RING,
+                requestId = "req-ring",
+            ),
+        )
+
+        assertTrue(decision.success)
+        assertEquals(MilinkBridgeCommandAction.StartRing, decision.action)
+    }
+
+    @Test
+    fun evaluate_acceptsStopRingWhenCapabilityEnabled() {
+        val decision = evaluate(
+            snapshot = snapshot(supportsRing = true),
+            command = MilinkBridgeCommandEnvelope(
+                commandType = MilinkBridgeContract.COMMAND_STOP_RING,
+                requestId = "req-ring",
+            ),
+        )
+
+        assertTrue(decision.success)
+        assertEquals(MilinkBridgeCommandAction.StopRing, decision.action)
+    }
+
+    @Test
+    fun evaluate_mapsLegacyRingFindByRequestedState() {
+        val start = evaluate(
+            snapshot = snapshot(supportsRing = true),
+            command = MilinkBridgeCommandEnvelope(
+                commandType = MilinkBridgeContract.COMMAND_RING_FIND,
+                ringEnabled = true,
+                requestId = "req-ring",
+            ),
+        )
+        val stop = evaluate(
+            snapshot = snapshot(supportsRing = true),
+            command = MilinkBridgeCommandEnvelope(
+                commandType = MilinkBridgeContract.COMMAND_RING_FIND,
+                ringEnabled = false,
+                requestId = "req-ring",
+            ),
+        )
+
+        assertTrue(start.success)
+        assertEquals(MilinkBridgeCommandAction.StartRing, start.action)
+        assertTrue(stop.success)
+        assertEquals(MilinkBridgeCommandAction.StopRing, stop.action)
     }
 
     @Test
@@ -115,6 +271,9 @@ class MilinkBridgeCommandProcessorTest {
         connected: Boolean = true,
         protocolReady: Boolean = true,
         supportsNoiseControl: Boolean = true,
+        supportsRing: Boolean = false,
+        supportsVolumeControl: Boolean = false,
+        supportsAudioEffect: Boolean = false,
     ): MilinkDeviceSnapshot =
         MilinkDeviceSnapshot(
             mac = "AA:BB:CC:DD:EE:FF",
@@ -122,6 +281,7 @@ class MilinkBridgeCommandProcessorTest {
             brand = "Sony",
             model = "LinkBuds S",
             deviceId = MiTwsDeviceIdPolicy.GENERIC_EARBUD_DEVICE_ID,
+            formFactor = MiTwsRuntimeProjection.FORM_FACTOR_TRUE_WIRELESS,
             connected = connected,
             protocolReady = protocolReady,
             leftBattery = 70,
@@ -135,10 +295,14 @@ class MilinkBridgeCommandProcessorTest {
             caseCharging = null,
             ancMode = 1,
             ringing = false,
+            currentVolume = null,
+            currentAudioEffectState = null,
             supportsBattery = true,
             supportsNoiseControl = supportsNoiseControl,
             supportsWearing = true,
-            supportsRing = false,
+            supportsRing = supportsRing,
+            supportsVolumeControl = supportsVolumeControl,
+            supportsAudioEffect = supportsAudioEffect,
             revision = 1L,
             updatedAt = 2L,
         )

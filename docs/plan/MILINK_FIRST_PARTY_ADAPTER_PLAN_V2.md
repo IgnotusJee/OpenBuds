@@ -12,7 +12,7 @@
 |------|--------|----------|----------|
 | `com.milink.service` 中 hook `MxBluetoothManager.checkIsMiTWS(BluetoothDevice)` | 高 | 能让 `BluetoothServiceClient.getDeviceType()` 进入 `HEADSET`，但只是分类入口，不代表状态和控制已可用 | M1 |
 | `com.milink.service` 中 hook MiTWS 状态 callback / getter | 高 | `registerCallback`、电量、ANC、wear getter 已可从 bridge 喂数据；下一步不是继续堆只读点位，而是让 `com.miui.headset.runtime` 自己看到 OpenBuds 作为自然的 active headset | M2 |
-| `com.milink.service` 中 hook MiTWS 控制方法 | 中 | `openAnc`、`openTransparent`、`closeAnc` 已可转发到 OpenBuds；剩余主线缺口是 runtime projection，以及 ring / volume / audio effect 等控制面 | M3+ |
+| `com.milink.service` 中 hook MiTWS 控制方法 | 中 | `openAnc`、`openTransparent`、`closeAnc` 已可转发到 OpenBuds；runtime projection 已进入可用态，但 ANC 首屏时序与 ring / volume / audio effect 等剩余控制面仍待收敛 | M3+ |
 | `com.xiaomi.bluetooth` 快连弹窗/通知接入 | 中低 | FastConnect 依赖小米/Apple 广播和 deviceId 云控，Sony/QCY 广播默认进不来，需要伪造 adv/cache/notification 状态 | M4 实验 |
 | `com.xiaomi.bluetooth` GATT/SPP/MMA 代理 | 低到中 | 技术上可 hook，但服务/特征 UUID、SPP UUID、MMA 帧、注册门控和 Sony 默认路径都不匹配；不能作为 M2 前置 | M5 实验 |
 | 完整 MMA 协议栈或 Xiaomi 蓝牙插件仿真 | 低 | 工作量接近逆向一套 Mi Headset 协议，且蓝牙进程稳定性风险高 | 暂不承诺 |
@@ -373,7 +373,7 @@ V2 主线剩余 bridge / runtime 能力：
 | `ringFind` / `setVolume` / `setAudioEffect` / `playback` 命令 AIDL | 剩余控制面 | M3+ | ❌ 未实现 |
 | 命令结果回执缓存 | 当前只有 `accepted/reason/requestId`；缺少按协议执行结果回写的短超时缓存 | M3+ | ⚠️ 部分实现 |
 | capability 矩阵 | 当前已有 `supportsBattery` / `supportsNoiseControl` / `supportsWearing` / `supportsRing` 字段，但没有按品牌/型号形成稳定能力矩阵 | M3+ | ⚠️ 部分实现 |
-| runtime projection (`ProfileContext + DiscoveryImpl`) | 让 `ProfileImpl.getHeadsetProperty(...)`、`updateHeadsetMode(...)`、`updateHeadsetVolume(...)`、`updateHeadsetAudioEffect(...)` 走自然 first-party runtime 路径，而不是继续增加单点旁路 hook | M3+ | ❌ 未实现 |
+| runtime projection (`ProfileContext + DiscoveryImpl`) | 让 `ProfileImpl.getHeadsetProperty(...)`、`updateHeadsetMode(...)`、`updateHeadsetVolume(...)`、`updateHeadsetAudioEffect(...)` 走自然 first-party runtime 路径，而不是继续增加单点旁路 hook | M3+ | ⚠️ 已实现基础投影，仍待收敛 |
 
 命令接口建议保持领域语义，不暴露 Sony/QCY 原始字节：
 
@@ -611,6 +611,25 @@ M2 真机验证发现的关键问题及修复（2026-06-02）：
 
 **当前状态（2026-06-04）：** 电量和 ANC 状态已在卡面正确显示，ANC 调节已通过 bridge 闭环可用；关键运行时进程已确认是 `com.milink.service:ui` 和 `com.milink.service:core`，二者都必须持有 facade，其中 `:core` 还必须接入 bridge，否则耳机卡片会消失。进程筛选后，卡片缩小/样式抽搐和 ANC 偶发点不动已从高频问题降为低频余留问题；当前最主要的嫌疑是 `:core` 内 `disconnectMma` 的高频轮询会扰动 headset runtime，但该链路暂只做观测，不再主动做行为性干预。与此同时，当前 ANC 路径仍部分依赖 `ProfileImpl.updateHeadsetMode(...)` 的定点特判，这说明 `com.miui.headset.runtime` 的 active headset 运行时视图尚未自然成立。
 
+**增量进展（2026-06-04 晚些时候）：**
+
+1. `MiTwsBridgeCache` 与 `MilinkBridgeClientFacade` 已拆分“分类资格”和“live runtime snapshot”语义：bridge 断线时仅保留 `checkIsMiTWS/getDeviceId` 的分类粘性，不再让 placeholder/历史授权设备参与 active headset、ProfileContext 或 ProfileImpl 运行时投影。
+2. `ProfileContext + DiscoveryImpl` 的基础 runtime projection 已落地：
+   - `getActiveHeadset` / `getActiveDevice` / `getConnectedDevices`
+   - `isConnected` / `isActive`
+   - `getBatteryLevel` / `getAncState` / `getSwitchState` / `getDeviceType`
+   - `assembleHeadsetInfo`
+   - `ProfileImpl.getHeadsetProperty(...)` / `updateHeadsetMode(...)`
+3. `HeadsetInfo.powers` 已改成与米链 first-party runtime 一致的 6 槽位格式：
+   `[boxPower, leftPower, rightPower, isBoxCharging, isLeftCharging, isRightCharging]`。
+   这修复了 `HeadSetsDetail` 对 `powers[3..5]` 的越界访问。
+4. `HeadphoneFormFactor` 已进入 bridge snapshot，并开始驱动 MiLink runtime 的 `deviceType` 投影：
+   - `TRUE_WIRELESS -> type 0 (BUDS)`
+   - `HEADSET -> type 2`
+   不再把 OpenBuds 真无线设备误投到 AirPods 专用 `type == 5` 分支。
+5. volume / audio effect 仍未实现，但 runtime 投影已改为“有真实支持值才 override；否则保留 original 值或原链路”，不再伪造默认值。
+6. ring 路径仍未实现；当前策略是避免让 OpenBuds 设备误落入 AirPods/ring 专用分支，而不是伪造支持状态。
+
 #### 附录：`:core` 中 `disconnectMma` 高频轮询的当前证据
 
 截至 2026-06-04 的真机日志，`com.milink.service:core` 已被确认是耳机卡片和
@@ -666,8 +685,9 @@ M3 完成记录（2026-06-02）：
 - [x] 通过真机日志确认当前关键进程为 `com.milink.service:ui` 和 `com.milink.service:core`；前者更贴近卡片/详情页 UI，后者承载 `HeadsetLocalService` / `HeadsetCirculateSessionService` / `AncBatteryController` 等 headset runtime。
 - [x] 收紧进程筛选：仅在 `:ui` 和 `:core` 安装 MiTWS facade，排除 `:audio`、`:provider`、`persistent`、`com.milink.runtime`、`com.milink.crossdeviceservice` 等非关键进程。
 - [x] 将 bridge client 限制到 `:ui` + `:core` 两个关键进程；验证 `:core` 若缺 bridge 会导致耳机卡片消失。
-- [ ] 新增 `ProfileContext + DiscoveryImpl` runtime projection，让 OpenBuds 授权设备在 `com.miui.headset.runtime` 中表现为自然的 `activeHeadset`，而不是只在 facade 层看起来像 MiTWS。
-- [ ] 让 `ProfileImpl.getHeadsetProperty(...)`、`updateHeadsetMode(...)` 在不依赖定点旁路 hook 的情况下通过 native target matching。
+- [x] 新增 `ProfileContext + DiscoveryImpl` runtime projection，让 OpenBuds 授权设备在 `com.miui.headset.runtime` 中表现为自然的 `activeHeadset`，而不是只在 facade 层看起来像 MiTWS。当前已覆盖 active device、connected devices、battery/ANC/switch/deviceType、`assembleHeadsetInfo` 与基础 `ProfileImpl` 路径。
+- [x] 让 `ProfileImpl.getHeadsetProperty(...)`、`updateHeadsetMode(...)` 在不依赖定点旁路 hook 的情况下通过 native target matching。ANC 仍保留 bridge command 闭环与最小 optimistic snapshot。
+- [ ] 收敛首屏时序：进一步确认 `HeadSetsDetail` 首次展开时的 ANC 卡片显示路径，减少依赖后续异步刷新才显现的情况。
 - [ ] 在 runtime projection 稳定后，评估是否下调或删除 `ProfileImpl.updateHeadsetMode(...)` 特判 hook，避免继续为每条控制链单独加 bypass。
 - [ ] 扩展 bridge snapshot：volume、audio effect、ring 状态；明确 `DiscoveryImpl.assembleHeadsetInfo()` 所需字段的 OpenBuds 映射来源。
 - [ ] 扩展 bridge 命令：`ringFind`、`setVolume`、`setAudioEffect`；`playback` 仅在 MiLink 真机确认通过 MiTWS 控制面调用时再纳入主线。
@@ -678,6 +698,8 @@ M3 完成记录（2026-06-02）：
 
 - `ProfileImpl.updateHeadsetMode(...)` 对 OpenBuds 不再因为 `activeHeadset == null` 或 `address != activeHeadset.address` 返回 `206 / TargetNotMatch`。
 - `ProfileImpl.getHeadsetProperty(...)` 对同一设备也能通过 native path。
+- `HeadsetInfo.powers` 与米链 first-party runtime 兼容，不再触发 `HeadSetsDetail` 越界访问。
+- 真无线设备的 `deviceType` 投影不再误落到 AirPods/ring 专用分支。
 - 后续 `updateHeadsetVolume(...)` / `updateHeadsetAudioEffect(...)` 可以复用同一 runtime target，而不是再做新的单点特判。
 - OpenBuds 仍不触发真实 Xiaomi MMA 连接，不跨到 `com.xiaomi.bluetooth` 或 `com.android.bluetooth` 做主线协议代理。
 

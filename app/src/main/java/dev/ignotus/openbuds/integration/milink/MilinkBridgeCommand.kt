@@ -4,13 +4,20 @@ import android.os.Bundle
 import dev.ignotus.openbuds.protocol.NoiseControlMode
 
 data class MilinkBridgeCommandEnvelope(
-    val commandType: String?,
-    val noiseMode: Int?,
-    val requestId: String?,
+    val commandType: String? = null,
+    val noiseMode: Int? = null,
+    val volume: Int? = null,
+    val audioEffectState: Int? = null,
+    val ringEnabled: Boolean? = null,
+    val requestId: String? = null,
 )
 
 sealed class MilinkBridgeCommandAction {
     data class SetNoiseControl(val mode: NoiseControlMode) : MilinkBridgeCommandAction()
+    data class SetVolume(val volume: Int) : MilinkBridgeCommandAction()
+    data class SetAudioEffect(val state: Int) : MilinkBridgeCommandAction()
+    object StartRing : MilinkBridgeCommandAction()
+    object StopRing : MilinkBridgeCommandAction()
 }
 
 data class MilinkBridgeCommandDecision(
@@ -82,6 +89,15 @@ object MilinkBridgeCommandProcessor {
 
         return when (command.commandType) {
             MilinkBridgeContract.COMMAND_SET_NOISE_CONTROL -> evaluateNoiseControl(snapshot, command)
+            MilinkBridgeContract.COMMAND_SET_VOLUME -> evaluateVolume(snapshot, command)
+            MilinkBridgeContract.COMMAND_SET_AUDIO_EFFECT -> evaluateAudioEffect(snapshot, command)
+            MilinkBridgeContract.COMMAND_START_RING -> evaluateRing(snapshot, command, start = true)
+            MilinkBridgeContract.COMMAND_STOP_RING,
+            MilinkBridgeContract.COMMAND_RING_FIND -> evaluateRing(
+                snapshot = snapshot,
+                command = command,
+                start = command.ringEnabled ?: false,
+            )
             null, "" -> MilinkBridgeCommandDecision.rejected(
                 MilinkBridgeContract.REASON_INVALID_COMMAND,
                 command.requestId,
@@ -117,6 +133,69 @@ object MilinkBridgeCommandProcessor {
             action = MilinkBridgeCommandAction.SetNoiseControl(mode),
         )
     }
+
+    private fun evaluateVolume(
+        snapshot: MilinkDeviceSnapshot,
+        command: MilinkBridgeCommandEnvelope,
+    ): MilinkBridgeCommandDecision {
+        if (!snapshot.supportsVolumeControl) {
+            return MilinkBridgeCommandDecision.rejected(
+                MilinkBridgeContract.REASON_UNSUPPORTED_CAPABILITY,
+                command.requestId,
+            )
+        }
+        val volume = command.volume?.takeIf { it in 0..100 }
+            ?: return MilinkBridgeCommandDecision.rejected(
+                MilinkBridgeContract.REASON_INVALID_VOLUME,
+                command.requestId,
+            )
+        return MilinkBridgeCommandDecision.accepted(
+            requestId = command.requestId,
+            action = MilinkBridgeCommandAction.SetVolume(volume),
+        )
+    }
+
+    private fun evaluateAudioEffect(
+        snapshot: MilinkDeviceSnapshot,
+        command: MilinkBridgeCommandEnvelope,
+    ): MilinkBridgeCommandDecision {
+        if (!snapshot.supportsAudioEffect) {
+            return MilinkBridgeCommandDecision.rejected(
+                MilinkBridgeContract.REASON_UNSUPPORTED_CAPABILITY,
+                command.requestId,
+            )
+        }
+        val state = command.audioEffectState?.takeIf { it >= 0 }
+            ?: return MilinkBridgeCommandDecision.rejected(
+                MilinkBridgeContract.REASON_INVALID_AUDIO_EFFECT,
+                command.requestId,
+            )
+        return MilinkBridgeCommandDecision.accepted(
+            requestId = command.requestId,
+            action = MilinkBridgeCommandAction.SetAudioEffect(state),
+        )
+    }
+
+    private fun evaluateRing(
+        snapshot: MilinkDeviceSnapshot,
+        command: MilinkBridgeCommandEnvelope,
+        start: Boolean,
+    ): MilinkBridgeCommandDecision {
+        if (!snapshot.supportsRing) {
+            return MilinkBridgeCommandDecision.rejected(
+                MilinkBridgeContract.REASON_UNSUPPORTED_CAPABILITY,
+                command.requestId,
+            )
+        }
+        return MilinkBridgeCommandDecision.accepted(
+            requestId = command.requestId,
+            action = if (start) {
+                MilinkBridgeCommandAction.StartRing
+            } else {
+                MilinkBridgeCommandAction.StopRing
+            },
+        )
+    }
 }
 
 fun Bundle?.toMilinkBridgeCommandEnvelope(): MilinkBridgeCommandEnvelope =
@@ -124,5 +203,11 @@ fun Bundle?.toMilinkBridgeCommandEnvelope(): MilinkBridgeCommandEnvelope =
         commandType = this?.getString(MilinkBridgeContract.KEY_COMMAND_TYPE),
         noiseMode = this?.takeIf { it.containsKey(MilinkBridgeContract.KEY_NOISE_MODE) }
             ?.getInt(MilinkBridgeContract.KEY_NOISE_MODE),
+        volume = this?.takeIf { it.containsKey(MilinkBridgeContract.KEY_VOLUME) }
+            ?.getInt(MilinkBridgeContract.KEY_VOLUME),
+        audioEffectState = this?.takeIf { it.containsKey(MilinkBridgeContract.KEY_AUDIO_EFFECT_STATE) }
+            ?.getInt(MilinkBridgeContract.KEY_AUDIO_EFFECT_STATE),
+        ringEnabled = this?.takeIf { it.containsKey(MilinkBridgeContract.KEY_RING_ENABLED) }
+            ?.getBoolean(MilinkBridgeContract.KEY_RING_ENABLED),
         requestId = this?.getString(MilinkBridgeContract.KEY_REQUEST_ID),
     )

@@ -104,6 +104,8 @@ Current validated process roles:
   - Current behavior is engineered for UI stability, not for full session-semantic parity
 - Conclusion:
   - Works pragmatically, but not as a fully faithful MiTWS session model.
+  - Bridge loss or history-only authorization should not keep OpenBuds projected
+    as a live active headset. Only classification stickiness is retained.
 
 ### B3. MiTWS callback registration lifecycle is replaced
 
@@ -134,15 +136,20 @@ Current validated process roles:
 
 ### C1. Battery state
 
-- Status: `Satisfied`
+- Status: `Mostly satisfied`
 - Current implementation:
   - `hookBatteryLevel()`
   - `MiTwsCallbackPump -> onBatteryLevel(int[])`
   - `MiTwsStateMapper.batteryArray()`
+  - `MiTwsStateMapper.headsetInfoPowers()` now projects the 6-slot first-party
+    power list needed by `HeadsetInfo` / `HeadSetsDetail`
 - MiLink dependency:
   - `HeadSetsDetail` repeatedly consumes `C4737b0.m19868A()`
 - Conclusion:
-  - Battery is fully covered for current UI paths.
+  - Battery is covered for current UI paths, including the 6-slot first-party
+    `HeadsetInfo.powers` shape.
+  - Residual risk remains around device-type-specific card sections rather than
+    raw battery transport.
 
 ### C2. ANC current state
 
@@ -216,6 +223,8 @@ Current validated process roles:
 - Current implementation:
   - `MilinkDeviceSnapshot.supportsRing = false`
   - Callback pump can emit `onRingStateChanged`, but only if a snapshot supports ring
+  - Runtime projection now avoids mapping OpenBuds true-wireless devices onto
+    the AirPods-only `type == 5` branch merely to obtain first-party UI
 - MiLink dependency:
   - `HeadSetsDetail` ring card uses first-party ring control paths through `C6451o0`
 - Conclusion:
@@ -332,14 +341,18 @@ Current validated process roles:
 
 ### F1. `HeadsetDeviceInfo` parity
 
-- Status: `Partially satisfied`
+- Status: `Mostly satisfied`
 - Observation:
   - MiLink UI often reads `HeadsetDeviceInfo` indirectly through `C4734a` and `C4737b0`
   - Current solution does not rebuild the full first-party `HeadsetDeviceInfo` generation chain
   - It replaces enough runtime state and callback behavior to satisfy current headset page flows
+  - `HeadsetInfo.powers` now matches MiLink's 6-slot runtime expectation and
+    `deviceType` now follows OpenBuds `formFactor` instead of a single hardcoded value
 - Conclusion:
   - Core fields are effectively covered where needed
   - Full model parity is not achieved
+  - Unsupported volume/audio-effect fields should not be filled by synthetic
+    runtime defaults when OpenBuds has no real backing state.
 
 ### F2. Full `RemoteProtocol / QueryLocal / Profile / Registry` equivalence
 
