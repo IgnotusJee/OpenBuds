@@ -1390,8 +1390,8 @@ class MilinkMiTwsFacadeHook(
         private const val QUERY_BOND_STATE_NOT_BONDED = 307
         private const val LOCAL_DEVICE_ID = "local_device_id"
         private const val HEADSET_NOTIFY_PROPERTY_CHANGED = 4
-        private const val MI_LINK_VOLUME_MAX = 15  // Android STREAM_MUSIC max steps (MiLink slider range)
-        private const val HEADPHONE_VOLUME_MAX = 31 // Conservative: covers Sony 0-31 and QCY single-byte range
+        private const val MI_LINK_VOLUME_MAX = 100  // MiLink slider range (percentage 0-100)
+        private const val HEADPHONE_VOLUME_MAX = 15  // Conservative BLE headset volume steps (Sony: 0-15, QCY: 0-15)
         private const val TAG = "OpenBuds"
         private val assignedDeviceIds = ConcurrentHashMap<String, String>()
 

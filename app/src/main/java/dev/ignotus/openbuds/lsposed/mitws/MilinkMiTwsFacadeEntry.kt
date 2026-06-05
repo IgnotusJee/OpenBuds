@@ -249,7 +249,7 @@ class MilinkMiTwsFacadeEntry(
     private companion object {
         private const val TAG = "OpenBuds"
         private const val PROFILE_IMPL = "com.miui.headset.runtime.ProfileImpl"
-        private const val MI_LINK_VOLUME_MAX = 15  // Android STREAM_MUSIC max
-        private const val HEADPHONE_VOLUME_MAX = 31 // Conservative headphone volume range
+        private const val MI_LINK_VOLUME_MAX = 100 // MiLink slider percentage range
+        private const val HEADPHONE_VOLUME_MAX = 15  // BLE headset volume steps (typical 0-15)
     }
 }
