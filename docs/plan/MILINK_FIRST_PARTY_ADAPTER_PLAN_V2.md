@@ -1,6 +1,6 @@
 # OpenBuds 米链第一方耳机适配器集成方案 V2
 
-更新日期：2026-06-04
+更新日期：2026-06-05
 
 本文是 V2 草案的可行性修订版，基于对 `com.milink.service` 和 `com.xiaomi.bluetooth` 反编译源码的交叉验证。结论先行：**把 OpenBuds 设备伪装成 MiTWS 并让米链用第一方耳机页面渲染是可行的，且 MiTWS 路径是主线。** AirPods 伪装路径（V1）已废弃，不再维护。
 
@@ -664,7 +664,7 @@ headset runtime 的关键进程之一。当前已确认的现象如下：
 
 - [x] 扩展 bridge 命令 AIDL。
 - [x] 实现 `openAnc`、`openTransparent`、`closeAnc` 到 OpenBuds `ControlCommand.SetNoiseControl` 的映射。**注意：hook 后必须不调用原方法**，因为原方法会通过 MMA 协议栈发送命令到不支持的设备。
-- [ ] trace 并实现 MiTWS 对应查找接口到 OpenBuds 查找命令。
+- [ ] trace 并实现 MiTWS 对应查找接口到 OpenBuds 查找命令。（`ringFindForAirPods` 已加 trace-only hook，等待 OpenBuds 侧 ring 数据源就绪后再实现 mutation）
 - [x] 如果 UI 调用了 `changeAncMode` / `changeAncLevel`，再加 hook；否则不主动实现。
 - [x] 每个命令需要：米链 UI 操作 -> bridge command -> OpenBuds 协议执行 -> snapshot 更新 -> callback 回推。
 
@@ -674,7 +674,7 @@ headset runtime 的关键进程之一。当前已确认的现象如下：
 - 不支持的设备不显示或不启用相应能力。
 - 命令失败不会让米链 UI 长期显示错误状态。
 
-M3 完成记录（2026-06-02）：
+M3 完成记录（2026-06-02 / 更新 2026-06-05）：
 
 - `IMilinkBridgeService` 新增 `executeCommand(token, mac, command)`；命令 envelope 使用 `commandType`、`noiseMode`、`requestId`，结果使用 `success`、`reason`、`requestId`。
 - App 侧新增 `MilinkBridgeCommandProcessor`，统一校验 adapter 开关、授权 MAC、连接状态、protocol ready 和 capability；当前只接受 `set_noise_control`，预留 `ring_find`、`playback`、`set_eq_preset` 常量但不执行。
@@ -683,7 +683,7 @@ M3 完成记录（2026-06-02）：
 - `IMiuiHeadsetService$Stub$Proxy` 的 `changeAncMode`、`changeAncLevel`、`changePlayStatus`、`setCommonCommand`、`ringFindForAirPods` 已加 trace-only hook。查找耳机和播放控制仍不做 mutation，等待真机 trace 确认调用链。
 - 单元测试新增 `MilinkBridgeCommandProcessorTest` 和 `MiTwsControlMapperTest`；`.\gradlew.bat testDebugUnitTest` 通过。
 
-### M3+：MiTWS runtime projection 和剩余主线能力（1-2 周）
+### M3+：MiTWS runtime projection 和剩余主线能力（1-2 周 / Volume 闭环 2026-06-05）
 
 - [x] 通过真机日志确认当前关键进程为 `com.milink.service:ui` 和 `com.milink.service:core`；前者更贴近卡片/详情页 UI，后者承载 `HeadsetLocalService` / `HeadsetCirculateSessionService` / `AncBatteryController` 等 headset runtime。
 - [x] 收紧进程筛选：仅在 `:ui` 和 `:core` 安装 MiTWS facade，排除 `:audio`、`:provider`、`persistent`、`com.milink.runtime`、`com.milink.crossdeviceservice` 等非关键进程。
@@ -714,6 +714,40 @@ M3 完成记录（2026-06-02）：
 
 - 这里的 runtime projection 不等于完整 `HeadsetHostSupervisor / MultipointProcessor` host graph 仿真；只有当 `ProfileContext + DiscoveryImpl` 投影后仍存在阻断性缺口时，才继续下钻到完整 host graph。
 - 当前进程结论已经明确：`com.milink.service:ui` 与 `com.milink.service:core` 是主线关键进程；`com.milink.service:audio`、`com.milink.service:provider`、`com.milink.service.persistent`、`com.milink.runtime`、`com.milink.crossdeviceservice` 目前不是 MiTWS 耳机卡片主链关键宿主。
+
+M3+ Volume 完成记录（2026-06-05）：
+
+**协议层**：
+- Sony V2 Table1：新增 `PLAY_GET_PARAM(0xA6)` / `PLAY_RET_PARAM(0xA7)` / `PLAY_SET_PARAM(0xA8)` / `PLAY_NTFY_PARAM(0xA9)` 命令字节，`buildGetMusicVolume()` / `buildSetMusicVolume()`，`parsePlayParam()` 支持 `MUSIC_VOLUME` / `CALL_VOLUME` / 带 MUTE 变体。
+- Sony V1 Table1：相同 PLAY_PARAM 命令族，双层 payload `[PLAYBACK_CONTROLLER(0x01), VOLUME(0x20), value]`。
+- `PlayInquiredType` 枚举新增 `MUSIC_VOLUME(0x20)`、`CALL_VOLUME(0x21)`、`MUSIC_VOLUME_WITH_MUTE(0x30)`、`CALL_VOLUME_WITH_MUTE(0x31)`。
+- 新增 `ParsedHeadphoneResponse.SonyTandem.Volume` 类型，带 `muted` 字段。
+- QCY：`CMDID_VOLUME(0x08)` 读请求和 `[08, 3, left, right, 0]` 写命令，`QcyResponseMapper.applyVolume()` 从空桩改为真实映射。
+
+**Adapter / Profile 层**：
+- `HeadphoneAdapter` 接口 + `Registry` 新增 `buildRefreshVolumeCommands()` / `buildSetVolumeCommands()` 委托。
+- `SonyTandemHeadphoneAdapter`：`classifyPlayParam()` 路由 PLAY_PARAM → `HeadphoneFeature.VOLUME`，volume builder 实现。
+- `QcyHeadphoneAdapter`：`buildRefreshVolumeCommands()` / `buildSetVolumeCommands()` 实现。
+- 启用 `HeadphoneFeature.VOLUME` 的 profile：LinkBuds S、WF-1000XM5、WH-1000XM4、QCY C30S。
+
+**Repository 层**：
+- 新增 `VolumeState(musicVolume, callVolume, isMuted, raw)` 数据类。
+- `HeadphoneUiState.volumeState` 字段，`setVolume()` 公开方法，`applySonyVolume()` 响应处理，dispatch 路由。
+- `featureStatusesFor()` 增加 Volume Control 条目。
+
+**MiLink 集成层**：
+- `MilinkDeviceSnapshot.fromUiState()`：`currentVolume` 从 `VolumeState.musicVolume` 映射，`supportsVolumeControl` 从 profile 判定。
+- `MilinkBridgeService.executeAcceptedCommand()`：`SetVolume` 调用 `repository.setVolume()`。
+- `MiTwsControlMapper`：新增 `buildSetVolumeCommand()` 和 `volume()` 读取方法。
+- `MilinkMiTwsFacadeEntry.installVolumeControlHook()`：hook `ProfileImpl.updateHeadsetVolume` 并转发到 bridge 命令。
+- `MilinkMiTwsFacadeHook.installProfileImplHooks()`：移除冗余的 `updateHeadsetVolume` guard（已被 Entry 层 hook 替代）。
+
+**测试**：
+- `QcyResponseMapperTest`：applyVolume 从 noop 改为验证真实映射。
+- `MilinkBridgeSnapshotMapperTest`：supportsVolumeControl 断言更新为 true（QCY C30S 启用 VOLUME）。
+- `SonyTandemProfileRoutingTest`：XM4 feature set 增加 VOLUME。
+
+**构建**：`testDebugUnitTest` 409/409 通过，`assembleDebug` 成功。
 
 ### M4：`com.xiaomi.bluetooth` 快连和通知实验（可选，1-2 周）
 
