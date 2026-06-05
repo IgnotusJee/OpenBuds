@@ -723,22 +723,31 @@ class MilinkMiTwsFacadeHook(
             log("missing runtime projection: ${profileContext.name}.getVolume()")
             return
         }
+        val audioManager: android.media.AudioManager? = runCatching {
+            val app = Class.forName("android.app.ActivityThread")
+                .getMethod("currentApplication")
+                .invoke(null) as? android.app.Application
+            app?.getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
+        }.getOrNull()
         ModuleMain.instance.hook(method)
             .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
             .intercept(object : XposedInterface.Hooker {
                 override fun intercept(chain: XposedInterface.Chain): Any? {
                     val snapshot = runtimeProjection.activeSnapshot()
-                    if (snapshot?.supportsVolumeControl == true && snapshot.currentVolume != null) {
-                        // Scale headphone raw (0-HEADPHONE_MAX) → MiLink slider range (0-15).
-                        // The headphone reports a single-byte value whose effective max varies
-                        // by device (6–31 steps). MiLink expects Android media volume 0-15.
-                        val scaled = (snapshot.currentVolume * MI_LINK_VOLUME_MAX / HEADPHONE_VOLUME_MAX)
-                            .coerceIn(0, MI_LINK_VOLUME_MAX)
+                    if (snapshot?.supportsVolumeControl == true) {
+                        val am = audioManager ?: return chain.proceed()
+                        val streamVol = am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
+                        val min = am.getStreamMinVolume(android.media.AudioManager.STREAM_MUSIC)
+                        val max = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
+                        val percent = if (max > min) {
+                            kotlin.math.round(((streamVol - min).toFloat() / (max - min).toFloat()) * 100f).toInt()
+                        } else 0
                         log(
-                            "runtime getVolume mac=${snapshot.mac} raw=${snapshot.currentVolume} " +
-                                "scaled=$scaled gate=${facadeGateSummary()}"
+                            "runtime getVolume mac=${snapshot.mac} " +
+                                "streamVol=$streamVol min=$min max=$max percent=$percent " +
+                                "gate=${facadeGateSummary()}"
                         )
-                        return scaled
+                        return percent
                     }
                     return chain.proceed()
                 }
@@ -1390,8 +1399,6 @@ class MilinkMiTwsFacadeHook(
         private const val QUERY_BOND_STATE_NOT_BONDED = 307
         private const val LOCAL_DEVICE_ID = "local_device_id"
         private const val HEADSET_NOTIFY_PROPERTY_CHANGED = 4
-        private const val MI_LINK_VOLUME_MAX = 100  // MiLink slider range (percentage 0-100)
-        private const val HEADPHONE_VOLUME_MAX = 15  // Conservative BLE headset volume steps (Sony: 0-15, QCY: 0-15)
         private const val TAG = "OpenBuds"
         private val assignedDeviceIds = ConcurrentHashMap<String, String>()
 

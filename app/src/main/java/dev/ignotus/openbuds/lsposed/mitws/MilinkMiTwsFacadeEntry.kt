@@ -66,38 +66,45 @@ class MilinkMiTwsFacadeEntry(
             Log.w(TAG, "M3+ volume control: ProfileImpl.updateHeadsetVolume not found")
             return
         }
+        val audioManager = runCatching {
+            currentApplication()
+                ?.getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
+        }.getOrNull()
         ModuleMain.instance.hook(method)
             .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
             .intercept(object : XposedInterface.Hooker {
                 override fun intercept(chain: XposedInterface.Chain): Any? {
                     val address = chain.args.getOrNull(1) as? String ?: ""
-                    val volumeValue = (chain.args.getOrNull(3) as? Int) ?: -1
+                    val volumePercent = (chain.args.getOrNull(3) as? Int) ?: -1
                     val mac = address.normalizeMac() ?: ""
                     val snapshot = BridgeClientHolder.snapshotFor(mac)
                     if (snapshot == null || !snapshot.supportsVolumeControl) {
                         return 201 // PROFILE_FAILURE_RESULT
                     }
-                    // Scale MiLink slider (0-MI_LINK_MAX) → headphone protocol range (0-HEADPHONE_MAX).
-                    // MiLink uses Android STREAM_MUSIC volume (typically 0-15); the headphone
-                    // protocol expects 0-31 (Sony) or single-byte (QCY). Linear scaling ensures
-                    // 50% on slider ≈ 50% of headphone's actual volume range.
-                    val scaledVolume = (volumeValue.coerceIn(0, MI_LINK_VOLUME_MAX) * HEADPHONE_VOLUME_MAX / MI_LINK_VOLUME_MAX)
-                        .coerceIn(0, HEADPHONE_VOLUME_MAX)
-                    val command = Bundle().apply {
-                        putString(MilinkBridgeContract.KEY_COMMAND_TYPE, MilinkBridgeContract.COMMAND_SET_VOLUME)
-                        putInt(MilinkBridgeContract.KEY_VOLUME, scaledVolume)
-                        putString(MilinkBridgeContract.KEY_REQUEST_ID, java.util.UUID.randomUUID().toString())
+                    // Native MiTWS uses AudioManager.setStreamVolume(STREAM_MUSIC)
+                    // directly — it does NOT send MMA/Tandem protocol volume commands.
+                    // Android's Bluetooth stack syncs volume to the headset via AVRCP
+                    // Absolute Volume or HFP. We replicate that behavior here.
+                    val am = audioManager
+                    if (am == null) {
+                        Log.w(TAG, "[MiLinkMiTWS] updateHeadsetVolume: AudioManager unavailable")
+                        return 201
                     }
-                    val result = BridgeClientHolder.executeCommand(mac, command, 50L)
+                    val min = am.getStreamMinVolume(android.media.AudioManager.STREAM_MUSIC)
+                    val max = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
+                    val streamVol = kotlin.math.round(
+                        min + (volumePercent.coerceIn(0, 100).toFloat() / 100f) * (max - min)
+                    ).toInt()
+                    am.setStreamVolume(android.media.AudioManager.STREAM_MUSIC, streamVol, 0)
                     Log.i(
                         TAG,
-                        "[MiLinkMiTWS] updateHeadsetVolume mac=$mac raw=$volumeValue scaled=$scaledVolume " +
-                            "accepted=${result.accepted} reason=${result.reason}"
+                        "[MiLinkMiTWS] updateHeadsetVolume mac=$mac " +
+                            "percent=$volumePercent streamVol=$streamVol min=$min max=$max"
                     )
-                    return if (result.accepted) 1 else 201
+                    return 1 // PROFILE_SUCCESS
                 }
             })
-        Log.i(TAG, "hooked M3+ volume control: ProfileImpl.updateHeadsetVolume")
+        Log.i(TAG, "hooked M3+ volume control: ProfileImpl.updateHeadsetVolume (AudioManager)")
     }
 
     private fun installAudioEffectControlHook() {
@@ -249,7 +256,5 @@ class MilinkMiTwsFacadeEntry(
     private companion object {
         private const val TAG = "OpenBuds"
         private const val PROFILE_IMPL = "com.miui.headset.runtime.ProfileImpl"
-        private const val MI_LINK_VOLUME_MAX = 100 // MiLink slider percentage range
-        private const val HEADPHONE_VOLUME_MAX = 15  // BLE headset volume steps (typical 0-15)
     }
 }
