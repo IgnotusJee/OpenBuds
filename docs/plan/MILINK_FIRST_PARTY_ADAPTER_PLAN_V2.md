@@ -945,16 +945,99 @@ Sony SPP direct probe。目标是验证 LinkBuds S 的 Sony SPP 控制连接是�
 - 当前仍不把 Xiaomi SPP 作为 OpenBuds 主线控制路径；OpenBuds App 默认仍走
   App 侧 `SppTransport` + `SonySppPayloadMapper`。
 
-未完成 / 不宣称覆盖：
+#### M5 完成修订：PC/SPP Proxy + MiLink State/Command Integration（2026-06-05）
 
-- [ ] 通用 `MiuiGattProxyStrategy` / `MiuiSppProxyStrategy` 代理层尚未建立。
-- [ ] 未证明 Xiaomi PC/MMA 注册链会对 LinkBuds S 自然命中；M4 结论仍是
-  `MiuiSppPeripheral` / PC service path 未自然进入。
-- [ ] 未接入 MiLink 状态面或命令面；probe 仍是诊断工具，不替代 M3 bridge。
-- [ ] 未实现“probe 模式下 OpenBuds App 不 auto-connect”的应用内门控；
-  当前真机实验依赖手动/adb force-stop OpenBuds App 以避免 SPP socket 竞争。
-- [ ] 真实 Xiaomi/Redmi Buds 原路径回归仍需单独验证；当前设计层面 probe 仅在
-  显式 enable + MAC allowlist 命中时生效。
+Direct probe 成功后，M5 扩展为一个默认关闭、单 MAC allowlist 限定的 Sony SPP
+proxy 实验层。目标不变：证明 LinkBuds S 的 Sony SPP transport 能否在
+`com.xiaomi.bluetooth` 进程内作为受控代理工作；同时把可解析的 Sony SPP 状态发布
+到现有 MiLink bridge，并只在显式命令开关开启时路由一条低风险 NC/ASM 命令。
+
+新增完成项：
+
+- [x] 新增 proxy kill switch / 配置属性：
+  `debug.openbuds.xiaomi_bt_spp_proxy_enable=false`、
+  `debug.openbuds.xiaomi_bt_spp_proxy_mac`、
+  `debug.openbuds.xiaomi_bt_spp_proxy_transport=pc|direct`、
+  `debug.openbuds.xiaomi_bt_spp_proxy_command_enable=false`、
+  `debug.openbuds.xiaomi_bt_pc_register_package=com.mi.health`、
+  `debug.openbuds.xiaomi_bt_pc_register_action=dev.ignotus.openbuds.SONY_SPP_PROXY`。
+- [x] 将 direct probe 的 Sony SPP framing/ACK/query/parser/state 映射抽到
+  `SonySppWireSession`，复用 `SppFraming`、`SonySppPayloadMapper` 和现有
+  Sony Tandem parser。
+- [x] 建立 `MiuiSppProxyStrategy`，包含：
+  - `direct`：当前 RFCOMM direct socket fallback/diagnostic path。
+  - `pc`：反射调用 `MiuiPeripheralConnectionServiceReal.registerPCService(...)`，
+    使用 Sony MDR SPP UUID 与 `IPCServiceEventCallback` proxy 接收 status/data。
+- [x] 建立 `MiuiGattProxyStrategy` 明确 unsupported/no-op：LinkBuds S 在 M5
+  不走 Sony GATT proxy。
+- [x] 增加 MMA trace hooks：`MiuiMMAService`、`MiuiMMARegisterManager`、
+  `MiuiMMADataHandler` 的 register/send/receive 路径只记录，不封装 Sony Tandem
+  为 Xiaomi MMA。
+- [x] 扩展 bridge AIDL：
+  `openTransportProxySession()`、`registerTransportProxy(...)`、
+  `publishTransportProxySnapshot(...)`、`unregisterTransportProxy(...)`，并新增
+  `IMilinkTransportProxyCallback.executeProxyCommand(...)`。
+- [x] caller verifier 分角色：
+  普通 MiLink client 仅允许 `com.milink.service` / OpenBuds；
+  transport-proxy methods 仅允许 `com.xiaomi.bluetooth` / OpenBuds。
+- [x] `MilinkBridgeService` 合并 proxy snapshot：proxy 对某 MAC 激活时，MiLink
+  状态查询和 callback 可以使用 proxy-published Battery/NoiseControl state；未激活时
+  继续使用 App repository snapshot。
+- [x] 命令路由安全边界：只有 proxy 激活且
+  `debug.openbuds.xiaomi_bt_spp_proxy_command_enable=true` 时，
+  `COMMAND_SET_NOISE_CONTROL` 才会发到 `com.xiaomi.bluetooth` proxy callback；
+  否则回到既有 bridge-to-Repository 命令路径。若只有 proxy snapshot 而命令开关关闭，
+  不会借 proxy state 放行控制命令。
+- [x] OpenBuds App auto-connect 在 probe/proxy 开启且 MAC 命中时自动抑制，降低
+  SPP socket 竞争。
+
+2026-06-05 PC/SPP proxy 真机结论：
+
+- [x] 已确认设备运行中的 `com.xiaomi.bluetooth` base APK 不是直接暴露完整
+  peripheral/PC class 的单 dex 形态；`MiuiPeripheralConnectionServiceReal`、
+  `MiuiSppPeripheral`、`MiuiPCRegisterManager`、`MiuiGattPeripheral` 等类来自
+  Qigsaw `preloadedFeature-master.zip`，运行时由
+  `com.iqiyi.android.qigsaw.core.splitload.SplitDexClassLoader` 加载。
+- [x] deferred class-load hook 能捕获 Qigsaw split-loaded
+  `MiuiSppPeripheral` / `MiuiPCRegisterManager`，并安装 trace/proxy hook。
+- [x] `debug.openbuds.xiaomi_bt_spp_proxy_transport=pc` 真机验证中，
+  `MiuiPeripheralConnectionServiceReal.getPeripheralConnectionServiceReal()` /
+  `getPeripheralConnectionService()` 持续返回 `null`；`startService` / `bindService`
+  未得到可用 service instance。因此不能声明真正的
+  `registerPCService(...)` 路径成功。
+- [x] 当 PC service instance 不可用时，`pc` strategy 显式记录
+  `spp_proxy_pc_miui_spp_fallback`，并使用 split-loaded `MiuiSppPeripheral`
+  作为同进程 SPP fallback。LinkBuds S `F8:4E:17:D1:32:27` 在 Sony SPP UUID
+  `956c7b26-d49a-4ba8-b03f-b17d393cb6e2` 上最终进入 `state=2`，Xiaomi 日志输出
+  `spp connect success!`。
+- [x] `MiuiSppPeripheral.sendData(byte[])` 成功承载 OpenBuds 自己封装的 Sony SPP
+  frame：发送 readonly battery query `0E2200` 对应 frame
+  `3E0C00000000022200303C`，收到 DATA_MDR frame 后按 Sony SPP 规则回 ACK。
+- [x] 本轮 PC/SPP fallback 日志解析到 Sony Tandem `CommonStatus`、
+  `PlaybackAck` 和一个 `A9` unknown status frame；未开启 proxy command 写入
+  (`debug.openbuds.xiaomi_bt_spp_proxy_command_enable=false`)。
+- [x] 日志未见 `AndroidRuntime` / `FATAL EXCEPTION` /
+  `com.xiaomi.bluetooth` 崩溃，`com.xiaomi.bluetooth` 进程保持存活。
+
+准确结论：
+
+- Qigsaw split-loaded Xiaomi `MiuiSppPeripheral` 可以在 `com.xiaomi.bluetooth`
+  进程内承载 LinkBuds S 的 Sony SPP 数据链路。
+- Manifest/PC service instance 路径仍不可用；`MiuiPeripheralConnectionServiceReal`
+  返回 `null`，所以 direct `registerPCService(...)` 路径尚未证明。
+- 本轮不证明 Xiaomi MMA natural path；MMA 只观察到普通 A2DP 连接状态 receiver
+  日志，没有看到 LinkBuds S 自然进入可用的 MMA register/data path。
+
+仍不宣称覆盖：
+
+- [ ] 真正 PC registration path 尚未证明：当前只证明 `pc` strategy 的
+  split-loaded `MiuiSppPeripheral` fallback 可用；`MiuiPeripheralConnectionServiceReal`
+  service instance 仍为 `null`，不伪造 `registerPCService(...)` 成功。
+- [ ] LinkBuds S 是否自然进入 Xiaomi MMA 注册/数据路径仍未证明；M5 只 trace，
+  不实现 Xiaomi MMA 协议仿真。
+- [ ] 真实 Xiaomi/Redmi Buds 原路径回归仍需设备验证；当前设计上 proxy 仅在显式
+  enable + MAC allowlist 命中时启动。
+- [ ] M5 proxy 仍是实验/诊断路径，不替代 App 侧默认 `SppTransport` 主线。
 
 退出条件：
 

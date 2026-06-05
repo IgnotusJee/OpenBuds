@@ -35,6 +35,30 @@ class XiaomiBluetoothTraceConfigTest {
             "debug.openbuds.xiaomi_bt_spp_probe_uuid",
             XiaomiBluetoothTraceConfig.SPP_PROBE_UUID_PROPERTY,
         )
+        assertEquals(
+            "debug.openbuds.xiaomi_bt_spp_proxy_enable",
+            XiaomiBluetoothTraceConfig.SPP_PROXY_ENABLE_PROPERTY,
+        )
+        assertEquals(
+            "debug.openbuds.xiaomi_bt_spp_proxy_mac",
+            XiaomiBluetoothTraceConfig.SPP_PROXY_MAC_PROPERTY,
+        )
+        assertEquals(
+            "debug.openbuds.xiaomi_bt_spp_proxy_transport",
+            XiaomiBluetoothTraceConfig.SPP_PROXY_TRANSPORT_PROPERTY,
+        )
+        assertEquals(
+            "debug.openbuds.xiaomi_bt_spp_proxy_command_enable",
+            XiaomiBluetoothTraceConfig.SPP_PROXY_COMMAND_ENABLE_PROPERTY,
+        )
+        assertEquals(
+            "debug.openbuds.xiaomi_bt_pc_register_package",
+            XiaomiBluetoothTraceConfig.PC_REGISTER_PACKAGE_PROPERTY,
+        )
+        assertEquals(
+            "debug.openbuds.xiaomi_bt_pc_register_action",
+            XiaomiBluetoothTraceConfig.PC_REGISTER_ACTION_PROPERTY,
+        )
     }
 
     @Test
@@ -118,5 +142,25 @@ class XiaomiBluetoothTraceConfigTest {
             SonySppProbeUuid.AUTO,
             XiaomiBluetoothTraceConfig.parseSppProbeUuid("00000000-0000-0000-0000-000000000000"),
         )
+    }
+
+    @Test
+    fun parseSppProxyTransport_acceptsKnownModesCaseInsensitively() {
+        assertEquals(MiuiSppProxyTransport.PC, XiaomiBluetoothTraceConfig.parseSppProxyTransport("pc"))
+        assertEquals(MiuiSppProxyTransport.DIRECT, XiaomiBluetoothTraceConfig.parseSppProxyTransport("DIRECT"))
+    }
+
+    @Test
+    fun parseSppProxyTransport_fallsBackToPcForUnknownValues() {
+        assertEquals(MiuiSppProxyTransport.PC, XiaomiBluetoothTraceConfig.parseSppProxyTransport(""))
+        assertEquals(MiuiSppProxyTransport.PC, XiaomiBluetoothTraceConfig.parseSppProxyTransport("gatt"))
+    }
+
+    @Test
+    fun proxyDefaults_areSafeAndExplicit() {
+        assertFalse(XiaomiBluetoothTraceConfig.isSppProxyEnabled())
+        assertFalse(XiaomiBluetoothTraceConfig.isSppProxyCommandEnabled())
+        assertEquals("com.mi.health", XiaomiBluetoothTraceConfig.DEFAULT_PC_REGISTER_PACKAGE)
+        assertEquals("dev.ignotus.openbuds.SONY_SPP_PROXY", XiaomiBluetoothTraceConfig.DEFAULT_PC_REGISTER_ACTION)
     }
 }

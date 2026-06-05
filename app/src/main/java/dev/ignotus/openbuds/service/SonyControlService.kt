@@ -116,6 +116,10 @@ class SonyControlService : Service() {
             val target = bonded.firstOrNull { device ->
                 isKnownHeadphone(device.name ?: "")
             } ?: return
+            if (shouldSuppressAutoConnectForM5ProbeOrProxy(target.address)) {
+                Log.i(TAG, "Auto-connect suppressed for M5 SPP probe/proxy target ${target.address}")
+                return
+            }
 
             Log.i(TAG, "Auto-connecting via BLE scan to: ${target.name} (${target.address})")
             // Do a brief BLE scan to get proper SonyAd discovery data, then auto-connect.
@@ -129,7 +133,10 @@ class SonyControlService : Service() {
                     && repository.state.value.discoveredDevices.isNotEmpty()
                 ) {
                     val discovered = repository.state.value.discoveredDevices
-                        .firstOrNull { d -> d.address.normalizeMac() != null }
+                        .firstOrNull { d ->
+                            d.address.normalizeMac() != null &&
+                                !shouldSuppressAutoConnectForM5ProbeOrProxy(d.address)
+                        }
                     if (discovered != null) {
                         Log.i(TAG, "Auto-connecting discovered: ${discovered.name} (${discovered.address})")
                         repository.connect(discovered)
@@ -145,6 +152,26 @@ class SonyControlService : Service() {
         val n = name.lowercase()
         return KNOWN_PATTERNS.any { n.contains(it) }
     }
+
+    private fun shouldSuppressAutoConnectForM5ProbeOrProxy(mac: String?): Boolean {
+        val normalized = mac?.normalizeMac() ?: return false
+        val probeEnabled = readSystemProp("debug.openbuds.xiaomi_bt_spp_probe_enable", "false")
+            .equals("true", ignoreCase = true)
+        val probeMac = readSystemProp("debug.openbuds.xiaomi_bt_spp_probe_mac", "")
+            .normalizeMac()
+        val proxyEnabled = readSystemProp("debug.openbuds.xiaomi_bt_spp_proxy_enable", "false")
+            .equals("true", ignoreCase = true)
+        val proxyMac = readSystemProp("debug.openbuds.xiaomi_bt_spp_proxy_mac", "")
+            .normalizeMac()
+        return (probeEnabled && probeMac == normalized) || (proxyEnabled && proxyMac == normalized)
+    }
+
+    private fun readSystemProp(key: String, defaultValue: String): String =
+        runCatching {
+            val clazz = Class.forName("android.os.SystemProperties")
+            val method = clazz.getMethod("get", String::class.java, String::class.java)
+            method.invoke(null, key, defaultValue) as? String ?: defaultValue
+        }.getOrDefault(defaultValue)
 
     override fun onDestroy() {
         repository.disconnect()

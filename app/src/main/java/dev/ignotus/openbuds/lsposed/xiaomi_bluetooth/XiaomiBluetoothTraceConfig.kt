@@ -12,16 +12,30 @@ object XiaomiBluetoothTraceConfig {
     const val SPP_PROBE_MAC_PROPERTY = "debug.openbuds.xiaomi_bt_spp_probe_mac"
     const val SPP_PROBE_MODE_PROPERTY = "debug.openbuds.xiaomi_bt_spp_probe_mode"
     const val SPP_PROBE_UUID_PROPERTY = "debug.openbuds.xiaomi_bt_spp_probe_uuid"
+    const val SPP_PROXY_ENABLE_PROPERTY = "debug.openbuds.xiaomi_bt_spp_proxy_enable"
+    const val SPP_PROXY_MAC_PROPERTY = "debug.openbuds.xiaomi_bt_spp_proxy_mac"
+    const val SPP_PROXY_TRANSPORT_PROPERTY = "debug.openbuds.xiaomi_bt_spp_proxy_transport"
+    const val SPP_PROXY_COMMAND_ENABLE_PROPERTY = "debug.openbuds.xiaomi_bt_spp_proxy_command_enable"
+    const val PC_REGISTER_PACKAGE_PROPERTY = "debug.openbuds.xiaomi_bt_pc_register_package"
+    const val PC_REGISTER_ACTION_PROPERTY = "debug.openbuds.xiaomi_bt_pc_register_action"
+    const val DEFAULT_PC_REGISTER_PACKAGE = "com.mi.health"
+    const val DEFAULT_PC_REGISTER_ACTION = "dev.ignotus.openbuds.SONY_SPP_PROXY"
     const val DEFAULT_SAMPLE_MS = 2_000L
 
     fun shouldInstallForPackage(packageName: String): Boolean =
-        packageName == TARGET_PACKAGE && (isTraceEnabled() || isSppProbeEnabled())
+        packageName == TARGET_PACKAGE && (isTraceEnabled() || isSppProbeEnabled() || isSppProxyEnabled())
 
     fun isTraceEnabled(): Boolean =
         readSystemProp(TRACE_ENABLE_PROPERTY, "false").equals("true", ignoreCase = true)
 
     fun isSppProbeEnabled(): Boolean =
         readSystemProp(SPP_PROBE_ENABLE_PROPERTY, "false").equals("true", ignoreCase = true)
+
+    fun isSppProxyEnabled(): Boolean =
+        readSystemProp(SPP_PROXY_ENABLE_PROPERTY, "false").equals("true", ignoreCase = true)
+
+    fun isSppProxyCommandEnabled(): Boolean =
+        readSystemProp(SPP_PROXY_COMMAND_ENABLE_PROPERTY, "false").equals("true", ignoreCase = true)
 
     fun sampleWindowMs(): Long =
         parseSampleWindowMs(readSystemProp(TRACE_SAMPLE_MS_PROPERTY, DEFAULT_SAMPLE_MS.toString()))
@@ -55,6 +69,24 @@ object XiaomiBluetoothTraceConfig {
     fun sppProbeUuid(): SonySppProbeUuid =
         parseSppProbeUuid(readSystemProp(SPP_PROBE_UUID_PROPERTY, SonySppProbeUuid.AUTO.propertyValue))
 
+    fun sppProxyTargetMac(): String? =
+        readSystemProp(SPP_PROXY_MAC_PROPERTY, "").normalizeMac()
+
+    fun sppProxyTransport(): MiuiSppProxyTransport =
+        parseSppProxyTransport(
+            readSystemProp(SPP_PROXY_TRANSPORT_PROPERTY, MiuiSppProxyTransport.PC.propertyValue),
+        )
+
+    fun pcRegisterPackage(): String =
+        readSystemProp(PC_REGISTER_PACKAGE_PROPERTY, DEFAULT_PC_REGISTER_PACKAGE)
+            .trim()
+            .ifBlank { DEFAULT_PC_REGISTER_PACKAGE }
+
+    fun pcRegisterAction(): String =
+        readSystemProp(PC_REGISTER_ACTION_PROPERTY, DEFAULT_PC_REGISTER_ACTION)
+            .trim()
+            .ifBlank { DEFAULT_PC_REGISTER_ACTION }
+
     fun parseSppProbeMode(raw: String): SonySppProbeMode =
         SonySppProbeMode.entries.firstOrNull { it.propertyValue.equals(raw.trim(), ignoreCase = true) }
             ?: SonySppProbeMode.CONNECT
@@ -68,6 +100,11 @@ object XiaomiBluetoothTraceConfig {
             it.uuid.toString().equals(trimmed, ignoreCase = true)
         } ?: SonySppProbeUuid.AUTO
     }
+
+    fun parseSppProxyTransport(raw: String): MiuiSppProxyTransport =
+        MiuiSppProxyTransport.entries.firstOrNull {
+            it.propertyValue.equals(raw.trim(), ignoreCase = true)
+        } ?: MiuiSppProxyTransport.PC
 
     fun maskMac(mac: String?): String {
         val normalized = mac?.normalizeMac() ?: return mac.orEmpty()
@@ -86,6 +123,11 @@ enum class SonySppProbeMode(val propertyValue: String) {
     CONNECT("connect"),
     READONLY("readonly"),
     WRITE("write"),
+}
+
+enum class MiuiSppProxyTransport(val propertyValue: String) {
+    PC("pc"),
+    DIRECT("direct"),
 }
 
 sealed class SonySppProbeUuid(val propertyValue: String) {

@@ -374,7 +374,9 @@ Framework ready:
 
 ## Stage 9.5: M5 LinkBuds S Sony SPP direct probe
 
-**2026-06-05 status: Complete as a diagnostic probe, not a mainline bridge.**
+**2026-06-05 status: Direct probe validated; M5 proxy implementation complete.
+PC mode validated through Qigsaw split-loaded `MiuiSppPeripheral` fallback;
+true `registerPCService(...)` service path and MMA natural entry remain unproven.**
 
 Implemented:
 
@@ -411,12 +413,59 @@ Validated on LinkBuds S `F8:4E:17:D1:32:27`:
 
 Still out of scope:
 
-- [ ] Does not replace the OpenBuds App transport path
-- [ ] Does not replace MiLink bridge state or command flow
-- [ ] Does not prove Xiaomi PC/MMA registration naturally enters LinkBuds S
-- [ ] Does not implement a generic `MiuiGattProxyStrategy` / `MiuiSppProxyStrategy`
-- [ ] Does not remove the need to stop OpenBuds App before probe testing when App-side
-  SPP would otherwise hold the socket
+- [x] Add default-off proxy properties:
+  `debug.openbuds.xiaomi_bt_spp_proxy_enable=false`,
+  `debug.openbuds.xiaomi_bt_spp_proxy_mac`,
+  `debug.openbuds.xiaomi_bt_spp_proxy_transport=pc|direct`,
+  `debug.openbuds.xiaomi_bt_spp_proxy_command_enable=false`,
+  `debug.openbuds.xiaomi_bt_pc_register_package=com.mi.health`,
+  `debug.openbuds.xiaomi_bt_pc_register_action=dev.ignotus.openbuds.SONY_SPP_PROXY`
+- [x] Refactor reusable Sony SPP wire logic into `SonySppWireSession`
+- [x] Add `MiuiSppProxyStrategy` architecture with `direct` and `pc` strategies
+- [x] Add explicit unsupported/no-op `MiuiGattProxyStrategy` for LinkBuds S
+- [x] Add MMA trace hooks for register/send/receive paths without emulation
+- [x] Extend MiLink bridge AIDL for transport proxy sessions, registration,
+  snapshot publishing, unregister, and proxy command callback
+- [x] Merge active proxy Battery/NoiseControl snapshots into MiLink state
+- [x] Route `COMMAND_SET_NOISE_CONTROL` to the proxy callback only when proxy is
+  active and `debug.openbuds.xiaomi_bt_spp_proxy_command_enable=true`
+- [x] Suppress OpenBuds App auto-connect when M5 probe/proxy is enabled for the
+  same MAC
+
+PC/SPP proxy runtime validation on LinkBuds S `F8:4E:17:D1:32:27`:
+
+- [x] Confirmed `MiuiSppPeripheral`, `MiuiPCRegisterManager`,
+  `MiuiGattPeripheral`, and `MiuiPeripheralConnectionServiceReal` are Qigsaw
+  split-loaded classes at runtime, not always visible from the base APK class
+  loader.
+- [x] Deferred class-load hook sees `MiuiSppPeripheral` via
+  `com.iqiyi.android.qigsaw.core.splitload.SplitDexClassLoader` and installs
+  the trace/proxy hooks.
+- [x] `transport=pc` attempts to obtain
+  `MiuiPeripheralConnectionServiceReal`, but the runtime service instance
+  remains `null`; do not claim PC registration success.
+- [x] `transport=pc` explicit `MiuiSppPeripheral` fallback connects to Sony MDR
+  SPP UUID `956c7b26-d49a-4ba8-b03f-b17d393cb6e2`, reaches `state=2`, and logs
+  `spp connect success!`.
+- [x] `MiuiSppPeripheral.sendData(byte[])` carries OpenBuds-framed Sony SPP
+  readonly query `0E2200`; incoming DATA_MDR frames are ACKed by
+  `SonySppWireSession`.
+- [x] Runtime log contains parsed `CommonStatus`, `PlaybackAck`, and one unknown
+  `A9` Tandem status frame; proxy command writes were intentionally disabled.
+- [x] No matching `AndroidRuntime` / `FATAL EXCEPTION` /
+  `com.xiaomi.bluetooth` crash observed during the PC/SPP fallback window.
+
+Still out of scope / pending validation:
+
+- [ ] True PC registration through a live `MiuiPeripheralConnectionServiceReal`
+  service instance remains unproven; current success is the explicit
+  `MiuiSppPeripheral` fallback inside the `pc` strategy.
+- [ ] Does not prove Xiaomi MMA registration naturally enters LinkBuds S
+- [ ] Does not emulate Xiaomi MMA protocol unless runtime logs prove a compatible
+  payload boundary
+- [ ] Does not replace the OpenBuds App default transport path
+- [ ] Real Xiaomi/Redmi Buds regression remains a checklist item until a device is
+  available
 
 ## Stage 10: Verification checklist
 

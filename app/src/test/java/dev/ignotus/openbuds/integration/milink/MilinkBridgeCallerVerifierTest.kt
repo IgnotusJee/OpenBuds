@@ -32,6 +32,30 @@ class MilinkBridgeCallerVerifierTest {
     }
 
     @Test
+    fun clientRole_rejectsXiaomiBluetoothPackage() {
+        val verifier = verifier(
+            packages = mapOf(22 to arrayOf(MilinkBridgeContract.XIAOMI_BLUETOOTH_PACKAGE)),
+        )
+
+        assertFalse(verifier.isAllowedUid(22, MilinkBridgeCallerRole.CLIENT))
+    }
+
+    @Test
+    fun transportProxyRole_acceptsXiaomiBluetoothAndOpenBudsOnly() {
+        val verifier = verifier(
+            packages = mapOf(
+                22 to arrayOf(MilinkBridgeContract.XIAOMI_BLUETOOTH_PACKAGE),
+                23 to arrayOf(MilinkBridgeContract.OPENBUDS_PACKAGE),
+                24 to arrayOf(MilinkBridgeContract.MILINK_PACKAGE),
+            ),
+        )
+
+        assertTrue(verifier.isAllowedUid(22, MilinkBridgeCallerRole.TRANSPORT_PROXY))
+        assertTrue(verifier.isAllowedUid(23, MilinkBridgeCallerRole.TRANSPORT_PROXY))
+        assertFalse(verifier.isAllowedUid(24, MilinkBridgeCallerRole.TRANSPORT_PROXY))
+    }
+
+    @Test
     fun isAllowedUid_rejectsUnknownPackage() {
         val verifier = verifier(
             packages = mapOf(30 to arrayOf("com.example.other")),

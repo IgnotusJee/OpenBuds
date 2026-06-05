@@ -33,6 +33,8 @@ class MilinkBridgeService : Service() {
     private val secureRandom = SecureRandom()
     private val sessions = ConcurrentHashMap<String, Session>()
     private val snapshots = ConcurrentHashMap<String, MilinkDeviceSnapshot>()
+    private val proxySnapshots = ConcurrentHashMap<String, MilinkDeviceSnapshot>()
+    private val proxyRegistrations = ConcurrentHashMap<String, ProxyRegistration>()
 
     @Volatile
     private var adapterEnabled: Boolean = false
@@ -102,7 +104,11 @@ class MilinkBridgeService : Service() {
         override fun openSession(): Bundle {
             val uid = verifyCaller()
             val token = newToken()
-            sessions[token] = Session(uid = uid, lastSeenMs = SystemClock.elapsedRealtime())
+            sessions[token] = Session(
+                uid = uid,
+                role = MilinkBridgeCallerRole.CLIENT,
+                lastSeenMs = SystemClock.elapsedRealtime(),
+            )
             return Bundle().apply {
                 putString(MilinkBridgeContract.KEY_TOKEN, token)
             }
@@ -126,7 +132,7 @@ class MilinkBridgeService : Service() {
         override fun getDeviceSnapshot(token: String?, mac: String?): Bundle {
             verifySession(token)
             val targetMac = mac?.normalizeMac() ?: return Bundle()
-            val snapshot = snapshots[targetMac]
+            val snapshot = snapshotFor(targetMac)
             return if (snapshot != null && isAuthorized(snapshot)) {
                 snapshot.toBundle()
             } else {
@@ -145,14 +151,36 @@ class MilinkBridgeService : Service() {
                 ).toBundle()
             }
             val envelope = command.toMilinkBridgeCommandEnvelope()
+            val proxyCommandEnabled = MilinkTransportProxyCoordinator.isProxyCommandPropertyEnabled()
+            val proxyRouteCandidate =
+                envelope.commandType == MilinkBridgeContract.COMMAND_SET_NOISE_CONTROL &&
+                    targetMac in activeProxyMacs() &&
+                    proxyCommandEnabled
+            val snapshot = MilinkTransportProxyCoordinator.commandEvaluationSnapshotFor(
+                mac = targetMac,
+                command = envelope,
+                appSnapshots = snapshots,
+                proxySnapshots = proxySnapshots,
+                activeProxyMacs = activeProxyMacs(),
+                proxyCommandEnabled = proxyCommandEnabled,
+            )?.takeIf(::isAuthorized)
             val decision = MilinkBridgeCommandProcessor.evaluate(
                 adapterEnabled = adapterEnabled,
-                snapshot = snapshots[targetMac]?.takeIf(::isAuthorized),
+                snapshot = snapshot,
                 command = envelope,
             )
-            Log.i(TAG, "[ANC_CMD] evaluate mac=$targetMac adapterEnabled=$adapterEnabled snapshotExists=${snapshots[targetMac] != null} mode=${envelope.noiseMode} requestId=${envelope.requestId} success=${decision.success} reason=${decision.reason}")
+            Log.i(TAG, "[ANC_CMD] evaluate mac=$targetMac adapterEnabled=$adapterEnabled snapshotExists=${snapshot != null} proxyActive=${targetMac in activeProxyMacs()} proxyCommandEnabled=$proxyCommandEnabled routeCandidate=$proxyRouteCandidate mode=${envelope.noiseMode} requestId=${envelope.requestId} success=${decision.success} reason=${decision.reason}")
             val action = decision.action
             if (decision.success && action != null) {
+                if (MilinkTransportProxyCoordinator.shouldRouteNoiseCommandToProxy(
+                        mac = targetMac,
+                        activeProxyMacs = activeProxyMacs(),
+                        commandEnabled = proxyCommandEnabled,
+                        action = action,
+                    )
+                ) {
+                    return executeProxyCommand(targetMac, command, decision.requestId)
+                }
                 val execution = executeAcceptedCommand(action, decision.requestId)
                 if (!execution.success) {
                     return execution.toBundle()
@@ -176,6 +204,74 @@ class MilinkBridgeService : Service() {
         override fun unregisterCallback(token: String?, callback: IMilinkBridgeCallback?) {
             verifySession(token)
             if (callback != null) callbacks.unregister(callback)
+        }
+
+        override fun openTransportProxySession(): Bundle {
+            val uid = verifyCaller(MilinkBridgeCallerRole.TRANSPORT_PROXY)
+            val token = newToken()
+            sessions[token] = Session(
+                uid = uid,
+                role = MilinkBridgeCallerRole.TRANSPORT_PROXY,
+                lastSeenMs = SystemClock.elapsedRealtime(),
+            )
+            return Bundle().apply {
+                putString(MilinkBridgeContract.KEY_TOKEN, token)
+            }
+        }
+
+        override fun registerTransportProxy(
+            token: String?,
+            mac: String?,
+            capabilities: Bundle?,
+            callback: IMilinkTransportProxyCallback?,
+        ): Bundle {
+            verifySession(token, MilinkBridgeCallerRole.TRANSPORT_PROXY)
+            val targetMac = mac?.normalizeMac()
+            if (targetMac == null) {
+                return MilinkTransportProxyCoordinator.rejectedBundle(MilinkBridgeContract.REASON_INVALID_MAC)
+            }
+            if (callback == null) {
+                return MilinkTransportProxyCoordinator.rejectedBundle(MilinkBridgeContract.REASON_BRIDGE_UNAVAILABLE)
+            }
+            proxyRegistrations[targetMac] = ProxyRegistration(
+                mac = targetMac,
+                capabilities = Bundle(capabilities ?: Bundle.EMPTY),
+                callback = callback,
+                updatedAt = SystemClock.elapsedRealtime(),
+            )
+            notifyClients()
+            Log.i(TAG, "[M5_PROXY] registered mac=$targetMac capabilities=${capabilities?.keySet().orEmpty()}")
+            return MilinkTransportProxyCoordinator.acceptedBundle().apply {
+                putBoolean(MilinkBridgeContract.KEY_PROXY_ACTIVE, true)
+                putString(MilinkBridgeContract.KEY_PROXY_MAC, targetMac)
+            }
+        }
+
+        override fun publishTransportProxySnapshot(token: String?, snapshot: Bundle?): Bundle {
+            verifySession(token, MilinkBridgeCallerRole.TRANSPORT_PROXY)
+            val parsed = MilinkDeviceSnapshot.fromBundle(snapshot)
+                ?: return MilinkTransportProxyCoordinator.rejectedBundle(MilinkBridgeContract.REASON_INVALID_MAC)
+            if (!proxyRegistrations.containsKey(parsed.mac)) {
+                return MilinkTransportProxyCoordinator.rejectedBundle(MilinkBridgeContract.REASON_PROXY_INACTIVE)
+            }
+            proxySnapshots[parsed.mac] = parsed
+            proxyRegistrations.computeIfPresent(parsed.mac) { _, registration ->
+                registration.copy(updatedAt = SystemClock.elapsedRealtime())
+            }
+            notifyClients()
+            Log.i(TAG, "[M5_PROXY] snapshot mac=${parsed.mac} battery=${parsed.singleBattery ?: parsed.leftBattery} anc=${parsed.ancMode} revision=${parsed.revision}")
+            return MilinkTransportProxyCoordinator.acceptedBundle()
+        }
+
+        override fun unregisterTransportProxy(token: String?, mac: String?): Bundle {
+            verifySession(token, MilinkBridgeCallerRole.TRANSPORT_PROXY)
+            val targetMac = mac?.normalizeMac()
+                ?: return MilinkTransportProxyCoordinator.rejectedBundle(MilinkBridgeContract.REASON_INVALID_MAC)
+            proxyRegistrations.remove(targetMac)
+            proxySnapshots.remove(targetMac)
+            notifyClients()
+            Log.i(TAG, "[M5_PROXY] unregistered mac=$targetMac")
+            return MilinkTransportProxyCoordinator.acceptedBundle()
         }
     }
 
@@ -203,17 +299,20 @@ class MilinkBridgeService : Service() {
             )
         }
 
-    private fun verifyCaller(): Int {
+    private fun verifyCaller(role: MilinkBridgeCallerRole = MilinkBridgeCallerRole.CLIENT): Int {
         val uid = Binder.getCallingUid()
-        callerVerifier.verify(uid)
+        callerVerifier.verify(uid, role)
         return uid
     }
 
-    private fun verifySession(token: String?) {
-        val uid = verifyCaller()
+    private fun verifySession(
+        token: String?,
+        role: MilinkBridgeCallerRole = MilinkBridgeCallerRole.CLIENT,
+    ) {
+        val uid = verifyCaller(role)
         val session = token?.takeIf { it.isNotBlank() }?.let(sessions::get)
-        if (session == null || session.uid != uid) {
-            throw SecurityException("MiLink bridge session is not open")
+        if (session == null || session.uid != uid || session.role != role) {
+            throw SecurityException("MiLink bridge session is not open for role=$role")
         }
         sessions[token] = session.copy(lastSeenMs = SystemClock.elapsedRealtime())
     }
@@ -248,12 +347,48 @@ class MilinkBridgeService : Service() {
         authorizedSnapshots().map { it.mac }
 
     private fun authorizedSnapshots(): List<MilinkDeviceSnapshot> =
-        snapshots.values
+        MilinkTransportProxyCoordinator.mergedSnapshots(
+            appSnapshots = snapshots.values,
+            proxySnapshots = proxySnapshots.values,
+            activeProxyMacs = activeProxyMacs(),
+        )
             .filter(::isAuthorized)
             .sortedBy { it.mac }
 
+    private fun snapshotFor(mac: String): MilinkDeviceSnapshot? =
+        MilinkTransportProxyCoordinator.snapshotFor(
+            mac = mac,
+            appSnapshots = snapshots,
+            proxySnapshots = proxySnapshots,
+            activeProxyMacs = activeProxyMacs(),
+        )
+
+    private fun activeProxyMacs(): Set<String> =
+        proxyRegistrations.keys.toSet()
+
     private fun isAuthorized(snapshot: MilinkDeviceSnapshot): Boolean =
         adapterEnabled && snapshot.connected && snapshot.mac.isNotBlank()
+
+    private fun executeProxyCommand(
+        targetMac: String,
+        command: Bundle?,
+        requestId: String?,
+    ): Bundle {
+        val registration = proxyRegistrations[targetMac]
+            ?: return MilinkTransportProxyCoordinator.rejectedBundle(
+                MilinkBridgeContract.REASON_PROXY_INACTIVE,
+                requestId,
+            )
+        return runCatching {
+            registration.callback.executeProxyCommand(targetMac, command ?: Bundle.EMPTY)
+        }.getOrElse { error ->
+            Log.w(TAG, "[M5_PROXY] proxy command failed mac=$targetMac", error)
+            MilinkTransportProxyCoordinator.rejectedBundle(
+                MilinkBridgeContract.REASON_REMOTE_ERROR,
+                requestId,
+            )
+        }
+    }
 
     private fun notifyClients() {
         val authorized = authorizedSnapshots()
@@ -283,6 +418,14 @@ class MilinkBridgeService : Service() {
 
     private data class Session(
         val uid: Int,
+        val role: MilinkBridgeCallerRole,
         val lastSeenMs: Long,
+    )
+
+    private data class ProxyRegistration(
+        val mac: String,
+        val capabilities: Bundle,
+        val callback: IMilinkTransportProxyCallback,
+        val updatedAt: Long,
     )
 }

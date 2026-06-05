@@ -12,16 +12,33 @@ class MilinkBridgeCallerVerifier(
         packageResolver = { uid -> context.packageManager.getPackagesForUid(uid).orEmpty() },
     )
 
-    fun verify(uid: Int) {
-        if (!isAllowedUid(uid)) {
-            throw SecurityException("MiLink bridge caller uid=$uid is not allowed")
+    fun verify(
+        uid: Int,
+        role: MilinkBridgeCallerRole = MilinkBridgeCallerRole.CLIENT,
+    ) {
+        if (!isAllowedUid(uid, role)) {
+            throw SecurityException("MiLink bridge caller uid=$uid is not allowed for role=$role")
         }
     }
 
-    fun isAllowedUid(uid: Int): Boolean {
+    fun isAllowedUid(
+        uid: Int,
+        role: MilinkBridgeCallerRole = MilinkBridgeCallerRole.CLIENT,
+    ): Boolean {
         if (uid == ownUid()) return true
         val packages = packageResolver(uid).toSet()
-        return MilinkBridgeContract.MILINK_PACKAGE in packages ||
-            MilinkBridgeContract.OPENBUDS_PACKAGE in packages
+        return when (role) {
+            MilinkBridgeCallerRole.CLIENT ->
+                MilinkBridgeContract.MILINK_PACKAGE in packages ||
+                    MilinkBridgeContract.OPENBUDS_PACKAGE in packages
+            MilinkBridgeCallerRole.TRANSPORT_PROXY ->
+                MilinkBridgeContract.XIAOMI_BLUETOOTH_PACKAGE in packages ||
+                    MilinkBridgeContract.OPENBUDS_PACKAGE in packages
+        }
     }
+}
+
+enum class MilinkBridgeCallerRole {
+    CLIENT,
+    TRANSPORT_PROXY,
 }

@@ -6,9 +6,11 @@ import java.lang.reflect.Method
 import java.util.concurrent.ConcurrentHashMap
 
 class DeferredClassLoadTraceInstaller(
-    private val fastConnectTraceHook: FastConnectTraceHook,
-    private val notificationTraceHook: NotificationTraceHook,
-    private val peripheralTraceHook: PeripheralTraceHook,
+    private val fastConnectTraceHook: FastConnectTraceHook? = null,
+    private val notificationTraceHook: NotificationTraceHook? = null,
+    private val peripheralTraceHook: PeripheralTraceHook? = null,
+    private val mmaTraceHook: MmaTraceHook? = null,
+    private val onLoadedClass: ((String, Class<*>) -> Unit)? = null,
     private val logger: XiaomiBluetoothTraceLogger,
 ) {
     private val installedClassNames = ConcurrentHashMap.newKeySet<String>()
@@ -55,9 +57,12 @@ class DeferredClassLoadTraceInstaller(
         if (!installedClassNames.add(className)) return
 
         val installed =
-            fastConnectTraceHook.installLoadedClass(clazz) ||
-                notificationTraceHook.installLoadedClass(clazz) ||
-                peripheralTraceHook.installLoadedClass(clazz)
+            fastConnectTraceHook?.installLoadedClass(clazz) == true ||
+                notificationTraceHook?.installLoadedClass(clazz) == true ||
+                peripheralTraceHook?.installLoadedClass(clazz) == true ||
+                mmaTraceHook?.installLoadedClass(clazz) == true
+
+        onLoadedClass?.invoke(className, clazz)
 
         logger.info(
             event = "deferred_hook_install",
@@ -71,7 +76,9 @@ class DeferredClassLoadTraceInstaller(
         val targetClassNames: Set<String> =
             FastConnectTraceHook.targetClassNames +
                 NotificationTraceHook.targetClassNames +
-                PeripheralTraceHook.targetClassNames
+                PeripheralTraceHook.targetClassNames +
+                MmaTraceHook.targetClassNames +
+                SonySppProxy.targetClassNames
     }
 }
 

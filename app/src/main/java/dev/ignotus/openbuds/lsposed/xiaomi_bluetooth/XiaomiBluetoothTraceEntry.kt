@@ -11,20 +11,26 @@ class XiaomiBluetoothTraceEntry(
 ) {
     private val logger = XiaomiBluetoothTraceLogger(macAllowlist = combinedMacAllowlist())
     private val sonySppProbe = SonySppProbe(logger)
+    private val sonySppProxy = SonySppProxy(classLoader, logger)
 
     fun installIfEnabled() {
         val traceEnabled = XiaomiBluetoothTraceConfig.isTraceEnabled()
         val sppProbeEnabled = XiaomiBluetoothTraceConfig.isSppProbeEnabled()
-        if (!traceEnabled && !sppProbeEnabled) {
+        val sppProxyEnabled = XiaomiBluetoothTraceConfig.isSppProxyEnabled()
+        if (!traceEnabled && !sppProbeEnabled && !sppProxyEnabled) {
             Log.i(
                 TAG,
                 "[XIAOMI_BT_TRACE] disabled traceProperty=${XiaomiBluetoothTraceConfig.TRACE_ENABLE_PROPERTY} " +
-                    "sppProbeProperty=${XiaomiBluetoothTraceConfig.SPP_PROBE_ENABLE_PROPERTY}",
+                    "sppProbeProperty=${XiaomiBluetoothTraceConfig.SPP_PROBE_ENABLE_PROPERTY} " +
+                    "sppProxyProperty=${XiaomiBluetoothTraceConfig.SPP_PROXY_ENABLE_PROPERTY}",
             )
             return
         }
         if (traceEnabled) installTraceHooks()
-        if (sppProbeEnabled) installSppProbeContextHook()
+        if (!traceEnabled && sppProxyEnabled && XiaomiBluetoothTraceConfig.sppProxyTransport() == MiuiSppProxyTransport.PC) {
+            installProxyClassLoadHook()
+        }
+        if (sppProbeEnabled || sppProxyEnabled) installContextHook()
     }
 
     private fun installTraceHooks() {
@@ -38,24 +44,35 @@ class XiaomiBluetoothTraceEntry(
         val fastConnectTraceHook = FastConnectTraceHook(classLoader, logger)
         val notificationTraceHook = NotificationTraceHook(classLoader, logger)
         val peripheralTraceHook = PeripheralTraceHook(classLoader, logger)
+        val mmaTraceHook = MmaTraceHook(classLoader, logger)
 
         fastConnectTraceHook.install()
         notificationTraceHook.install()
         peripheralTraceHook.install()
+        mmaTraceHook.install()
         DeferredClassLoadTraceInstaller(
             fastConnectTraceHook = fastConnectTraceHook,
             notificationTraceHook = notificationTraceHook,
             peripheralTraceHook = peripheralTraceHook,
+            mmaTraceHook = mmaTraceHook,
+            onLoadedClass = sonySppProxy::onLoadedClass,
             logger = logger,
         ).install()
     }
 
-    private fun installSppProbeContextHook() {
+    private fun installProxyClassLoadHook() {
+        DeferredClassLoadTraceInstaller(
+            onLoadedClass = sonySppProxy::onLoadedClass,
+            logger = logger,
+        ).install()
+    }
+
+    private fun installContextHook() {
         val method = runCatching {
             Application::class.java.getDeclaredMethod("attach", Context::class.java)
                 .also { it.isAccessible = true }
         }.onFailure {
-            logger.warn("spp_probe_attach_hook_missing", "Application.attach(Context)", it)
+            logger.warn("xiaomi_bt_attach_hook_missing", "Application.attach(Context)", it)
         }.getOrNull() ?: return
 
         ModuleMain.instance.hook(method)
@@ -67,9 +84,11 @@ class XiaomiBluetoothTraceEntry(
                         val context = (chain.args.firstOrNull() as? Context)
                             ?: (chain.thisObject as? Application)
                         if (context != null) {
-                            sonySppProbe.startOnce(context.applicationContext ?: context)
+                            val appContext = context.applicationContext ?: context
+                            sonySppProbe.startOnce(appContext)
+                            sonySppProxy.startOnce(appContext)
                         }
-                    }.onFailure { logger.warn("spp_probe_attach_error", "Application.attach(Context)", it) }
+                    }.onFailure { logger.warn("xiaomi_bt_attach_error", "Application.attach(Context)", it) }
                     return result
                 }
             })
@@ -81,6 +100,9 @@ class XiaomiBluetoothTraceEntry(
 
         private fun combinedMacAllowlist(): Set<String> =
             XiaomiBluetoothTraceConfig.macAllowlist() +
-                setOfNotNull(XiaomiBluetoothTraceConfig.sppProbeTargetMac())
+                setOfNotNull(
+                    XiaomiBluetoothTraceConfig.sppProbeTargetMac(),
+                    XiaomiBluetoothTraceConfig.sppProxyTargetMac(),
+                )
     }
 }

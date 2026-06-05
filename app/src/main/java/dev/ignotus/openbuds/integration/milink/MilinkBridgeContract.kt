@@ -6,6 +6,7 @@ object MilinkBridgeContract {
     const val SERVICE_CLASS = "dev.ignotus.openbuds.integration.milink.MilinkBridgeService"
     const val MILINK_PACKAGE = "com.milink.service"
     const val OPENBUDS_PACKAGE = "dev.ignotus.openbuds"
+    const val XIAOMI_BLUETOOTH_PACKAGE = "com.xiaomi.bluetooth"
 
     const val KEY_TOKEN = "token"
     const val KEY_ENABLED = "enabled"
@@ -21,6 +22,10 @@ object MilinkBridgeContract {
     const val KEY_AUDIO_EFFECT_STATE = "audioEffectState"
     const val KEY_RING_ENABLED = "ringEnabled"
     const val KEY_REQUEST_ID = "requestId"
+    const val KEY_PROXY_ACTIVE = "proxyActive"
+    const val KEY_PROXY_MAC = "proxyMac"
+    const val KEY_PROXY_CAPABILITIES = "proxyCapabilities"
+    const val KEY_PROXY_TRANSPORT = "proxyTransport"
 
     const val KEY_MAC = "mac"
     const val KEY_NAME = "name"
@@ -78,4 +83,6 @@ object MilinkBridgeContract {
     const val REASON_BRIDGE_UNAVAILABLE = "bridge_unavailable"
     const val REASON_TIMEOUT = "timeout"
     const val REASON_REMOTE_ERROR = "remote_error"
+    const val REASON_PROXY_INACTIVE = "proxy_inactive"
+    const val REASON_PROXY_COMMAND_DISABLED = "proxy_command_disabled"
 }

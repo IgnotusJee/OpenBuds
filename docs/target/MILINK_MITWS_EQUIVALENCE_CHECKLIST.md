@@ -379,6 +379,10 @@ Current validated process roles:
     per-MAC, default-off direct probe
   - The probe can complete connect, readonly battery query, ACK handling, and one
     NC/ASM write round-trip inside the Xiaomi Bluetooth process
+  - `transport=pc` can also carry Sony SPP frames through the Qigsaw split-loaded
+    Xiaomi `MiuiSppPeripheral` fallback inside `com.xiaomi.bluetooth`
+  - A live `MiuiPeripheralConnectionServiceReal` instance was not available in
+    runtime validation, so the direct `registerPCService(...)` path is not proven
   - This is transport feasibility evidence only; it is not a full replacement of
     Xiaomi's RemoteProtocol, QueryLocal, Profile, Registry, PC, or MMA stack
 - Conclusion:
@@ -445,6 +449,18 @@ Operationally, as of 2026-06-04:
   write command, and parse the resulting `NoiseControl` response. This confirms
   process-local Sony SPP transport feasibility, but does not upgrade the current
   facade into full MiTWS remote protocol equivalence.
+- **M5 PC/SPP proxy implementation**: the code now contains a default-off,
+  per-MAC Sony SPP proxy with `direct` fallback and `pc` registration strategies,
+  bridge-level proxy snapshot publishing, and gated ANC command routing through
+  `com.xiaomi.bluetooth`. This upgrades M5 from pure diagnostic probe to an
+  experimental transport proxy.
+- **M5 PC/SPP runtime result**: LinkBuds S `F8:4E:17:D1:32:27` validated the
+  Qigsaw split-loaded `MiuiSppPeripheral` fallback path. The fallback reached
+  SPP connected state, sent the Sony readonly query, ACKed incoming frames, and
+  parsed Tandem `CommonStatus` / `PlaybackAck` without a
+  `com.xiaomi.bluetooth` crash. A live `MiuiPeripheralConnectionServiceReal`
+  instance was still unavailable, so `registerPCService(...)` success and Xiaomi
+  MMA natural-entry behavior remain unproven.
 
 For the implementation order and structural fix strategy, use the V2 main plan
 and target implementation checklist instead of extending this document.
