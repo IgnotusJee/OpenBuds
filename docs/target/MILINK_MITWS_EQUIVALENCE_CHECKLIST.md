@@ -200,12 +200,14 @@ Current validated process roles:
   - `HeadSetsDetail` reads `C4737b0.m19873G()`
   - Controller ultimately reads `HeadsetDeviceInfo.headsetVolume`
 - Current implementation:
-  - `hookProfileContextVolume()` returns `currentVolume` from active snapshot
-  - `MilinkBridgeSnapshotMapper.fromUiState()` maps `volumeState.musicVolume` → `currentVolume`
+  - **Native MiTWS discovery**: `VolumeController` uses `AudioManager.getStreamVolume(STREAM_MUSIC)` / `setStreamVolume()` directly. No MMA/Tandem protocol volume commands are used. Android's Bluetooth stack syncs volume via AVRCP Absolute Volume / HFP.
+  - `hookProfileContextVolume()`: reads `AudioManager.getStreamVolume(STREAM_MUSIC)` → `adaptToPercentVolume` → 0-100%
+  - `resolvedHeadsetInfoVolume()`: same AudioManager percentage for `HeadsetInfo.headsetVolume` initial display consistency
+  - `installVolumeControlHook()`: `adaptToStreamVolume` → `AudioManager.setStreamVolume(STREAM_MUSIC, ...)`
   - `supportsVolumeControl` from `profile.supports(HeadphoneFeature.VOLUME)`
-  - Bridge `SetVolume` command forwarded through `installVolumeControlHook()` → `MilinkBridgeClient` → `repository.setVolume()`
+  - OpenBuds App's own volume UI uses Tandem/QCY protocol (separate path, not involved in MiLink)
 - Conclusion:
-  - Volume state and control surface are fully replaced for OpenBuds targets.
+  - Volume state and control surface are fully replaced via AudioManager, matching native MiTWS behavior byte-for-byte.
 
 ### C7. Audio effect state
 

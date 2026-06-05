@@ -749,6 +749,43 @@ M3+ Volume 完成记录（2026-06-05）：
 
 **构建**：`testDebugUnitTest` 409/409 通过，`assembleDebug` 成功。
 
+#### 音量机制修订：从协议映射切换到 AudioManager（2026-06-05）
+
+**关键发现**：反编译 `com.milink.service` 确认——原生 MiTWS **不通过 MMA/Tandem 协议控制耳机音量**。
+
+原生调用链：
+```
+MiLink 滑块调整 (0-100%)
+  → ProfileContext.setVolume(percent)          [ProfileContext.java:862-870]
+    → VolumeController.setVolume(percent)        [VolumeController.java:368-373]
+      → adaptToStreamVolume(percent, min, max)   [EarphoneSupervisorKt.java:24-26]
+      → audioManager.setStreamVolume(STREAM_MUSIC, adapted, FLAG_SHOW_UI)
+→ Android 蓝牙栈通过 AVRCP Absolute Volume / HFP 自动同步到耳机
+```
+
+读取方向同样读 `AudioManager.getStreamVolume(STREAM_MUSIC)` → `adaptToPercentVolume` 映射到 0-100%。
+
+**原始实现问题**：最初 Volume 全链路通过 bridge command → repository → Sony/QCY 协议发送给耳机，与原生路径完全不匹配。导致：
+1. 滑块 50% 时耳机音量已达 100%（协议 raw 值与 MiLink 百分比范围不一致）
+2. 卡片初始显示值来自耳机协议 raw 值（0-31），与 MiLink 的 0-100% 滑块不一致
+
+**修复历程**：
+1. **第一次（`0e546fb`）**：尝试线性缩放常量 `MI_LINK_VOLUME_MAX=15` ↔ `HEADPHONE_VOLUME_MAX=31`。失败——实际 MiLink 滑块为 0-100 百分比。
+2. **第二次（`9bc9a99`）**：修正常量为 `MI_LINK_VOLUME_MAX=100` ↔ `HEADPHONE_VOLUME_MAX=15`。部分改善，但根本方向错误。
+3. **第三次（`2ed50bb`）**：彻底放弃协议路径。`hookProfileContextVolume` 直接读 `AudioManager.getStreamVolume(STREAM_MUSIC)` → 0-100%；`installVolumeControlHook` 直接调 `AudioManager.setStreamVolume(STREAM_MUSIC, ...)`。
+4. **第四次（`4e09d7e`）**：修复 AudioManager 在 hook 安装时获取为空的问题，改为每次调用时延迟获取。
+5. **第五次（`4f4558e`）**：修复 `HeadsetInfo.headsetVolume`（卡片初始显示）与 `getVolume` hook 不一致——前者用 `snapshot.currentVolume`（耳机 raw），后者用 AudioManager 百分比。统一为 AudioManager。
+
+**最终架构**：
+| 方向 | 实现 | 公式 |
+|------|------|------|
+| 读取 | `hookProfileContextVolume` → AudioManager | `round((streamVol-min)/(max-min)*100)` |
+| 设置 | `installVolumeControlHook` → AudioManager | `round(min + percent/100*(max-min))` |
+| 初始显示 | `resolvedHeadsetInfoVolume` → AudioManager | 同上 |
+| OpenBuds App 自有音量 | `HeadphoneRepository.setVolume()` → Tandem/QCY 协议 | 保持不变（App 内部使用） |
+
+**协议层保留**：Sony PLAY_PARAM / QCY CMDID_VOLUME 的协议命令和 repository 方法**保留不动**——OpenBuds App 自有音量 UI 仍通过协议控制耳机。MiLink 路径走系统音量，两者互不干扰。
+
 ### M3+ 收尾：多设备缓存、能力矩阵、capability 扩展（2026-06-05，轻量实现）
 
 #### 多设备过期 snapshot 保留

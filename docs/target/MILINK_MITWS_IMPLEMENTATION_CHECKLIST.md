@@ -340,13 +340,25 @@ Framework ready:
 
 ## Stage 9: Volume capability implementation plan
 
-**2026-06-05 status: Complete.** See `docs/plan/MILINK_FIRST_PARTY_ADAPTER_PLAN_V2.md` M3+ Volume 完成记录 for details.
+**2026-06-05 status: Complete — using AudioManager (native MiTWS path).**
 
-- [x] Confirm OpenBuds-side writable volume abstraction
-- [x] Extend snapshot with current volume
-- [x] Add bridge `SetVolume`
-- [x] Hook MiLink volume control path
-- [x] Verify refresh path after volume updates
+**Key finding** (2026-06-05): Native MiTWS `VolumeController` uses `AudioManager.getStreamVolume(STREAM_MUSIC)` / `setStreamVolume()` directly. No MMA/Tandem protocol volume commands. Android Bluetooth stack syncs via AVRCP Absolute Volume / HFP. See plan V2 §音量机制修订 for full evidence chain.
+
+- [x] getter: `hookProfileContextVolume()` → `AudioManager.getStreamVolume(STREAM_MUSIC)` → `adaptToPercentVolume` → 0-100%
+- [x] setter: `installVolumeControlHook()` → `adaptToStreamVolume` → `AudioManager.setStreamVolume(STREAM_MUSIC, ...)`
+- [x] initial display: `resolvedHeadsetInfoVolume()` → same AudioManager percentage (matches getter on first card open)
+- [x] `supportsVolumeControl` from `profile.supports(HeadphoneFeature.VOLUME)`
+- [x] Volume slider displays actual system media volume percentage
+- [x] Volume changes map linearly through AudioManager
+- [x] No desync between MiLink UI display and system volume
+
+**Evolution** (see plan V2 for full history):
+1. Initial: protocol path (bridge command → Tandem/QCY)
+2. Scaling attempt 1: `MI_LINK_MAX=15 ↔ HEADPHONE_MAX=31` — incorrect range assumption
+3. Scaling attempt 2: `MI_LINK_MAX=100 ↔ HEADPHONE_MAX=15` — closer but wrong approach
+4. Final: AudioManager — matches native behavior exactly
+5. Lazy fix: AudioManager acquisition moved to invocation time
+6. Consistency fix: `HeadsetInfo.headsetVolume` unified with getter
 
 ### Milink-side references
 
