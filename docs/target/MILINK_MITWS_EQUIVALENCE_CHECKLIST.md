@@ -374,6 +374,13 @@ Current validated process roles:
 - Current architecture:
   - The solution replaces selected facade points
   - It does not fully replace MiLink's complete first-party remote protocol stack
+- M5 diagnostic evidence:
+  - `com.xiaomi.bluetooth` can hold a Sony LinkBuds S SPP control connection in a
+    per-MAC, default-off direct probe
+  - The probe can complete connect, readonly battery query, ACK handling, and one
+    NC/ASM write round-trip inside the Xiaomi Bluetooth process
+  - This is transport feasibility evidence only; it is not a full replacement of
+    Xiaomi's RemoteProtocol, QueryLocal, Profile, Registry, PC, or MMA stack
 - Conclusion:
   - This is a facade-based compatibility solution, not a full first-party protocol emulation.
 
@@ -430,6 +437,14 @@ Operationally, as of 2026-06-04:
 - **Multi-device snapshot retention**: `MilinkBridgeService` no longer clears all snapshots on each state update. Disconnected devices retain snapshots for 5 min (SNAPSHOT_STALE_MS), giving MiLink a multi-device appearance without touching the single-connection transport layer.
 - **`DeviceCapabilityRegistry`**: Static per-model capability lookup (`supports(modelName, feature)`). Maps 4 device profiles. Enables capability queries without a live connection.
 - **4 new MiLink capability flags**: `supportsEq`, `supportsLeaStatus`, `supportsQuickAccess`, `supportsAmbientLevel` added to snapshot and contract.
+
+### 2026-06-05 M5 diagnostic addition
+
+- **LinkBuds S Sony SPP direct probe**: `com.xiaomi.bluetooth` can connect to the
+  Sony MDR SPP UUID, read a Tandem battery response, ACK frames, send one NC/ASM
+  write command, and parse the resulting `NoiseControl` response. This confirms
+  process-local Sony SPP transport feasibility, but does not upgrade the current
+  facade into full MiTWS remote protocol equivalence.
 
 For the implementation order and structural fix strategy, use the V2 main plan
 and target implementation checklist instead of extending this document.

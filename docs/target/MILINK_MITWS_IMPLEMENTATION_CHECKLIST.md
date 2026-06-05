@@ -372,6 +372,52 @@ Framework ready:
 - [ ] Volume changes round-trip through bridge
 - [ ] No jumpy desync between MiLink UI and OpenBuds repository state
 
+## Stage 9.5: M5 LinkBuds S Sony SPP direct probe
+
+**2026-06-05 status: Complete as a diagnostic probe, not a mainline bridge.**
+
+Implemented:
+
+- [x] Add a default-off probe kill switch:
+  `debug.openbuds.xiaomi_bt_spp_probe_enable=false`
+- [x] Restrict probe to a single explicit BR/EDR MAC:
+  `debug.openbuds.xiaomi_bt_spp_probe_mac`
+- [x] Add mode selection:
+  `debug.openbuds.xiaomi_bt_spp_probe_mode=connect|readonly|write`
+- [x] Add UUID policy:
+  `debug.openbuds.xiaomi_bt_spp_probe_uuid=auto|956c...|96cc...`
+- [x] Start from `com.xiaomi.bluetooth` process by hooking
+  `Application.attach(Context)` after application context is available
+- [x] Find bonded non-LE LinkBuds S device by MAC
+- [x] Use Sony MDR SPP UUID candidates
+- [x] Reuse `SppFraming` and `SonySppPayloadMapper`
+- [x] Implement safe read loop, DATA_MDR ACK, Tandem parser logging, and clean close
+- [x] Implement `connect` mode
+- [x] Implement `readonly` mode with battery query
+- [x] Implement `write` mode with one low-risk NC/ASM ambient-normal command
+
+Validated on LinkBuds S `F8:4E:17:D1:32:27`:
+
+- [x] `connect`: RFCOMM socket connects from `com.xiaomi.bluetooth` to Sony SPP UUID
+  `956c7b26-d49a-4ba8-b03f-b17d393cb6e2`
+- [x] `readonly`: sends `0E2200`, receives ACK and parses `Battery`
+- [x] `write`: after readonly ACK, sends `0E6817010101000A`, receives ACK and parses
+  `NoiseControl mode=AMBIENT_SOUND ambientLevel=10 ambientMode=NORMAL`
+- [x] No matching `AndroidRuntime` / `FATAL EXCEPTION` / `com.xiaomi.bluetooth` crash
+  observed during the probe windows
+- [x] Probe properties restored to safe state after test:
+  `debug.openbuds.xiaomi_bt_spp_probe_enable=false`,
+  `debug.openbuds.xiaomi_bt_spp_probe_mode=connect`
+
+Still out of scope:
+
+- [ ] Does not replace the OpenBuds App transport path
+- [ ] Does not replace MiLink bridge state or command flow
+- [ ] Does not prove Xiaomi PC/MMA registration naturally enters LinkBuds S
+- [ ] Does not implement a generic `MiuiGattProxyStrategy` / `MiuiSppProxyStrategy`
+- [ ] Does not remove the need to stop OpenBuds App before probe testing when App-side
+  SPP would otherwise hold the socket
+
 ## Stage 10: Verification checklist
 
 ### Functional verification

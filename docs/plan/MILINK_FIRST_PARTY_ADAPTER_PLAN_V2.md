@@ -896,10 +896,65 @@ MiLink 滑块调整 (0-100%)
 
 ### M5：GATT / SPP / MMA 代理实验（可选，2-4 周）
 
-- [ ] 只对明确支持 GATT 或 SPP 控制的品牌启用。Sony LinkBuds S 默认不走此路径。
-- [ ] 建立 `MiuiGattProxyStrategy` / `MiuiSppProxyStrategy`，同时映射 transport endpoint、UUID 或 SPP UUID、数据帧。
-- [ ] 先支持 read-only query，再支持 write。
-- [ ] 所有 mutation 必须有 per-MAC allowlist、per-brand strategy、kill switch。
+#### M5 修订：LinkBuds S Sony SPP Direct Probe（2026-06-05）
+
+本轮 M5 先不实现通用 `MiuiGattProxyStrategy` / `MiuiSppProxyStrategy`，而是在
+`com.xiaomi.bluetooth` 注入进程内做一个显式关闭默认、MAC allowlist 限定的
+Sony SPP direct probe。目标是验证 LinkBuds S 的 Sony SPP 控制连接是否能稳定
+由 Xiaomi 蓝牙进程持有。
+
+已完成：
+
+- [x] 新增独立 kill switch / 配置属性：
+  `debug.openbuds.xiaomi_bt_spp_probe_enable=false`、
+  `debug.openbuds.xiaomi_bt_spp_probe_mac`、
+  `debug.openbuds.xiaomi_bt_spp_probe_mode=connect|readonly|write`、
+  `debug.openbuds.xiaomi_bt_spp_probe_uuid=auto|956c...|96cc...`。
+- [x] `XiaomiBluetoothTraceConfig.shouldInstallForPackage()` 支持 trace 与 SPP probe
+  两条独立开关；默认属性缺省时 probe 不安装、不连接、不写入。
+- [x] `XiaomiBluetoothTraceEntry` 在 `com.xiaomi.bluetooth` 内 hook
+  `Application.attach(Context)` 获取 application context，并只在 probe 开启时启动。
+- [x] 新增 `SonySppProbe`，按 MAC 查找 bonded classic/dual device，排除 LE-only
+  device。
+- [x] 使用 LinkBuds S 已验证 Sony SPP UUID 候选：
+  `956c7b26-d49a-4ba8-b03f-b17d393cb6e2`、
+  `96cc203e-5068-46ad-b32d-e316f5e069ba`。
+- [x] 复用现有 `SppFraming` 与 `SonySppPayloadMapper`，没有在 probe 内重写 SPP
+  frame escape/checksum/Tandem prefix 映射。
+- [x] `connect` 模式真机验证通过：`com.xiaomi.bluetooth` 内成功 RFCOMM connect
+  Sony SPP UUID `956c...`，6s window 后 clean close。
+- [x] `readonly` 模式真机验证通过：发送 V2 Table1 battery status query
+  `0E2200`，收到 ACK、DATA_MDR response，并由现有 parser 识别为 `Battery`。
+- [x] `write` 模式真机验证通过：在 readonly ACK 后发送一条低风险
+  NC/ASM 命令 `0E6817010101000A`（ambient normal level 10），收到 ACK 和
+  `NoiseControl type=MODE_NC_ASM_DUAL_NC_MODE_SWITCH_AND_ASM_SEAMLESS
+  mode=AMBIENT_SOUND ambientLevel=10 ambientMode=NORMAL`。
+- [x] 实验后已回到安全属性：`debug.openbuds.xiaomi_bt_spp_probe_enable=false`，
+  `debug.openbuds.xiaomi_bt_spp_probe_mode=connect`。
+- [x] 真机日志未见 `AndroidRuntime` / `FATAL EXCEPTION` /
+  `com.xiaomi.bluetooth` 崩溃。
+- [x] 构建验证通过：`.\gradlew.bat testDebugUnitTest assembleDebug` 与
+  `.\gradlew.bat installDebug`。
+
+当前结论：
+
+- Sony LinkBuds S 的 Sony SPP transport 可以在 `com.xiaomi.bluetooth` 进程内
+  稳定建立、读取、ACK、发送一条低风险控制命令并解析响应。
+- 这证明了“Xiaomi 蓝牙进程内 Sony SPP transport 可行”，但尚不等价于完整
+  Xiaomi first-party GATT/SPP/MMA 代理。
+- 当前仍不把 Xiaomi SPP 作为 OpenBuds 主线控制路径；OpenBuds App 默认仍走
+  App 侧 `SppTransport` + `SonySppPayloadMapper`。
+
+未完成 / 不宣称覆盖：
+
+- [ ] 通用 `MiuiGattProxyStrategy` / `MiuiSppProxyStrategy` 代理层尚未建立。
+- [ ] 未证明 Xiaomi PC/MMA 注册链会对 LinkBuds S 自然命中；M4 结论仍是
+  `MiuiSppPeripheral` / PC service path 未自然进入。
+- [ ] 未接入 MiLink 状态面或命令面；probe 仍是诊断工具，不替代 M3 bridge。
+- [ ] 未实现“probe 模式下 OpenBuds App 不 auto-connect”的应用内门控；
+  当前真机实验依赖手动/adb force-stop OpenBuds App 以避免 SPP socket 竞争。
+- [ ] 真实 Xiaomi/Redmi Buds 原路径回归仍需单独验证；当前设计层面 probe 仅在
+  显式 enable + MAC allowlist 命中时生效。
 
 退出条件：
 
