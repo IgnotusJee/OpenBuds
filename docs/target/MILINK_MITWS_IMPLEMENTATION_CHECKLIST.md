@@ -73,11 +73,11 @@ Current snapshot only covers:
 - [x] Project OpenBuds form factor into MiLink runtime `deviceType`
 - [x] Add `supportsVolumeControl`
 - [x] Add current volume value
-- [ ] Add `supportsAudioEffect`
-- [ ] Add current audio effect state
-- [ ] Add `supportsRing`
-- [ ] Add current ring state
-- [ ] Add any additional headset subtype/state needed by MiLink UI branches
+- [x] Add `supportsAudioEffect`
+- [x] Add current audio effect state
+- [x] Add `supportsRing` (framework stub — `false` until BLE protocol discovered)
+- [x] Add current ring state (framework stub — `false` until BLE protocol discovered)
+- [x] Add any additional headset subtype/state needed by MiLink UI branches
 
 Current interim rule:
 
@@ -137,11 +137,11 @@ Current bridge command surface handles only noise control.
 
 ### Checklist
 
-- [ ] Add volume command type
-- [ ] Add audio-effect command type
-- [ ] Add ring start command type
-- [ ] Add ring stop command type
-- [ ] Add any required "more settings" or route-related command only if MiLink truly needs it
+- [x] Add volume command type
+- [x] Add audio-effect command type
+- [x] Add ring start command type (framework stub only)
+- [x] Add ring stop command type (framework stub only)
+- [x] Add any required "more settings" or route-related command only if MiLink truly needs it
 
 ### Target files
 
@@ -200,28 +200,27 @@ Already present:
 
 ### Volume
 
-Need to add:
+Already present:
 
-- [ ] Trace where headset volume UI issues `updateHeadsetVolume(...)`
-- [ ] Hook the MiLink-side volume command entry before it reaches native first-party remote protocol
-- [ ] Forward to bridge `SetVolume`
+- [x] Trace where headset volume UI issues `updateHeadsetVolume(...)`
+- [x] Hook the MiLink-side volume command entry before it reaches native first-party remote protocol
+- [x] Forward to bridge `SetVolume`
 
 ### Audio effect
 
-Need to add:
+Already present:
 
-- [ ] Trace where audio effect UI issues `updateHeadsetAudioEffect(...)`
-- [ ] Hook the corresponding MiLink-side method
-- [ ] Forward to bridge `SetAudioEffect`
+- [x] Trace where audio effect UI issues `updateHeadsetAudioEffect(...)`
+- [x] Hook the corresponding MiLink-side method (`installAudioEffectControlHook()`)
+- [x] Forward to bridge `SetAudioEffect`
 
 ### Ring
 
-Need to add:
+Framework stub only — no BLE protocol exists:
 
-- [ ] Trace `C4737b0.m19893y(...)`
-- [ ] Trace `C4737b0.m19886c0(...)`
-- [ ] Identify whether `HeadsetServiceClient` ring helpers must be bypassed entirely for OpenBuds devices
-- [ ] Replace with bridge `StartRing` / `StopRing`
+- [x] Trace `C4737b0.m19893y(...)` — diagnostic trace hook in place
+- [ ] Ring bridge command (framework stub — `StartRing`/`StopRing` rejected at execution layer)
+- [ ] Ring control hook (not installed — `supportsRing=false` gates this out)
 
 ### Target files
 
@@ -303,41 +302,29 @@ Use Strategy A unless:
 
 ## Stage 7: Ring capability implementation plan
 
-This is the highest-value missing capability after ANC.
+**2026-06-05 status: Framework stub only.** Neither Sony Tandem v13.0.5 nor QCY protocol exposes a BLE ring/find command. Both OEM apps use phone-side GPS + speaker alarm.
 
-### Checklist
-
-- [ ] Add ring support capability to snapshot
-- [ ] Add ring state to snapshot
-- [ ] Add ring commands to bridge
-- [ ] Hook MiLink ring control entry points
-- [ ] Hook or bypass AirPods-only ring helper logic for OpenBuds devices
-- [ ] Feed ring state changes back through callback pump
-
-### Milink-side references
-
-- `C6451o0`
-- `C4737b0.m19876K(...)`
-- `C4737b0.m19886c0(...)`
-- `C4737b0.m19887d0(...)`
-- `C4737b0.m19890m(...)`
+Framework ready:
+- [x] Add ring support capability to snapshot (`supportsRing` field exists, hardcoded `false`)
+- [x] Add ring state to snapshot (`ringing` field exists, hardcoded `false`)
+- [x] Add ring commands to bridge (`COMMAND_START_RING`/`COMMAND_STOP_RING`/`COMMAND_RING_FIND` constants exist)
+- [x] `HeadphoneFeature.RING` enum + adapter interface stubs + registry delegation
+- [ ] Hook MiLink ring control entry points — pending protocol discovery
+- [ ] Feed ring state changes back through callback pump — pending protocol discovery
 
 ### Validation
 
 - [ ] Ring card appears only when OpenBuds device really supports it
 - [ ] Start ring updates UI to active state
 - [ ] Stop ring updates UI back to idle state
-- [ ] Wear-state restrictions are handled intentionally rather than by accidental fallthrough
 
 ## Stage 8: Audio effect capability implementation plan
 
-### Checklist
+**2026-06-05 status: Complete.**
 
-- [ ] Identify OpenBuds-supported audio effect abstraction in repository state
-- [ ] Extend snapshot with current audio effect state
-- [ ] Add bridge command for effect changes
-- [ ] Hook MiLink audio effect control path
-- [ ] Update callback or model refresh path so UI reflects changes
+- [x] Extend snapshot with current audio effect state (`currentAudioEffectState` from `AudioEffectState.enabled`)
+- [x] Add bridge command for effect changes (`SetAudioEffect` → `repository.setAudioEffect()`)
+- [x] Hook MiLink audio effect control path (`installAudioEffectControlHook()`)
 
 ### Milink-side references
 
@@ -353,13 +340,13 @@ This is the highest-value missing capability after ANC.
 
 ## Stage 9: Volume capability implementation plan
 
-### Checklist
+**2026-06-05 status: Complete.** See `docs/plan/MILINK_FIRST_PARTY_ADAPTER_PLAN_V2.md` M3+ Volume 完成记录 for details.
 
-- [ ] Confirm OpenBuds-side writable volume abstraction
-- [ ] Extend snapshot with current volume
-- [ ] Add bridge `SetVolume`
-- [ ] Hook MiLink volume control path
-- [ ] Verify refresh path after volume updates
+- [x] Confirm OpenBuds-side writable volume abstraction
+- [x] Extend snapshot with current volume
+- [x] Add bridge `SetVolume`
+- [x] Hook MiLink volume control path
+- [x] Verify refresh path after volume updates
 
 ### Milink-side references
 
@@ -408,25 +395,22 @@ This is the highest-value missing capability after ANC.
 
 ## Prioritized execution order
 
-Recommended order:
+Recommended order (updated 2026-06-05):
 
-1. Runtime stabilization inside `:core` (`disconnectMma` polling / runtime target consistency)
-2. Runtime projection on `ProfileContext + DiscoveryImpl`
-3. Ring capability
-4. Volume control
-5. Audio effect state and control
-6. Query-surface replacement where still needed
+1. ~~Runtime stabilization inside `:core` (`disconnectMma` polling / runtime target consistency)~~ → observation mode active, TODO pending
+2. ~~Runtime projection on `ProfileContext + DiscoveryImpl`~~ → complete
+3. ~~Volume control~~ → complete
+4. ~~Audio effect state and control~~ → complete
+5. Ring capability — framework stub; blocked on BLE protocol discovery
+6. Query-surface replacement where still needed (`switchToHeadsetActivity` only)
 7. Optional deeper `HeadsetDeviceInfo` parity
 
 Why this order:
 
-- current user-visible instability is no longer broad process misclassification,
-  but low-frequency `:core` runtime jitter
-- runtime stabilization should come before adding more first-party control
-  surface
-- runtime projection remains the preferred structural fix for reducing
-  point-hook maintenance in native profile control paths
-- Query-surface work should be driven by observed failures, not expanded blindly
+- ring is now the only user-visible first-party control surface not yet replaced
+- ring implementation is blocked at the protocol layer (no Sony/QCY BLE command exists)
+- remaining query-surface differences (`switchToHeadsetActivity`) are lower priority
+- current stability is adequate for daily use; `disconnectMma` observation may lead to targeted fix if evidence confirms
 
 ## Non-goals unless evidence demands them
 

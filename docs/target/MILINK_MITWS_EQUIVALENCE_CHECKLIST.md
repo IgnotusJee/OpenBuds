@@ -209,28 +209,35 @@ Current validated process roles:
 
 ### C7. Audio effect state
 
-- Status: `Not satisfied`
+- Status: `Satisfied`
 - MiLink dependency:
   - `HeadSetsDetail` checks `HeadsetDeviceInfo.audioEffectState`
   - Controller exposes `updateHeadsetAudioEffect(...)`
 - Current implementation:
-  - Bridge snapshot contains no audio-effect field
-  - Current hooks do not replace this state or control surface
+  - `hookProfileContextAudioEffect()` returns `snapshot.currentAudioEffectState` when `supportsAudioEffect`
+  - `MilinkBridgeSnapshotMapper.fromUiState()` maps `state.audioEffectState.enabled` → `currentAudioEffectState` (0/1)
+  - `supportsAudioEffect` from `profile.supports(HeadphoneFeature.AUDIO_EFFECT)`
+  - Bridge `SetAudioEffect` forwarded through `installAudioEffectControlHook()` → `MilinkBridgeClient` → `repository.setAudioEffect()`
+- Brand backing:
+  - Sony: DSEE upscaling via AUDIO_PARAM (0xE6-0xE9) with `AudioInquiredType.UPSCALING(0x01)`
+  - QCY: `CMDID_SPACE_AUDIO(45)` toggle
+  - Profiles: LinkBuds S, WF-1000XM5, WH-1000XM4, QCY C30S
 - Conclusion:
-  - Clear gap.
+  - Audio effect state and control surface are fully replaced for OpenBuds targets.
 
 ### C8. Ring / find earbud state
 
 - Status: `Not satisfied`
 - Current implementation:
-  - `MilinkDeviceSnapshot.supportsRing = false`
+  - `MilinkDeviceSnapshot.supportsRing = false` (framework stub)
+  - `HeadphoneFeature.RING` enum + adapter interface stubs exist for future protocol discovery
+  - Neither Sony Tandem (v13.0.5) nor QCY protocol exposes a BLE ring/find command
+  - Both OEM "find earbuds" features are phone-side (GPS + phone speaker alarm)
   - Callback pump can emit `onRingStateChanged`, but only if a snapshot supports ring
-  - Runtime projection now avoids mapping OpenBuds true-wireless devices onto
-    the AirPods-only `type == 5` branch merely to obtain first-party UI
 - MiLink dependency:
   - `HeadSetsDetail` ring card uses first-party ring control paths through `C6451o0`
 - Conclusion:
-  - This is a major missing capability for full equivalence.
+  - This remains a missing capability. Framework ready when/if BLE protocol support is discovered.
 
 ## D. Query surface used by MiLink
 
@@ -307,14 +314,15 @@ Current validated process roles:
 
 ### E3. Audio effect / spatial audio control
 
-- Status: `Not satisfied`
+- Status: `Satisfied`
 - MiLink native path:
   - `C4737b0.m19863s() -> updateHeadsetAudioEffect(...)`
 - Current implementation:
-  - No hook replacement
-  - No bridge command
+  - `installAudioEffectControlHook()` hooks `ProfileImpl.updateHeadsetAudioEffect` and forwards to bridge `COMMAND_SET_AUDIO_EFFECT`
+  - `MilinkBridgeService.executeAcceptedCommand()` → `repository.setAudioEffect()`
+  - Optional optimistic UI update
 - Conclusion:
-  - Clear gap.
+  - Audio effect control is fully bridged.
 
 ### E4. Ring / find earbud control
 
@@ -326,10 +334,11 @@ Current validated process roles:
     - `C4737b0.m19887d0(...)`
     - `C4737b0.m19890m(...)`
 - Current implementation:
-  - No ring bridge command
-  - No ring state source
+  - No ring bridge command (framework stub only)
+  - No ring state source (framework stub only)
+  - Neither Sony Tandem nor QCY protocol has a BLE ring/find command
 - Conclusion:
-  - Clear gap.
+  - Clear gap. Framework ready for future protocol discovery.
 
 ### E5. Deep first-party settings surface
 
@@ -410,12 +419,10 @@ Operationally, as of 2026-06-04:
 
 ## Highest-priority equivalence gaps
 
-1. Ring / find-earbud state and command surface
-2. Audio effect / spatial-audio state and command surface
-3. Volume command surface
-4. Runtime target naturalness inside `ProfileContext + DiscoveryImpl`
-5. `:core` runtime stability under high-frequency `disconnectMma` polling
-6. Remaining query-surface differences (`getSupportAncMode`, `isMmaHeadset`, bond state, settings-related queries)
+1. Ring / find-earbud state and command surface (framework stub — no BLE protocol exists)
+2. `:core` runtime stability under high-frequency `disconnectMma` polling (observation mode)
+3. Remaining query-surface differences (`switchToHeadsetActivity` not fully replaced)
+4. Optional deeper `HeadsetDeviceInfo` parity (Strategy A recommended)
 
 For the implementation order and structural fix strategy, use the V2 main plan
 and target implementation checklist instead of extending this document.
