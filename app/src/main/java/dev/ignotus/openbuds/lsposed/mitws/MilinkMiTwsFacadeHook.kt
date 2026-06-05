@@ -163,17 +163,28 @@ class MilinkMiTwsFacadeHook(
                         // (every ~100ms as the controller polls), and dispatching
                         // onConnectMmaStateChanged(false) each time would cause the UI
                         // to hide battery/ANC controls thinking MMA is disconnected.
+                        //
+                        // PHASE-1 OBSERVATION MODE (2026-06-05):
+                        // disconnectMma is intercepted but keeps no-op — we do NOT push
+                        // UI state changes here. The :core runtime polling is observed via
+                        // logcat only. If low-frequency card shrink or ANC no-op persists
+                        // on real devices and is definitively traced to disconnectMma,
+                        // apply narrower caller-side governance (e.g. rate-limit or debounce
+                        // a specific caller) rather than UI-level state injection.
+                        // TODO(M3+): apply narrow disconnectMma governance if evidence remains.
                         if (name == "connectMma") {
                             callbackPump.dispatchConnection(
                                 snapshot = snapshot,
                                 connected = true,
                             )
+                        } else {
+                            // disconnectMma observation — log frequency for diagnostics
+                            log(
+                                "[OBSERVE] $name mac=$mac name=${safeName(device)} " +
+                                    "facadeTarget=true passthrough=false facadeResult=$MMA_FACADE_SUCCESS_RESULT " +
+                                    "(no dispatch — observation mode) gate=${facadeGateSummary()}"
+                            )
                         }
-                        log(
-                            "$name mac=$mac name=${safeName(device)} " +
-                                "facadeTarget=true passthrough=false facadeResult=$MMA_FACADE_SUCCESS_RESULT " +
-                                "gate=${facadeGateSummary()}"
-                        )
                         return MMA_FACADE_SUCCESS_RESULT
                     }
                     val result = chain.proceed()
@@ -246,6 +257,17 @@ class MilinkMiTwsFacadeHook(
                         )
                         return ancState
                     }
+                    // First-open timing gap protection (Phase 1, 2026-06-05):
+                    // Device is already classification-eligible but first snapshot hasn't
+                    // arrived. Return ANC_OFF as safe default — the real value arrives
+                    // with the first snapshot and will be dispatched via callback pump.
+                    if (facadeClassificationEligible(mac)) {
+                        log(
+                            "getAncState mac=$mac name=${safeName(device)} " +
+                                "classificationEligible=true snapshot=null fallback=0 gate=${facadeGateSummary()}"
+                        )
+                        return MiTwsStateMapper.ANC_OFF
+                    }
                     val result = chain.proceed()
                     log(
                         "trace getAncState mac=$mac name=${safeName(device)} " +
@@ -280,6 +302,17 @@ class MilinkMiTwsFacadeHook(
                                 "gate=${facadeGateSummary()}"
                         )
                         return wearStatus
+                    }
+                    // First-open timing gap protection (Phase 1, 2026-06-05):
+                    // Device may be classification-eligible before first snapshot arrives.
+                    // Returning native wear status could block ANC switching (MiLink checks
+                    // wear status via isSupportOpAnc → returns 212 for unknown/-1).
+                    if (facadeClassificationEligible(mac)) {
+                        log(
+                            "getWearStatus mac=$mac name=${safeName(device)} " +
+                                "classificationEligible=true snapshot=null fallback=1 gate=${facadeGateSummary()}"
+                        )
+                        return "1"
                     }
                     val result = chain.proceed()
                     log(
@@ -854,6 +887,24 @@ class MilinkMiTwsFacadeHook(
         log("hooked runtime profile: ${profileImpl.name}.${method.name}")
     }
 
+    /**
+     * Hook ProfileImpl.updateHeadsetMode — MUST remain as full replacement, not downgraded.
+     *
+     * Runtime projection (getActiveHeadset, getActiveDevice etc.) ensures the native
+     * target-matching check passes: `activeHeadset.address == address` succeeds because
+     * getActiveHeadset() now returns the projected OpenBuds device. However, the native
+     * path still fails at the final step — ProfileContext.setAncState() calls into the
+     * Xiaomi MMA protocol stack, which is incompatible with Sony/QCY devices.
+     *
+     * Therefore this hook cannot be reduced to a minimal bypass; it must fully replace
+     * the ANC switching path: bridge command → repository → Sony Tandem / QCY TLV.
+     *
+     * Redundant code removed in Phase 1 (2026-06-05):
+     * - `projectedTarget` — targetMatchesActive is now handled by runtime projection,
+     *   making the check inside this hook redundant.
+     * - `validationResult` / chain.proceed() in passthrough mode — native MMA execution
+     *   has no bearing on OpenBuds ANC switching and was only used for debug logging.
+     */
     private fun hookProfileUpdateHeadsetMode(profileImpl: Class<*>) {
         val method = findMethod(
             profileImpl,
@@ -877,6 +928,8 @@ class MilinkMiTwsFacadeHook(
                     val opAncMode = (args.getOrNull(3) as? Int) ?: -1
                     val mac = address.normalizeMac() ?: ""
                     val snapshot = facadeSnapshot(mac)
+                    // Classification-eligible but no live snapshot yet → fail gracefully.
+                    // The MiLink caller will retry after the snapshot arrives via callback.
                     if (snapshot == null && facadeClassificationEligible(mac)) {
                         log(
                             "updateHeadsetMode hostId=$hostId mac=$mac deviceId=$deviceId opAncMode=$opAncMode " +
@@ -885,12 +938,10 @@ class MilinkMiTwsFacadeHook(
                         return PROFILE_FAILURE_RESULT
                     }
                     if (snapshot != null) {
-                        val projectedTarget = runtimeProjection.targetMatchesActive(address, deviceId)
-                        val validationResult = if (MilinkRouteConfig.allowOpenBudsMmaPassthrough()) {
-                            chain.proceed()
-                        } else {
-                            null
-                        }
+                        // Target matching is now handled by runtime projection
+                        // (getActiveHeadset returns the projected OpenBuds device).
+                        // We skip the native chain entirely — MMA protocol is incompatible
+                        // with Sony/QCY, route through bridge command instead.
                         val commandResult = executeAncBridgeCommand(snapshot, opAncMode)
                         val facadeResult = if (commandResult.accepted) {
                             updateOptimisticAncSnapshot(snapshot, opAncMode, commandResult.requestId)
@@ -901,7 +952,6 @@ class MilinkMiTwsFacadeHook(
                         log(
                             "updateHeadsetMode hostId=$hostId mac=$mac name=${snapshot.name} " +
                                 "deviceId=$deviceId opAncMode=$opAncMode facadeTarget=true " +
-                                "projectedTarget=$projectedTarget nativeValidation=${resultSummary(validationResult)} " +
                                 "accepted=${commandResult.accepted} reason=${commandResult.reason} " +
                                 "requestId=${commandResult.requestId} result=$facadeResult gate=${facadeGateSummary()}"
                         )
@@ -1057,6 +1107,21 @@ class MilinkMiTwsFacadeHook(
                                 "facadeTarget=true supportsNoiseControl=${snapshot.supportsNoiseControl} result=$result"
                         )
                         return result
+                    }
+                    // First-open timing gap protection (Phase 1, 2026-06-05):
+                    // `checkIsMiTWS` may have already returned 1 (classification eligible via
+                    // knownAuthorizedMacs), but the first live runtime snapshot hasn't arrived
+                    // yet. Falling through to native here would cause MiLink to cache a wrong
+                    // ANC capability, potentially hiding the ANC card permanently.
+                    // Return the conservative default (three-state ANC) for classification-
+                    // eligible devices; the real snapshot will correct this on next query.
+                    if (facadeClassificationEligible(mac)) {
+                        log(
+                            "query ${queryClass.simpleName}.getSupportAncMode target=$targetAddress deviceId=$deviceId " +
+                                "classificationEligible=true snapshot=null " +
+                                "fallback=$QUERY_SUPPORT_ANC_MODE_THREE_STATE gate=${facadeGateSummary()}"
+                        )
+                        return QUERY_SUPPORT_ANC_MODE_THREE_STATE
                     }
                     return chain.proceed()
                 }
