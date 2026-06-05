@@ -284,6 +284,56 @@ MiTWS 查找耳机实际调用链
 
 本节不是 M1-M3 主线。
 
+### 4.0 M4 trace-only 真机结论（2026-06-05）
+
+测试对象：
+
+- 手机：nuwa / 2210132C，`com.xiaomi.bluetooth` 进程。
+- 目标耳机：LinkBuds S，MAC `F8:4E:17:D1:32:27`。
+- 模块配置：`debug.openbuds.xiaomi_bt_trace_enable=true`，`debug.openbuds.xiaomi_bt_trace_macs=F8:4E:17:D1:32:27`，`debug.openbuds.xiaomi_bt_trace_sample_ms=2000`。
+- 复测流程：`.\gradlew.bat installDebug` → `adb logcat -c` → `adb shell am force-stop com.xiaomi.bluetooth` → `adb shell am force-stop com.milink.service` → 连接耳机。
+
+关键日志证据：
+
+```text
+[LSPosed] install route: package=com.xiaomi.bluetooth ... xiaomiBtTrace=true
+[XIAOMI_BT_TRACE] hooked=java.lang.ClassLoader.loadClass(String)
+[XIAOMI_BT_TRACE] hooked=java.lang.ClassLoader.loadClass(String, boolean)
+[XIAOMI_BT_TRACE] event=deferred_hook_install ... class=com.android.bluetooth.ble.app.fastconnect.MiuiFastConnectStateMachine installed=true loader=com.iqiyi.android.qigsaw.core.splitload.SplitDexClassLoader
+[XIAOMI_BT_TRACE] event=deferred_hook_install ... class=com.android.bluetooth.ble.app.fastconnect.MiuiBluetoothNotificationApi installed=true loader=com.iqiyi.android.qigsaw.core.splitload.SplitDexClassLoader
+MiuiFastConnectService_Plugin: start OfflineFindScan
+MiuiFastConnectService_Plugin: onScanningStateChanged true
+DeviceClassify: getCachedDeviceId: deviceId =
+BluetoothHeadsetService: [checkSupport] headset does not report AT fetuares
+```
+
+M4 诊断模板判定：
+
+| 项 | 结果 | 日志依据 / 解释 |
+|----|------|------------------|
+| `scan_seen` | `true` | `MiuiFastConnectService_Plugin` 启动 `OfflineFindScan`，并出现 `onScanningStateChanged true`。说明 `com.xiaomi.bluetooth` 扫描链路活跃。 |
+| `assembled_adv` | `false / not observed` | `MiuiFastConnectStateMachine.getAssembleAdvData` hook 已安装，但目标 MAC 连接/扫描期间没有 `fastconnect_sm_assemble_adv` 事件。Sony 广播未自然进入 Xiaomi FastConnect adv 组装路径。 |
+| `check_adv_passed` | `false / not reached` | `MiuiFastConnectStateMachine.checkAdvData` hook 已安装，但未出现目标 MAC 的 `fastconnect_sm_check_adv` / `fastconnect_check_adv` 事件。M4 不将此视为失败；结论是目标设备未到达可判定 `checkAdvData` 的阶段。 |
+| `cached_device_id_seen` | `false for LinkBuds S` | `DeviceClassify: getCachedDeviceId: deviceId =` 多次为空；偶发 `01011A06` 来自真实 Redmi Buds 6，不是 LinkBuds S 的可用缓存。 |
+| `notification_state_seen` | `true` | LinkBuds S 的 HFP/A2DP/HID 连接状态进入 `BluetoothHeadsetService` / `MiuiFastConnectService` / `MiuiBluetoothNotification`，并命中 `MiuiBluetoothNotificationApi.setShowStatusBar` trace。 |
+| `toast_called` | `false` | 已 hook `showNewConnectedToast` / `showNewConnectNotification`，但仅看到 `notification_api_setShowStatusBar`，未看到 toast 或 connect notification API 调用。 |
+| `detail_notification_gate_passed` | `false` | `BluetoothHeadsetService` 对 LinkBuds S 多次输出 `headset does not report AT fetuares`，detail notification 支持门未通过。 |
+| `peripheral_path_seen` | `false` | 未观察到 `MiuiPeripheralConnectionServiceReal`、`MiuiPCRegisterManager`、`MiuiGattPeripheral`、`MiuiSppPeripheral` 类加载或 `peripheral_*` / `gatt_*` / `spp_*` trace 事件。 |
+
+阶段结论：
+
+- M4 trace-only 基础目标已达成：`com.xiaomi.bluetooth` scope、系统属性开关、MAC allowlist、采样、日志脱敏、Qigsaw `SplitDexClassLoader` 后加载 hook 均已验证。
+- FastConnect 弹窗路径未自然命中：LinkBuds S 未进入 adv 组装 / `checkAdvData` 可判定阶段。
+- notification 路径命中但被 cached deviceId 阻断：LinkBuds S 连接态进入 Xiaomi 通知链路，但 `getCachedDeviceId(MAC)` 为空，因此未触发 `showNewConnectedToast` / `showNewConnectNotification`。
+- detail notification 路径被设备能力门阻断：AT feature / support check 失败。
+- GATT/SPP/MMA peripheral 路径未命中。
+- 未见 `AndroidRuntime` / `FATAL EXCEPTION` / `com.xiaomi.bluetooth` 崩溃；普通蓝牙连接未因 trace hook 出现新的崩溃证据。
+
+M4 退出判断：
+
+- 对 Sony LinkBuds S，M4 应停止在 trace-only 结论，不投入 Controller wrapper、缓存伪造、ScanResult 伪造或 GATT/SPP/MMA mutation。
+- 若后续要继续尝试状态栏/连接 toast，必须另开 M4.5/M5，并以 per-MAC allowlist、kill switch、真实 Xiaomi 耳机回归、明确缓存写入/清理策略为前置条件。
+
 ### 4.1 FastConnect trace
 
 先只做 trace，不改结果：
@@ -833,15 +883,16 @@ MiLink 滑块调整 (0-100%)
 
 ### M4：`com.xiaomi.bluetooth` 快连和通知实验（可选，1-2 周）
 
-- [ ] LSPosed scope 增加 `com.xiaomi.bluetooth`，默认 trace-only。
-- [ ] trace FastConnect 扫描过滤、cached deviceId、notification state。
-- [ ] 评估是否能只通过 cached deviceId/notification API 触发连接 toast 或状态栏增强。
-- [ ] 不做 GATT mutation。
+- [x] LSPosed scope 增加 `com.xiaomi.bluetooth`，默认 trace-only，受 `debug.openbuds.xiaomi_bt_trace_enable` 控制。
+- [x] trace FastConnect 扫描过滤、cached deviceId、notification state；2026-06-05 真机日志见 `4.0 M4 trace-only 真机结论`。
+- [x] 评估是否能只通过 cached deviceId/notification API 触发连接 toast 或状态栏增强：LinkBuds S 连接态进入 notification 链路，但 cached deviceId 为空，仅命中 `setShowStatusBar`，未命中 toast / connect notification。
+- [x] 不做 GATT mutation；未观察到 `MiuiGattPeripheral` / `MiuiSppPeripheral` / PC service 路径命中。
+- [x] 按退出条件停止 M4：不投入 Controller wrapper、cache 写入、ScanResult 伪造或 GATT/SPP/MMA mutation。
 
 验收：
 
-- trace 对蓝牙稳定性无影响。
-- 如果无法让 Sony/QCY 广播进入 FastConnect，不继续投入 Controller wrapper。
+- trace 对蓝牙稳定性无影响：当前日志未见 `AndroidRuntime` / `FATAL EXCEPTION` / `com.xiaomi.bluetooth` 崩溃。
+- 如果无法让 Sony/QCY 广播进入 FastConnect，不继续投入 Controller wrapper：已满足退出条件；LinkBuds S 未自然进入 adv 组装 / `checkAdvData` 可判定阶段。
 
 ### M5：GATT / SPP / MMA 代理实验（可选，2-4 周）
 

@@ -110,11 +110,11 @@ class MiTwsRuntimeProjectionTest {
     }
 
     @Test
-    fun resolvedHeadsetInfoVolume_prefersSnapshotWhenSupported() {
+    fun resolvedHeadsetInfoVolume_prefersOriginalWhenAudioManagerUnavailable() {
         val snapshot = snapshot(currentVolume = 52, supportsVolumeControl = true)
         val projection = projection(snapshot)
 
-        assertEquals(52, projection.resolvedHeadsetInfoVolume(snapshot, FakeHeadsetInfo(volume = 37, audioEffect = 1)))
+        assertEquals(37, projection.resolvedHeadsetInfoVolume(snapshot, FakeHeadsetInfo(volume = 37, audioEffect = 1)))
     }
 
     @Test

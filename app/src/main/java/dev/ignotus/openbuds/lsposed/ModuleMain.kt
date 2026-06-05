@@ -6,6 +6,8 @@ import dev.ignotus.openbuds.lsposed.mitws.MilinkMiTwsFacadeEntry
 import dev.ignotus.openbuds.lsposed.mitws.MilinkMiTwsTraceEntry
 import dev.ignotus.openbuds.lsposed.mitws.MilinkRouteConfig
 import dev.ignotus.openbuds.lsposed.mitws.MilinkRouteMode
+import dev.ignotus.openbuds.lsposed.xiaomi_bluetooth.XiaomiBluetoothTraceConfig
+import dev.ignotus.openbuds.lsposed.xiaomi_bluetooth.XiaomiBluetoothTraceEntry
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
 
@@ -14,8 +16,8 @@ import io.github.libxposed.api.XposedModuleInterface.PackageLoadedParam
  *
  * ## Scope
  *
- * Configured via LSPosed Manager to inject into **`com.milink.service` only**.
- * No other packages are in scope.
+ * Configured via LSPosed Manager to inject into `com.milink.service` and,
+ * when explicitly enabled, trace-only `com.xiaomi.bluetooth`.
  *
  * ## Lifecycle
  *
@@ -47,7 +49,7 @@ class ModuleMain : XposedModule() {
      * Called by LSPosed when a package in scope is loaded.
      *
      * Dispatches only on the first package load (`isFirstPackage`).
-     * Currently only handles `com.milink.service`.
+     * Handles `com.milink.service` and gated trace-only `com.xiaomi.bluetooth`.
      */
     override fun onPackageLoaded(param: PackageLoadedParam) {
         super.onPackageLoaded(param)
@@ -78,6 +80,13 @@ class ModuleMain : XposedModule() {
                     MilinkRouteMode.MITWS -> MilinkMiTwsFacadeEntry(cl).install()
                     MilinkRouteMode.TRACE_ONLY -> MilinkMiTwsTraceEntry(cl).install()
                 }
+            }
+            XiaomiBluetoothTraceConfig.TARGET_PACKAGE -> {
+                log(
+                    "install route: package=${param.packageName} process=$processName " +
+                        "pid=${Process.myPid()} xiaomiBtTrace=${XiaomiBluetoothTraceConfig.isTraceEnabled()}"
+                )
+                XiaomiBluetoothTraceEntry(cl).installIfEnabled()
             }
         }
     }
