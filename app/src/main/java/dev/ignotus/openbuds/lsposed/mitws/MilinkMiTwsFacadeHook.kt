@@ -729,8 +729,16 @@ class MilinkMiTwsFacadeHook(
                 override fun intercept(chain: XposedInterface.Chain): Any? {
                     val snapshot = runtimeProjection.activeSnapshot()
                     if (snapshot?.supportsVolumeControl == true && snapshot.currentVolume != null) {
-                        log("runtime getVolume mac=${snapshot.mac} projected=${snapshot.currentVolume} gate=${facadeGateSummary()}")
-                        return snapshot.currentVolume
+                        // Scale headphone raw (0-HEADPHONE_MAX) → MiLink slider range (0-15).
+                        // The headphone reports a single-byte value whose effective max varies
+                        // by device (6–31 steps). MiLink expects Android media volume 0-15.
+                        val scaled = (snapshot.currentVolume * MI_LINK_VOLUME_MAX / HEADPHONE_VOLUME_MAX)
+                            .coerceIn(0, MI_LINK_VOLUME_MAX)
+                        log(
+                            "runtime getVolume mac=${snapshot.mac} raw=${snapshot.currentVolume} " +
+                                "scaled=$scaled gate=${facadeGateSummary()}"
+                        )
+                        return scaled
                     }
                     return chain.proceed()
                 }
@@ -1382,6 +1390,8 @@ class MilinkMiTwsFacadeHook(
         private const val QUERY_BOND_STATE_NOT_BONDED = 307
         private const val LOCAL_DEVICE_ID = "local_device_id"
         private const val HEADSET_NOTIFY_PROPERTY_CHANGED = 4
+        private const val MI_LINK_VOLUME_MAX = 15  // Android STREAM_MUSIC max steps (MiLink slider range)
+        private const val HEADPHONE_VOLUME_MAX = 31 // Conservative: covers Sony 0-31 and QCY single-byte range
         private const val TAG = "OpenBuds"
         private val assignedDeviceIds = ConcurrentHashMap<String, String>()
 

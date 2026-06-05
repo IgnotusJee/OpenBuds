@@ -77,15 +77,21 @@ class MilinkMiTwsFacadeEntry(
                     if (snapshot == null || !snapshot.supportsVolumeControl) {
                         return 201 // PROFILE_FAILURE_RESULT
                     }
+                    // Scale MiLink slider (0-MI_LINK_MAX) → headphone protocol range (0-HEADPHONE_MAX).
+                    // MiLink uses Android STREAM_MUSIC volume (typically 0-15); the headphone
+                    // protocol expects 0-31 (Sony) or single-byte (QCY). Linear scaling ensures
+                    // 50% on slider ≈ 50% of headphone's actual volume range.
+                    val scaledVolume = (volumeValue.coerceIn(0, MI_LINK_VOLUME_MAX) * HEADPHONE_VOLUME_MAX / MI_LINK_VOLUME_MAX)
+                        .coerceIn(0, HEADPHONE_VOLUME_MAX)
                     val command = Bundle().apply {
                         putString(MilinkBridgeContract.KEY_COMMAND_TYPE, MilinkBridgeContract.COMMAND_SET_VOLUME)
-                        putInt(MilinkBridgeContract.KEY_VOLUME, volumeValue.coerceIn(0, 255))
+                        putInt(MilinkBridgeContract.KEY_VOLUME, scaledVolume)
                         putString(MilinkBridgeContract.KEY_REQUEST_ID, java.util.UUID.randomUUID().toString())
                     }
                     val result = BridgeClientHolder.executeCommand(mac, command, 50L)
                     Log.i(
                         TAG,
-                        "[MiLinkMiTWS] updateHeadsetVolume mac=$mac volume=$volumeValue " +
+                        "[MiLinkMiTWS] updateHeadsetVolume mac=$mac raw=$volumeValue scaled=$scaledVolume " +
                             "accepted=${result.accepted} reason=${result.reason}"
                     )
                     return if (result.accepted) 1 else 201
@@ -243,5 +249,7 @@ class MilinkMiTwsFacadeEntry(
     private companion object {
         private const val TAG = "OpenBuds"
         private const val PROFILE_IMPL = "com.miui.headset.runtime.ProfileImpl"
+        private const val MI_LINK_VOLUME_MAX = 15  // Android STREAM_MUSIC max
+        private const val HEADPHONE_VOLUME_MAX = 31 // Conservative headphone volume range
     }
 }
