@@ -17,6 +17,14 @@ class MiTwsRuntimeProjection(
     private val headsetInfoClass: Class<*>? by lazy {
         runCatching { classLoader.loadClass(HEADSET_INFO) }.getOrNull()
     }
+    private val audioManager: android.media.AudioManager? by lazy {
+        runCatching {
+            val app = Class.forName("android.app.ActivityThread")
+                .getMethod("currentApplication")
+                .invoke(null) as? android.app.Application
+            app?.getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
+        }.getOrNull()
+    }
 
     fun canUseProjection(): Boolean =
         projectionGate(bridgeClient)
@@ -126,12 +134,21 @@ class MiTwsRuntimeProjection(
         }.getOrNull()
     }
 
-    fun resolvedHeadsetInfoVolume(snapshot: MilinkDeviceSnapshot, original: Any?): Int =
-        if (snapshot.supportsVolumeControl && snapshot.currentVolume != null) {
-            snapshot.currentVolume
-        } else {
-            intGetter(original, "getVolume") ?: DEFAULT_VOLUME
+    fun resolvedHeadsetInfoVolume(snapshot: MilinkDeviceSnapshot, original: Any?): Int {
+        if (!snapshot.supportsVolumeControl) {
+            return intGetter(original, "getVolume") ?: DEFAULT_VOLUME
         }
+        // Use AudioManager percentage, same as hookProfileContextVolume.
+        // The headset protocol raw value (snapshot.currentVolume) does NOT
+        // match MiLink's slider range (0-100%). Using AudioManager ensures
+        // HeadsetInfo.headsetVolume matches the getter on first card open.
+        val am = audioManager ?: return intGetter(original, "getVolume") ?: DEFAULT_VOLUME
+        val streamVol = am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
+        val min = am.getStreamMinVolume(android.media.AudioManager.STREAM_MUSIC)
+        val max = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
+        if (max <= min) return DEFAULT_VOLUME
+        return kotlin.math.round(((streamVol - min).toFloat() / (max - min).toFloat()) * 100f).toInt()
+    }
 
     fun resolvedHeadsetInfoAudioEffect(snapshot: MilinkDeviceSnapshot, original: Any?): Int =
         if (snapshot.supportsAudioEffect && snapshot.currentAudioEffectState != null) {
