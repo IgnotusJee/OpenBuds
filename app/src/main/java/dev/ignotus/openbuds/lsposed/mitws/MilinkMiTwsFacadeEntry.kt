@@ -66,10 +66,6 @@ class MilinkMiTwsFacadeEntry(
             Log.w(TAG, "M3+ volume control: ProfileImpl.updateHeadsetVolume not found")
             return
         }
-        val audioManager = runCatching {
-            currentApplication()
-                ?.getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
-        }.getOrNull()
         ModuleMain.instance.hook(method)
             .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
             .intercept(object : XposedInterface.Hooker {
@@ -85,7 +81,10 @@ class MilinkMiTwsFacadeEntry(
                     // directly — it does NOT send MMA/Tandem protocol volume commands.
                     // Android's Bluetooth stack syncs volume to the headset via AVRCP
                     // Absolute Volume or HFP. We replicate that behavior here.
-                    val am = audioManager
+                    val am = runCatching {
+                        currentApplication()
+                            ?.getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
+                    }.getOrNull()
                     if (am == null) {
                         Log.w(TAG, "[MiLinkMiTWS] updateHeadsetVolume: AudioManager unavailable")
                         return 201

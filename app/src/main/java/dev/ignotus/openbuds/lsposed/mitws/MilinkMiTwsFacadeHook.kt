@@ -723,19 +723,19 @@ class MilinkMiTwsFacadeHook(
             log("missing runtime projection: ${profileContext.name}.getVolume()")
             return
         }
-        val audioManager: android.media.AudioManager? = runCatching {
-            val app = Class.forName("android.app.ActivityThread")
-                .getMethod("currentApplication")
-                .invoke(null) as? android.app.Application
-            app?.getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
-        }.getOrNull()
         ModuleMain.instance.hook(method)
             .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
             .intercept(object : XposedInterface.Hooker {
                 override fun intercept(chain: XposedInterface.Chain): Any? {
                     val snapshot = runtimeProjection.activeSnapshot()
                     if (snapshot?.supportsVolumeControl == true) {
-                        val am = audioManager ?: return chain.proceed()
+                        val am = runCatching {
+                            val app = Class.forName("android.app.ActivityThread")
+                                .getMethod("currentApplication")
+                                .invoke(null) as? android.app.Application
+                            app?.getSystemService(android.content.Context.AUDIO_SERVICE) as? android.media.AudioManager
+                        }.getOrNull()
+                        if (am == null) return chain.proceed()
                         val streamVol = am.getStreamVolume(android.media.AudioManager.STREAM_MUSIC)
                         val min = am.getStreamMinVolume(android.media.AudioManager.STREAM_MUSIC)
                         val max = am.getStreamMaxVolume(android.media.AudioManager.STREAM_MUSIC)
