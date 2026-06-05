@@ -47,6 +47,10 @@ object MilinkBridgeContract {
     const val KEY_SUPPORTS_RING = "supportsRing"
     const val KEY_SUPPORTS_VOLUME_CONTROL = "supportsVolumeControl"
     const val KEY_SUPPORTS_AUDIO_EFFECT = "supportsAudioEffect"
+    const val KEY_SUPPORTS_EQ = "supportsEq"
+    const val KEY_SUPPORTS_LEA_STATUS = "supportsLeaStatus"
+    const val KEY_SUPPORTS_QUICK_ACCESS = "supportsQuickAccess"
+    const val KEY_SUPPORTS_AMBIENT_LEVEL = "supportsAmbientLevel"
     const val KEY_REVISION = "revision"
     const val KEY_UPDATED_AT = "updatedAt"
 

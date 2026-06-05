@@ -419,10 +419,15 @@ Operationally, as of 2026-06-04:
 
 ## Highest-priority equivalence gaps
 
-1. Ring / find-earbud state and command surface (framework stub — no BLE protocol exists)
-2. `:core` runtime stability under high-frequency `disconnectMma` polling (observation mode)
-3. Remaining query-surface differences (`switchToHeadsetActivity` not fully replaced)
-4. Optional deeper `HeadsetDeviceInfo` parity (Strategy A recommended)
+1. Ring / find-earbud state and command surface (framework stub — no BLE protocol exists in either Sony or QCY reference)
+2. Deep first-party settings surface (`switchToHeadsetActivity` not replaced)
+3. Full `RemoteProtocol / QueryLocal / Profile / Registry` equivalence (facade-based, not protocol emulation)
+
+### 2026-06-05 Phase 4 additions
+
+- **Multi-device snapshot retention**: `MilinkBridgeService` no longer clears all snapshots on each state update. Disconnected devices retain snapshots for 5 min (SNAPSHOT_STALE_MS), giving MiLink a multi-device appearance without touching the single-connection transport layer.
+- **`DeviceCapabilityRegistry`**: Static per-model capability lookup (`supports(modelName, feature)`). Maps 4 device profiles. Enables capability queries without a live connection.
+- **4 new MiLink capability flags**: `supportsEq`, `supportsLeaStatus`, `supportsQuickAccess`, `supportsAmbientLevel` added to snapshot and contract.
 
 For the implementation order and structural fix strategy, use the V2 main plan
 and target implementation checklist instead of extending this document.

@@ -141,6 +141,10 @@ class MiTwsBridgeCacheTest {
             supportsRing = false,
             supportsVolumeControl = false,
             supportsAudioEffect = false,
+            supportsEq = false,
+            supportsLeaStatus = false,
+            supportsQuickAccess = false,
+            supportsAmbientLevel = false,
             revision = 1L,
             updatedAt = nowMs,
         )

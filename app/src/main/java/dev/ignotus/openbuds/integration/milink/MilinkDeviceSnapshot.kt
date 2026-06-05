@@ -35,6 +35,10 @@ data class MilinkDeviceSnapshot(
     val supportsRing: Boolean,
     val supportsVolumeControl: Boolean,
     val supportsAudioEffect: Boolean,
+    val supportsEq: Boolean,
+    val supportsLeaStatus: Boolean,
+    val supportsQuickAccess: Boolean,
+    val supportsAmbientLevel: Boolean,
     val revision: Long,
     val updatedAt: Long,
 ) {
@@ -66,6 +70,10 @@ data class MilinkDeviceSnapshot(
         putBoolean(MilinkBridgeContract.KEY_SUPPORTS_RING, supportsRing)
         putBoolean(MilinkBridgeContract.KEY_SUPPORTS_VOLUME_CONTROL, supportsVolumeControl)
         putBoolean(MilinkBridgeContract.KEY_SUPPORTS_AUDIO_EFFECT, supportsAudioEffect)
+        putBoolean(MilinkBridgeContract.KEY_SUPPORTS_EQ, supportsEq)
+        putBoolean(MilinkBridgeContract.KEY_SUPPORTS_LEA_STATUS, supportsLeaStatus)
+        putBoolean(MilinkBridgeContract.KEY_SUPPORTS_QUICK_ACCESS, supportsQuickAccess)
+        putBoolean(MilinkBridgeContract.KEY_SUPPORTS_AMBIENT_LEVEL, supportsAmbientLevel)
         putLong(MilinkBridgeContract.KEY_REVISION, revision)
         putLong(MilinkBridgeContract.KEY_UPDATED_AT, updatedAt)
     }
@@ -107,6 +115,10 @@ data class MilinkDeviceSnapshot(
                 supportsRing = bundle.getBoolean(MilinkBridgeContract.KEY_SUPPORTS_RING, false),
                 supportsVolumeControl = bundle.getBoolean(MilinkBridgeContract.KEY_SUPPORTS_VOLUME_CONTROL, false),
                 supportsAudioEffect = bundle.getBoolean(MilinkBridgeContract.KEY_SUPPORTS_AUDIO_EFFECT, false),
+                supportsEq = bundle.getBoolean(MilinkBridgeContract.KEY_SUPPORTS_EQ, false),
+                supportsLeaStatus = bundle.getBoolean(MilinkBridgeContract.KEY_SUPPORTS_LEA_STATUS, false),
+                supportsQuickAccess = bundle.getBoolean(MilinkBridgeContract.KEY_SUPPORTS_QUICK_ACCESS, false),
+                supportsAmbientLevel = bundle.getBoolean(MilinkBridgeContract.KEY_SUPPORTS_AMBIENT_LEVEL, false),
                 revision = bundle.getLong(MilinkBridgeContract.KEY_REVISION, 0L),
                 updatedAt = bundle.getLong(MilinkBridgeContract.KEY_UPDATED_AT, 0L),
             )
@@ -163,6 +175,10 @@ object MilinkBridgeSnapshotMapper {
             supportsRing = false,
             supportsVolumeControl = profile.supports(HeadphoneFeature.VOLUME),
             supportsAudioEffect = profile.supports(HeadphoneFeature.AUDIO_EFFECT),
+            supportsEq = profile.supports(HeadphoneFeature.EQ),
+            supportsLeaStatus = profile.supports(HeadphoneFeature.LEA_STATUS),
+            supportsQuickAccess = profile.supports(HeadphoneFeature.QUICK_ACCESS),
+            supportsAmbientLevel = profile.supports(HeadphoneFeature.AMBIENT_LEVEL),
             revision = revision,
             updatedAt = updatedAt,
         )

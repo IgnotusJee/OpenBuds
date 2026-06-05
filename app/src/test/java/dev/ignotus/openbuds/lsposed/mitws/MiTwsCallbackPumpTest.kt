@@ -116,6 +116,10 @@ class MiTwsCallbackPumpTest {
             supportsRing = true,
             supportsVolumeControl = false,
             supportsAudioEffect = false,
+            supportsEq = false,
+            supportsLeaStatus = false,
+            supportsQuickAccess = false,
+            supportsAmbientLevel = false,
             revision = revision,
             updatedAt = revision,
         )

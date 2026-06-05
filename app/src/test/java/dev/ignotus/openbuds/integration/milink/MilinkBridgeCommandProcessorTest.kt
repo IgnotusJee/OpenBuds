@@ -303,6 +303,10 @@ class MilinkBridgeCommandProcessorTest {
             supportsRing = supportsRing,
             supportsVolumeControl = supportsVolumeControl,
             supportsAudioEffect = supportsAudioEffect,
+            supportsEq = false,
+            supportsLeaStatus = false,
+            supportsQuickAccess = false,
+            supportsAmbientLevel = false,
             revision = 1L,
             updatedAt = 2L,
         )

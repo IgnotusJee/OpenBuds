@@ -56,7 +56,6 @@ class MilinkBridgeService : Service() {
             }.collect { (state, enabled) ->
                 adapterEnabled = enabled
                 revision += 1
-                snapshots.clear()
                 if (enabled) {
                     MilinkBridgeSnapshotMapper.fromUiState(
                         state = state,
@@ -65,6 +64,14 @@ class MilinkBridgeService : Service() {
                     )?.takeIf(::isAuthorized)?.let { snapshot ->
                         snapshots[snapshot.mac] = snapshot
                     }
+                    // Remove stale entries for disconnected/
+                    snapshots.keys.toList().forEach { mac ->
+                        snapshots[mac]?.takeIf { snapshot ->
+                            SystemClock.elapsedRealtime() - snapshot.updatedAt > SNAPSHOT_STALE_MS
+                        }?.let { snapshots.remove(mac) }
+                    }
+                } else {
+                    snapshots.clear()
                 }
                 notifyClients()
             }
@@ -271,6 +278,7 @@ class MilinkBridgeService : Service() {
 
     private companion object {
         private const val TAG = "OpenBuds"
+        private const val SNAPSHOT_STALE_MS = 300_000L // 5 min — match MiTwsBridgeCache
     }
 
     private data class Session(

@@ -749,6 +749,51 @@ M3+ Volume 完成记录（2026-06-05）：
 
 **构建**：`testDebugUnitTest` 409/409 通过，`assembleDebug` 成功。
 
+### M3+ 收尾：多设备缓存、能力矩阵、capability 扩展（2026-06-05，轻量实现）
+
+#### 多设备过期 snapshot 保留
+
+**问题**：`MilinkBridgeService` 在每次 `HeadphoneUiState` 更新时调用 `snapshots.clear()`，导致所有设备的 snapshot 被清除，只保留当前活跃设备。当设备 A 连接而设备 B 断开时，B 的 snapshot 丢失。
+
+**修复**：
+- `MilinkBridgeService` 不再 `snapshots.clear()` 全量清除。改为 per-MAC upsert：活跃设备的 snapshot 写入，其他 MAC 的 snapshot 保留。
+- 新增 `SNAPSHOT_STALE_MS = 300s` 超时清理：超过 5 分钟的过期 snapshot 自动移除。
+- `MiTwsBridgeCache` 已有的 `knownAuthorizedMacs` + `STALE_TOLERANCE_MS` 机制继续工作——Bridge 断开后分类资格保持，快照在 TTL 内继续返回给 MiLink。
+
+**结论**：桥接层和缓存层已 per-MAC 就绪。由于 `HeadphoneRepository` 和传输层为单设备架构，真正的多连接需要重构 `HeadphoneUiState` → `Map<String, DeviceState>`，当前不做。当前最小可行方案利用已有的过期缓存机制给 MiLink 多设备外观。
+
+#### DeviceCapabilityRegistry
+
+**新增文件**：`integration/milink/DeviceCapabilityRegistry.kt`
+- 从 4 个设备 profile（LinkBuds S、WF-1000XM5、WH-1000XM4、C30S）提取静态能力映射 `modelName → Capabilities(features, formFactor)`。
+- `supports(modelName, feature)` / `featuresFor(modelName)` / `allModelNames()` 公共接口。
+- 用途：无需活跃设备连接即可查询型号能力，供 MiLink 快照、UI 诊断、未来功能门控使用。
+
+#### MiLink capability 标志扩展
+
+快照新增 4 个能力标志：
+| 标志 | 来源 | 用途 |
+|------|------|------|
+| `supportsEq` | `profile.supports(EQ)` | 均衡器能力 |
+| `supportsLeaStatus` | `profile.supports(LEA_STATUS)` | LE Audio 状态 |
+| `supportsQuickAccess` | `profile.supports(QUICK_ACCESS)` | 快捷操作键 |
+| `supportsAmbientLevel` | `profile.supports(AMBIENT_LEVEL)` | 环境音级别调节 |
+
+已更新的文件：`MilinkBridgeContract.kt`（KEY 常量）、`MilinkDeviceSnapshot.kt`（数据类 + Bundle 序列化 + mapper）、6 个测试文件（构造函数参数）。
+
+#### 剩余未实现项
+
+| 条目 | 状态 | 说明 |
+|------|------|------|
+| ring/find 耳机查找 | ❌ 框架桩 | Sony Tandem v13.0.5 和 QCY 均无 BLE 命令；框架就绪 |
+| 多连接传输 | ❌ 不承诺 | 需重构 `HeadphoneUiState` → per-MAC map，投入产出比低 |
+| `switchToHeadsetActivity` query | ❌ 待评估 | MiLink 设置跳转可用，深度等价未覆盖 |
+| NOISE_CONTROL 拆分 | ❌ 暂缓 | 单 `HeadphoneFeature` 涵盖 ANC + 通透，需拆分 |
+| AUDIO_EFFECT 拆分 | ❌ 暂缓 | 单 feature 涵盖空间音频 + DSEE，需按协议区分 |
+| 动态 capability 探测 | ❌ 暂缓 | 需接入 Sony GET_CAPABILITY / QCY function CMD |
+
+**构建**：`testDebugUnitTest` 通过，`compileDebugKotlin` 通过。
+
 ### M4：`com.xiaomi.bluetooth` 快连和通知实验（可选，1-2 周）
 
 - [ ] LSPosed scope 增加 `com.xiaomi.bluetooth`，默认 trace-only。
