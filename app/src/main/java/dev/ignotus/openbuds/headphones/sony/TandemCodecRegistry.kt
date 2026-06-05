@@ -56,6 +56,8 @@ interface TandemCodec {
         control: PlaybackControl,
         type: PlayInquiredType = PlayInquiredType.PLAYBACK_CONTROL_WITH_CALL_VOLUME_ADJUSTMENT,
     ): ByteArray? = null
+    fun buildGetMusicVolume(): ByteArray? = null
+    fun buildSetMusicVolume(volume: Int): ByteArray? = null
     fun buildGetLeaStatus(type: LeaInquiredType): ByteArray? = null
     fun buildGetLeaPairedHistory(type: LeaInquiredType): ByteArray? = null
     fun buildGetQuickAccess(): ByteArray? = null
@@ -159,6 +161,12 @@ object SonyTandemV1Table1Codec : TandemCodec {
 
     override fun buildPlayback(control: PlaybackControl, type: PlayInquiredType): ByteArray =
         SonyTandemV1Table1Protocol.buildPlayback(control)
+
+    override fun buildGetMusicVolume(): ByteArray =
+        SonyTandemV1Table1Protocol.buildGetMusicVolume()
+
+    override fun buildSetMusicVolume(volume: Int): ByteArray =
+        SonyTandemV1Table1Protocol.buildSetMusicVolume(volume)
 
     override fun parse(raw: ByteArray): ParsedHeadphoneResponse =
         SonyTandemV1Table1Protocol.parse(raw)
@@ -268,6 +276,12 @@ object SonyTandemV2Table1Codec : TandemCodec {
 
     override fun buildPlayback(control: PlaybackControl, type: PlayInquiredType): ByteArray =
         SonyTandemV2Table1Protocol.buildPlayback(control, type)
+
+    override fun buildGetMusicVolume(): ByteArray =
+        SonyTandemV2Table1Protocol.buildGetMusicVolume()
+
+    override fun buildSetMusicVolume(volume: Int): ByteArray =
+        SonyTandemV2Table1Protocol.buildSetMusicVolume(volume)
 
     override fun buildGetLeaStatus(type: LeaInquiredType): ByteArray =
         SonyTandemV2Table1Protocol.buildGetLeaStatus(type)

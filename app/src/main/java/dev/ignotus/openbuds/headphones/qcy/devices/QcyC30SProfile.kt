@@ -25,7 +25,7 @@ object QcyC30SProfile {
         HeadphoneFeature.AMBIENT_LEVEL,
         HeadphoneFeature.EQ,
         HeadphoneFeature.PLAYBACK_CONTROL,
-        // VOLUME: deferred to P3 — CMD 8 write path + UI state not wired yet.
+        HeadphoneFeature.VOLUME,
     )
 
     val template = ProfileTemplate(

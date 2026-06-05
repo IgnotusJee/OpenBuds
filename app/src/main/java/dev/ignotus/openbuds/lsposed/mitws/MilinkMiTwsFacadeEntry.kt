@@ -2,8 +2,12 @@ package dev.ignotus.openbuds.lsposed.mitws
 
 import android.app.Application
 import android.content.Context
+import android.os.Bundle
 import android.os.Process
 import android.util.Log
+import dev.ignotus.openbuds.integration.milink.MilinkBridgeContract
+import dev.ignotus.openbuds.integration.milink.MilinkDeviceSnapshot
+import dev.ignotus.openbuds.integration.milink.normalizeMac
 import dev.ignotus.openbuds.lsposed.ModuleMain
 import io.github.libxposed.api.XposedInterface
 
@@ -39,6 +43,54 @@ class MilinkMiTwsFacadeEntry(
             )
         }
         MilinkMiTwsFacadeHook(classLoader, BridgeClientHolder).installTraceHooks()
+        installVolumeControlHook()
+    }
+
+    private fun installVolumeControlHook() {
+        val profileImpl = runCatching {
+            classLoader.loadClass(PROFILE_IMPL)
+        }.getOrNull() ?: run {
+            Log.w(TAG, "M3+ volume control: $PROFILE_IMPL not found")
+            return
+        }
+        val method = runCatching {
+            profileImpl.getDeclaredMethod(
+                "updateHeadsetVolume",
+                String::class.java,
+                String::class.java,
+                String::class.java,
+                Int::class.javaPrimitiveType ?: Int::class.java,
+            )
+        }.getOrNull() ?: run {
+            Log.w(TAG, "M3+ volume control: ProfileImpl.updateHeadsetVolume not found")
+            return
+        }
+        ModuleMain.instance.hook(method)
+            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+            .intercept(object : XposedInterface.Hooker {
+                override fun intercept(chain: XposedInterface.Chain): Any? {
+                    val address = chain.args.getOrNull(1) as? String ?: ""
+                    val volumeValue = (chain.args.getOrNull(3) as? Int) ?: -1
+                    val mac = address.normalizeMac() ?: ""
+                    val snapshot = BridgeClientHolder.snapshotFor(mac)
+                    if (snapshot == null || !snapshot.supportsVolumeControl) {
+                        return 201 // PROFILE_FAILURE_RESULT
+                    }
+                    val command = Bundle().apply {
+                        putString(MilinkBridgeContract.KEY_COMMAND_TYPE, MilinkBridgeContract.COMMAND_SET_VOLUME)
+                        putInt(MilinkBridgeContract.KEY_VOLUME, volumeValue.coerceIn(0, 255))
+                        putString(MilinkBridgeContract.KEY_REQUEST_ID, java.util.UUID.randomUUID().toString())
+                    }
+                    val result = BridgeClientHolder.executeCommand(mac, command, 50L)
+                    Log.i(
+                        TAG,
+                        "[MiLinkMiTWS] updateHeadsetVolume mac=$mac volume=$volumeValue " +
+                            "accepted=${result.accepted} reason=${result.reason}"
+                    )
+                    return if (result.accepted) 1 else 201
+                }
+            })
+        Log.i(TAG, "hooked M3+ volume control: ProfileImpl.updateHeadsetVolume")
     }
 
     private fun currentProcessName(): String = runCatching {
@@ -142,5 +194,6 @@ class MilinkMiTwsFacadeEntry(
 
     private companion object {
         private const val TAG = "OpenBuds"
+        private const val PROFILE_IMPL = "com.miui.headset.runtime.ProfileImpl"
     }
 }

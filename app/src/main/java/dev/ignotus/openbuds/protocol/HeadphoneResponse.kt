@@ -9,6 +9,7 @@ import dev.ignotus.openbuds.protocol.sony.LeaInquiredType
 import dev.ignotus.openbuds.protocol.sony.LeaPairedHistory
 import dev.ignotus.openbuds.protocol.sony.LeaStreamingStatus
 import dev.ignotus.openbuds.protocol.sony.NcAsmInquiredType
+import dev.ignotus.openbuds.protocol.sony.PlayInquiredType
 import dev.ignotus.openbuds.protocol.sony.PowerInquiredType
 import dev.ignotus.openbuds.protocol.sony.QuickAccessFunction
 import dev.ignotus.openbuds.protocol.sony.QuickAccessKey
@@ -113,6 +114,14 @@ sealed interface ParsedHeadphoneResponse {
         data class WearingStatus(
             val status: WearingDetectionStatus? = null,
             val result: WearingDetectionResult? = null,
+            val values: List<Int>,
+            override val raw: ByteArray,
+        ) : SonyTandem
+
+        data class Volume(
+            val type: PlayInquiredType?,
+            val value: Int,
+            val muted: Boolean = false,
             val values: List<Int>,
             override val raw: ByteArray,
         ) : SonyTandem

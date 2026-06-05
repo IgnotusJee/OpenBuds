@@ -89,6 +89,27 @@ object MiTwsControlMapper {
             null
         }
 
+    fun volume(command: Bundle): Int? =
+        if (command.containsKey(MilinkBridgeContract.KEY_VOLUME)) {
+            command.getInt(MilinkBridgeContract.KEY_VOLUME)
+        } else {
+            null
+        }
+
+    fun buildSetVolumeCommand(
+        volumeValue: Int,
+        snapshot: MilinkDeviceSnapshot,
+        requestId: String = newRequestId(),
+    ): Bundle? {
+        if (!snapshot.supportsVolumeControl) return null
+        val clamped = volumeValue.coerceIn(0, 255)
+        return Bundle().apply {
+            putString(MilinkBridgeContract.KEY_COMMAND_TYPE, MilinkBridgeContract.COMMAND_SET_VOLUME)
+            putInt(MilinkBridgeContract.KEY_VOLUME, clamped)
+            putString(MilinkBridgeContract.KEY_REQUEST_ID, requestId)
+        }
+    }
+
     fun parseResult(result: Bundle?): MiTwsBridgeCommandResult =
         if (result == null) {
             MiTwsBridgeCommandResult.failed(MilinkBridgeContract.REASON_BRIDGE_UNAVAILABLE)

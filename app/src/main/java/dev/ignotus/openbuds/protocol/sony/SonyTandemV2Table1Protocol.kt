@@ -51,6 +51,10 @@ object SonyTandemV2Table1Protocol {
     private const val PLAY_RET_STATUS: Byte = 0xA3.toByte()
     private const val PLAY_SET_STATUS: Byte = 0xA4.toByte()
     private const val PLAY_NTFY_STATUS: Byte = 0xA5.toByte()
+    private const val PLAY_GET_PARAM: Byte = 0xA6.toByte()
+    private const val PLAY_RET_PARAM: Byte = 0xA7.toByte()
+    private const val PLAY_SET_PARAM: Byte = 0xA8.toByte()
+    private const val PLAY_NTFY_PARAM: Byte = 0xA9.toByte()
     private const val VALUE_ENABLE: Byte = 0x00
     private const val VALUE_CHANGED: Byte = 0x01
     private const val NCASM_EFFECT_OFF: Byte = 0x00
@@ -176,6 +180,15 @@ object SonyTandemV2Table1Protocol {
     ): ByteArray =
         SonyTandemFrame.message(PLAY_GET_STATUS, byteArrayOf(type.code))
 
+    fun buildGetMusicVolume(): ByteArray =
+        SonyTandemFrame.message(PLAY_GET_PARAM, byteArrayOf(PlayInquiredType.MUSIC_VOLUME.code))
+
+    fun buildSetMusicVolume(volume: Int): ByteArray =
+        SonyTandemFrame.message(
+            PLAY_SET_PARAM,
+            byteArrayOf(PlayInquiredType.MUSIC_VOLUME.code, volume.coerceIn(0, 255).toByte()),
+        )
+
     fun buildGetLeaStatus(type: LeaInquiredType): ByteArray =
         SonyTandemFrame.message(LEA_GET_STATUS, byteArrayOf(type.code))
 
@@ -272,6 +285,7 @@ object SonyTandemV2Table1Protocol {
                 isUnsolicited = true,
                 raw = raw,
             )
+            PLAY_RET_PARAM, PLAY_NTFY_PARAM -> parsePlayParam(payload, raw, command == PLAY_NTFY_PARAM)
             LEA_RET_STATUS, LEA_NTFY_STATUS -> parseLeaStatus(payload, raw)
             LEA_RET_PARAM, LEA_NTFY_PARAM -> parseLeaParam(payload, raw)
             SYSTEM_RET_PARAM -> parseSystemRetParam(payload, raw)
@@ -521,6 +535,37 @@ object SonyTandemV2Table1Protocol {
             3 -> PlaybackStatus.STOPPED
             else -> PlaybackStatus.UNKNOWN
         }
+
+    private fun parsePlayParam(payload: ByteArray, raw: ByteArray, isUnsolicited: Boolean): ParsedHeadphoneResponse {
+        val inquiredType = payload.firstOrNull()?.let { code ->
+            PlayInquiredType.entries.firstOrNull { it.code == code }
+        }
+        return when (inquiredType) {
+            PlayInquiredType.MUSIC_VOLUME,
+            PlayInquiredType.CALL_VOLUME -> {
+                val volumeValue = payload.getOrNull(1)?.unsigned ?: 0
+                ParsedHeadphoneResponse.SonyTandem.Volume(
+                    type = inquiredType,
+                    value = volumeValue.coerceIn(0, 255),
+                    values = payload.unsignedList(),
+                    raw = raw,
+                )
+            }
+            PlayInquiredType.MUSIC_VOLUME_WITH_MUTE,
+            PlayInquiredType.CALL_VOLUME_WITH_MUTE -> {
+                val volumeValue = payload.getOrNull(1)?.unsigned ?: 0
+                val muteEnabled = payload.getOrNull(2)?.let { it.toInt() == 0x01 } ?: false
+                ParsedHeadphoneResponse.SonyTandem.Volume(
+                    type = inquiredType,
+                    value = volumeValue.coerceIn(0, 255),
+                    muted = muteEnabled,
+                    values = payload.unsignedList(),
+                    raw = raw,
+                )
+            }
+            else -> ParsedHeadphoneResponse.SonyTandem.Unknown(null, PLAY_RET_PARAM.unsigned, payload, raw)
+        }
+    }
 
     private fun parseLeaStatus(payload: ByteArray, raw: ByteArray): ParsedHeadphoneResponse {
         val typeCode = payload.firstOrNull()

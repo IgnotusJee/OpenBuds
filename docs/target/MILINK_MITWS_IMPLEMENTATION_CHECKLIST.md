@@ -71,8 +71,8 @@ Current snapshot only covers:
 
 - [x] Preserve correct first-party battery payload shape for `HeadsetInfo`
 - [x] Project OpenBuds form factor into MiLink runtime `deviceType`
-- [ ] Add `supportsVolumeControl`
-- [ ] Add current volume value
+- [x] Add `supportsVolumeControl`
+- [x] Add current volume value
 - [ ] Add `supportsAudioEffect`
 - [ ] Add current audio effect state
 - [ ] Add `supportsRing`

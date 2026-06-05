@@ -34,6 +34,7 @@ import dev.ignotus.openbuds.protocol.sony.EqEbbInquiredType
 import dev.ignotus.openbuds.protocol.sony.LeaInquiredType
 import dev.ignotus.openbuds.protocol.sony.NcAsmInquiredType
 import dev.ignotus.openbuds.protocol.sony.PlaybackControl
+import dev.ignotus.openbuds.protocol.sony.PlayInquiredType
 import dev.ignotus.openbuds.protocol.sony.PowerInquiredType
 import dev.ignotus.openbuds.protocol.sony.SonyTandemConstants.DATA_MDR
 import dev.ignotus.openbuds.protocol.sony.SonyTandemConstants.DATA_MDR_NO2
@@ -61,6 +62,8 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
     private const val NCASM_NTFY_PARAM: Byte = 0x69
     private const val PLAY_RET_STATUS: Byte = 0xA3.toByte()
     private const val PLAY_NTFY_STATUS: Byte = 0xA5.toByte()
+    private const val PLAY_RET_PARAM: Byte = 0xA7.toByte()
+    private const val PLAY_NTFY_PARAM: Byte = 0xA9.toByte()
     override val id: String = "sony-tandem"
     override val brand: String = "Sony"
     override val protocolName: String = "Sony Tandem"
@@ -148,6 +151,9 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
             if (profile.supports(HeadphoneFeature.PLAYBACK_CONTROL)) {
                 addAll(buildRefreshPlaybackCommands(profile))
             }
+            if (profile.supports(HeadphoneFeature.VOLUME)) {
+                addAll(buildRefreshVolumeCommands(profile))
+            }
             if (profile.supports(HeadphoneFeature.LEA_STATUS)) {
                 addAll(buildRefreshLeaCommands(profile))
             }
@@ -171,7 +177,8 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
                 profile.supports(feature) && profile.capabilities.writableNoiseControlTypes.isNotEmpty()
             HeadphoneFeature.EQ,
             HeadphoneFeature.CLEAR_BASS,
-            HeadphoneFeature.PLAYBACK_CONTROL ->
+            HeadphoneFeature.PLAYBACK_CONTROL,
+            HeadphoneFeature.VOLUME ->
                 profile.supports(feature) && profile.protocolEvidence.any { it.startsWith("static-profile:") }
             else -> profile.supports(feature)
         }
@@ -399,6 +406,18 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
             ?.let { listOf(command(profile, HeadphoneFeature.PLAYBACK_CONTROL, "PLAYBACK ${control.name}", it)) }
             .orEmpty()
 
+    override fun buildRefreshVolumeCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> =
+        codecFor(profile, HeadphoneFeature.VOLUME)
+            .buildGetMusicVolume()
+            ?.let { listOf(command(profile, HeadphoneFeature.VOLUME, "GET music volume", it)) }
+            .orEmpty()
+
+    override fun buildSetVolumeCommands(profile: ConnectedHeadphoneProfile, volume: Int): List<HeadphoneCommand> =
+        codecFor(profile, HeadphoneFeature.VOLUME)
+            .buildSetMusicVolume(volume)
+            ?.let { listOf(command(profile, HeadphoneFeature.VOLUME, "SET music volume $volume", it)) }
+            .orEmpty()
+
     override fun parse(
         profile: ConnectedHeadphoneProfile,
         message: IncomingHeadphoneMessage,
@@ -530,7 +549,21 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
         NCASM_GET_PARAM, NCASM_RET_PARAM, NCASM_SET_PARAM,
         NCASM_NTFY_PARAM -> HeadphoneFeature.NOISE_CONTROL
         PLAY_RET_STATUS, PLAY_NTFY_STATUS -> HeadphoneFeature.PLAYBACK_CONTROL
+        PLAY_RET_PARAM, PLAY_NTFY_PARAM -> classifyPlayParam(payload)
         else -> HeadphoneFeature.DEVICE_INFO
+    }
+
+    private fun classifyPlayParam(payload: ByteArray): HeadphoneFeature {
+        val inquiredType = payload.firstOrNull()?.let { code ->
+            PlayInquiredType.entries.firstOrNull { it.code == code }
+        }
+        return when (inquiredType) {
+            PlayInquiredType.MUSIC_VOLUME,
+            PlayInquiredType.CALL_VOLUME,
+            PlayInquiredType.MUSIC_VOLUME_WITH_MUTE,
+            PlayInquiredType.CALL_VOLUME_WITH_MUTE -> HeadphoneFeature.VOLUME
+            else -> HeadphoneFeature.PLAYBACK_CONTROL
+        }
     }
 
     /**

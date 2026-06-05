@@ -56,6 +56,15 @@
 - 环境声等级 1-20。
 - 关注语音。
 
+### 音量控制
+
+- 音乐音量读取（Sony V1/V2 PLAY_PARAM + QCY CMDID_VOLUME）。
+- 音乐音量写入（Sony V1/V2 PLAY_SET_PARAM + QCY volume write）。
+- 通话音量读取支持（Sony V2 CALL_VOLUME type，协议层已就绪，UI 暂未区分）。
+- 静音状态读取（Sony V2 MUSIC_VOLUME_WITH_MUTE / CALL_VOLUME_WITH_MUTE）。
+- MiLink 第一方音量集成：snapshot 映射、bridge 命令转发、ProfileImpl.updateHeadsetVolume hook。
+- 覆盖设备：LinkBuds S、WF-1000XM5、WH-1000XM4、QCY C30S。
+
 ### 播放控制
 
 - 上一曲。
@@ -120,7 +129,7 @@ WH-1000XM4：EQ 使用 V1 `PRESET_EQ` type code `0x01` 读取 active preset 与 
 - 设备图片：当前使用云端 manifest 匹配远程 URL，并已增加进程内内存缓存；仍没有离线 fallback 图片包。
 - 播放状态：已有 Tandem-first dispatch、`isUnsolicited` 交叉验证、30s 心跳维持、`PendingPlaybackStatus` optimistic UI 过渡和 stale response filtering（2.5s 窗口）；但没有完整 media session 订阅。
 - GATT 控制：V2 HPC 可握手；HPC 握手后可使用 V2 MC/V1 MC endpoint 路由。V1 MC-only GATT 端点会进入 unsupported 诊断并标记为待验证，不会误报为可控。
-- WH-1000XM4：已有完整 V1 TableSet1 静态 profile，device info、电量、NC/ASM、EQ、Clear Bass、播放控制均走 `GATT_V1_MC`；仍需要按新 profile 做真机逐项 TX/RX 回归。
+- WH-1000XM4：已有完整 V1 TableSet1 静态 profile（device info、电量、NC/ASM、EQ、Clear Bass、播放控制、音量控制均走 `GATT_V1_MC`）；仍需要按新 profile 做真机逐项 TX/RX 回归。
 - WF-1000XM5：已有完整 V2 TableSet1 静态 profile（功能配置等同 LinkBuds S）；需要真机逐项 TX/RX 验证。
 - V1 TableSet2 / V2 TableSet2：已有 codec、parser、registry、MC/SPP data type 路径和最近响应的结构化 diagnostics state；当前只做只读解析/诊断，尚未开放具体 UI 写入功能。
 - 液态玻璃 UI：已实现可选效果和拖动修正；视觉细节仍以真机截图/帧统计继续迭代。

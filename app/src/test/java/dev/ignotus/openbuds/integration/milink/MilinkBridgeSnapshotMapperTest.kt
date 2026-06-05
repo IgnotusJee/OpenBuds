@@ -71,7 +71,7 @@ class MilinkBridgeSnapshotMapperTest {
         assertEquals(true, snapshot.supportsNoiseControl)
         assertEquals(false, snapshot.supportsWearing)
         assertEquals(false, snapshot.supportsRing)
-        assertEquals(false, snapshot.supportsVolumeControl)
+        assertEquals(true, snapshot.supportsVolumeControl)
         assertEquals(false, snapshot.supportsAudioEffect)
         assertEquals(7L, snapshot.revision)
         assertEquals(9L, snapshot.updatedAt)

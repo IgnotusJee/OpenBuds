@@ -368,9 +368,9 @@ V2 主线剩余 bridge / runtime 能力：
 |------|------|------|---------|
 | 多设备 snapshot map | Sony + QCY 同时连接或历史设备时不能只存一个 latestSnapshot | M3+ | ❌ 未实现 |
 | ANC 状态字段 | `ancMode` 已接入 bridge snapshot | M2 | ✅ 已实现 |
-| volume / audio effect / ring 状态字段 | 详情页剩余第一方控件依赖这些状态；当前 snapshot 尚未完整承载 | M3+ | ❌ 未实现 |
+| volume / audio effect / ring 状态字段 | 详情页剩余第一方控件依赖这些状态；volume 已接入 bridge snapshot，audio effect / ring 尚未 | M3+ | ✅ Volume 已实现 |
 | `setNoiseControl` 命令 AIDL | ANC 三态控制 | M3 | ✅ 已实现 |
-| `ringFind` / `setVolume` / `setAudioEffect` / `playback` 命令 AIDL | 剩余控制面 | M3+ | ❌ 未实现 |
+| `ringFind` / `setVolume` / `setAudioEffect` / `playback` 命令 AIDL | 剩余控制面 | M3+ | ✅ `setVolume` 已实现；ringFind / setAudioEffect 未实现 |
 | 命令结果回执缓存 | 当前只有 `accepted/reason/requestId`；缺少按协议执行结果回写的短超时缓存 | M3+ | ⚠️ 部分实现 |
 | capability 矩阵 | 当前已有 `supportsBattery` / `supportsNoiseControl` / `supportsWearing` / `supportsRing` 字段，但没有按品牌/型号形成稳定能力矩阵 | M3+ | ⚠️ 部分实现 |
 | runtime projection (`ProfileContext + DiscoveryImpl`) | 让 `ProfileImpl.getHeadsetProperty(...)`、`updateHeadsetMode(...)`、`updateHeadsetVolume(...)`、`updateHeadsetAudioEffect(...)` 走自然 first-party runtime 路径，而不是继续增加单点旁路 hook | M3+ | ⚠️ 已实现基础投影，仍待收敛 |
@@ -693,8 +693,11 @@ M3 完成记录（2026-06-02）：
 - [x] 在 runtime projection 后补齐最关键 query 差异：`getSupportAncMode`、`isMmaHeadset`、`getBondStateWithTargetHost` 已有最小替换，仅在 live OpenBuds snapshot 命中时覆写。
 - [ ] 收敛首屏时序：进一步确认 `HeadSetsDetail` 首次展开时的 ANC 卡片显示路径，减少依赖后续异步刷新才显现的情况。
 - [ ] 在 runtime projection 稳定后，评估是否下调或删除 `ProfileImpl.updateHeadsetMode(...)` 特判 hook，避免继续为每条控制链单独加 bypass。
-- [ ] 扩展 bridge snapshot：volume、audio effect、ring 状态；明确 `DiscoveryImpl.assembleHeadsetInfo()` 所需字段的 OpenBuds 映射来源。
-- [ ] 扩展 bridge 命令：`ringFind`、`setVolume`、`setAudioEffect`；`playback` 仅在 MiLink 真机确认通过 MiTWS 控制面调用时再纳入主线。
+- [x] 扩展 bridge snapshot：volume 状态；`currentVolume` 从 `VolumeState.musicVolume` 映射，`supportsVolumeControl` 从 profile 判定。audio effect、ring 状态仍未实现。
+- [x] 扩展 bridge 命令：`setVolume` 已通过 `MilinkBridgeService.executeAcceptedCommand()` → `repository.setVolume()` 闭环。`ringFind`、`setAudioEffect` 仍未实现。
+- [x] `ProfileImpl.updateHeadsetVolume(...)` 已从 guard-only 升级为 bridge 转发，通过 `MilinkMiTwsFacadeEntry.installVolumeControlHook()` 实现。
+- [ ] 扩展 bridge snapshot：audio effect、ring 状态；明确 `DiscoveryImpl.assembleHeadsetInfo()` 所需字段的 OpenBuds 映射来源。
+- [ ] 扩展 bridge 命令：`ringFind`、`setAudioEffect`；`playback` 仅在 MiLink 真机确认通过 MiTWS 控制面调用时再纳入主线。
 - [ ] 继续观测 `:core` 内 `disconnectMma` 高频轮询对耳机卡片 runtime 的扰动；若低频卡片缩小/ANC 点不动仍残留，再做更窄的 `disconnectMma` 调用侧治理，而不是直接做 UI 强推或会话语义改写。
 
 验收：

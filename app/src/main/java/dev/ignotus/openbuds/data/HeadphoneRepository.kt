@@ -128,6 +128,13 @@ data class WearingState(
     val raw: List<Int> = emptyList(),
 )
 
+data class VolumeState(
+    val musicVolume: Int? = null,
+    val callVolume: Int? = null,
+    val isMuted: Boolean = false,
+    val raw: List<Int> = emptyList(),
+)
+
 data class EndpointDiagnosticState(
     val reason: String,
     val serviceLabels: List<String> = emptyList(),
@@ -169,6 +176,7 @@ data class HeadphoneUiState(
     val leaState: LeaState = LeaState(),
     val quickAccessState: QuickAccessState = QuickAccessState(),
     val wearingState: WearingState = WearingState(),
+    val volumeState: VolumeState = VolumeState(),
     val playbackStatus: PlaybackStatus = PlaybackStatus.UNKNOWN,
     val endpointDiagnostic: EndpointDiagnosticState? = null,
     val table2Diagnostic: Table2DiagnosticState? = null,
@@ -334,6 +342,27 @@ class HeadphoneRepository private constructor(context: Context) : HeadphoneTrans
             mode,
         ).forEach(::sendCommand)
         refreshNoiseControlStateAfterWrite(profile)
+    }
+
+    fun setVolume(volume: Int) {
+        if (!_state.value.deviceInfo.protocolReady) {
+            appendLog("Volume change ignored: protocol not ready")
+            _state.update { it.copy(volumeState = it.volumeState.copy(musicVolume = volume)) }
+            return
+        }
+        if (!canWrite(HeadphoneFeature.VOLUME)) {
+            appendLog("Volume write is disabled for current profile")
+            return
+        }
+        val clamped = volume.coerceIn(0, 255)
+        val profile = ensureConnectedProfile()
+        val commands = HeadphoneAdapterRegistry.buildSetVolumeCommands(profile, clamped)
+        if (commands.isEmpty()) {
+            appendLog("Volume write not supported for adapter ${profile.adapterId}")
+            return
+        }
+        _state.update { it.copy(volumeState = it.volumeState.copy(musicVolume = clamped)) }
+        commands.forEach(::sendCommand)
     }
 
     fun setAmbientVoiceMode(enabled: Boolean) {
@@ -628,6 +657,7 @@ class HeadphoneRepository private constructor(context: Context) : HeadphoneTrans
                     BatteryState()
                 },
                 noiseControlState = if (connected) it.noiseControlState else NoiseControlState(),
+                volumeState = if (connected) it.volumeState else VolumeState(),
                 eqState = if (connected) it.eqState else EqState(),
                 eqUiCapability = if (connected) profile?.eqUiCapability else null,
                 playbackStatus = if (connected) it.playbackStatus else PlaybackStatus.UNKNOWN,
@@ -680,6 +710,7 @@ class HeadphoneRepository private constructor(context: Context) : HeadphoneTrans
             is ParsedHeadphoneResponse.SonyTandem.LeaPairedHistoryStatus -> applyLeaPairedHistory(parsed)
             is ParsedHeadphoneResponse.SonyTandem.QuickAccess -> applyQuickAccess(parsed)
             is ParsedHeadphoneResponse.SonyTandem.WearingStatus -> applyWearingStatus(parsed)
+            is ParsedHeadphoneResponse.SonyTandem.Volume -> applySonyVolume(parsed)
             is ParsedHeadphoneResponse.SonyTandem.Unknown -> applyKnownOrUnknown(parsed)
             is ParsedHeadphoneResponse.SonyTandem.Table2Common -> applyTable2Diagnostic(sourceKey, parsed)
             is ParsedHeadphoneResponse.SonyTandem.Table2Generic -> applyTable2Diagnostic(sourceKey, parsed)
@@ -1038,6 +1069,30 @@ class HeadphoneRepository private constructor(context: Context) : HeadphoneTrans
         }
     }
 
+    private fun applySonyVolume(response: ParsedHeadphoneResponse.SonyTandem.Volume) {
+        val volumeLabel = when (response.type) {
+            dev.ignotus.openbuds.protocol.sony.PlayInquiredType.MUSIC_VOLUME,
+            dev.ignotus.openbuds.protocol.sony.PlayInquiredType.MUSIC_VOLUME_WITH_MUTE -> "music"
+            dev.ignotus.openbuds.protocol.sony.PlayInquiredType.CALL_VOLUME,
+            dev.ignotus.openbuds.protocol.sony.PlayInquiredType.CALL_VOLUME_WITH_MUTE -> "call"
+            else -> "unknown"
+        }
+        appendLog("Sony volume $volumeLabel value=${response.value} muted=${response.muted}")
+        _state.update { current ->
+            current.copy(
+                volumeState = when (response.type) {
+                    dev.ignotus.openbuds.protocol.sony.PlayInquiredType.MUSIC_VOLUME,
+                    dev.ignotus.openbuds.protocol.sony.PlayInquiredType.MUSIC_VOLUME_WITH_MUTE ->
+                        current.volumeState.copy(musicVolume = response.value, isMuted = response.muted, raw = response.values)
+                    dev.ignotus.openbuds.protocol.sony.PlayInquiredType.CALL_VOLUME,
+                    dev.ignotus.openbuds.protocol.sony.PlayInquiredType.CALL_VOLUME_WITH_MUTE ->
+                        current.volumeState.copy(callVolume = response.value, isMuted = response.muted, raw = response.values)
+                    else -> current.volumeState
+                }
+            )
+        }
+    }
+
     private fun applyTable2Diagnostic(sourceKey: String, response: ParsedHeadphoneResponse) {
         appendLog("Table2 ${response::class.simpleName} source=$sourceKey raw=${response.raw.hexString()}")
         val diagnostic = table2DiagnosticStateFor(sourceKey, response) ?: return
@@ -1361,6 +1416,7 @@ fun featureStatusesFor(profile: ConnectedHeadphoneProfile?): List<FeatureStatus>
     FeatureStatus("Noise Control", "NC/ASM gated by current device profile", profile.supports(HeadphoneFeature.NOISE_CONTROL)),
     FeatureStatus("Ambient Level", "ASM seamless level when confirmed writable", profile.supports(HeadphoneFeature.AMBIENT_LEVEL)),
     FeatureStatus("Playback Control", "Play, pause, previous, next", profile.supports(HeadphoneFeature.PLAYBACK_CONTROL)),
+    FeatureStatus("Volume Control", "Music/call volume get/set via Tandem or QCY protocol", profile.supports(HeadphoneFeature.VOLUME)),
     FeatureStatus("EQ / Clear Bass", "Preset EQ, custom EQ, and Clear Bass", profile.supports(HeadphoneFeature.EQ)),
     FeatureStatus("LE Audio", "Connection type, streaming status, paired history", profile.supports(HeadphoneFeature.LEA_STATUS)),
     FeatureStatus("Quick Access", "Customizable button actions L/R and NC/AMB keys", profile.supports(HeadphoneFeature.QUICK_ACCESS)),

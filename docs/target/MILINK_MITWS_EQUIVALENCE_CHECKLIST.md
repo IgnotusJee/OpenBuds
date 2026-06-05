@@ -195,15 +195,17 @@ Current validated process roles:
 
 ### C6. Volume state
 
-- Status: `Partially satisfied`
+- Status: `Satisfied`
 - MiLink dependency:
   - `HeadSetsDetail` reads `C4737b0.m19873G()`
   - Controller ultimately reads `HeadsetDeviceInfo.headsetVolume`
 - Current implementation:
-  - No explicit MiTWS volume getter/callback replacement is present in the current facade path
+  - `hookProfileContextVolume()` returns `currentVolume` from active snapshot
+  - `MilinkBridgeSnapshotMapper.fromUiState()` maps `volumeState.musicVolume` → `currentVolume`
+  - `supportsVolumeControl` from `profile.supports(HeadphoneFeature.VOLUME)`
+  - Bridge `SetVolume` command forwarded through `installVolumeControlHook()` → `MilinkBridgeClient` → `repository.setVolume()`
 - Conclusion:
-  - Volume may display through surviving native paths or cached model state
-  - It is not fully replaced as a MiTWS state surface
+  - Volume state and control surface are fully replaced for OpenBuds targets.
 
 ### C7. Audio effect state
 
@@ -293,14 +295,15 @@ Current validated process roles:
 
 ### E2. Volume control
 
-- Status: `Not satisfied`
+- Status: `Satisfied`
 - MiLink native path:
   - `C4737b0.m19865u() -> updateHeadsetVolume(...)`
 - Current implementation:
-  - No hook replacement
-  - No bridge command
+  - `installVolumeControlHook()` hooks `ProfileImpl.updateHeadsetVolume`
+  - Forwards to bridge `COMMAND_SET_VOLUME` → `repository.setVolume()`
+  - Optimistic UI update while protocol proceeds async
 - Conclusion:
-  - Clear gap.
+  - Volume control is fully bridged.
 
 ### E3. Audio effect / spatial audio control
 

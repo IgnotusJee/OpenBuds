@@ -808,7 +808,6 @@ class MilinkMiTwsFacadeHook(
         val profileImpl = loadClass(PROFILE_IMPL) ?: return
         hookProfileGetHeadsetProperty(profileImpl)
         hookProfileUpdateHeadsetMode(profileImpl)
-        hookProfileControlTrace(profileImpl, "updateHeadsetVolume")
         hookProfileControlTrace(profileImpl, "updateHeadsetAudioEffect")
     }
 

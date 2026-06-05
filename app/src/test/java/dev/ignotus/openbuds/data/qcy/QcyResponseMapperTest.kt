@@ -56,9 +56,10 @@ class QcyResponseMapperTest {
     }
 
     @Test
-    fun applyVolume_noop_returnsSame() {
+    fun applyVolume_setsMusicVolumeFromLeftVolume() {
         val r = ParsedHeadphoneResponse.Qcy.Volume(10, 12, byteArrayOf())
-        assertTrue(QcyResponseMapper.applyVolume(initial, r) === initial)
+        val s = QcyResponseMapper.applyVolume(initial, r)
+        assertEquals(10, s.volumeState.musicVolume)
     }
 
     @Test

@@ -98,7 +98,13 @@ object QcyResponseMapper {
     fun applyVolume(
         state: HeadphoneUiState,
         response: ParsedHeadphoneResponse.Qcy.Volume,
-    ): HeadphoneUiState = state // P3 follow-up
+    ): HeadphoneUiState = state.copy(
+        volumeState = state.volumeState.copy(
+            musicVolume = response.leftVolume,
+            isMuted = false,
+            raw = listOf(response.leftVolume, response.rightVolume),
+        )
+    )
 
     fun applyFunctionStatus(
         state: HeadphoneUiState,

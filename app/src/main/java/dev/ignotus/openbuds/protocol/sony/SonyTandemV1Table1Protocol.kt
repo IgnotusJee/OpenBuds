@@ -28,7 +28,12 @@ object SonyTandemV1Table1Protocol {
     private const val PLAY_RET_STATUS: Byte = 0xA3.toByte()
     private const val PLAY_SET_STATUS: Byte = 0xA4.toByte()
     private const val PLAY_NTFY_STATUS: Byte = 0xA5.toByte()
+    private const val PLAY_GET_PARAM: Byte = 0xA6.toByte()
+    private const val PLAY_RET_PARAM: Byte = 0xA7.toByte()
+    private const val PLAY_SET_PARAM: Byte = 0xA8.toByte()
+    private const val PLAY_NTFY_PARAM: Byte = 0xA9.toByte()
     private const val PLAYBACK_CONTROLLER: Byte = 0x01
+    private const val V1_PLAYBACK_DETAILED_VOLUME: Byte = 0x20
     private const val VALUE_ENABLE: Byte = 0x00
 
     // ── NC/ASM (V1 / shared) ──
@@ -159,6 +164,15 @@ object SonyTandemV1Table1Protocol {
             byteArrayOf(PLAYBACK_CONTROLLER, VALUE_ENABLE, control.code),
         )
 
+    fun buildGetMusicVolume(): ByteArray =
+        SonyTandemFrame.message(PLAY_GET_PARAM, byteArrayOf(PLAYBACK_CONTROLLER, V1_PLAYBACK_DETAILED_VOLUME))
+
+    fun buildSetMusicVolume(volume: Int): ByteArray =
+        SonyTandemFrame.message(
+            PLAY_SET_PARAM,
+            byteArrayOf(PLAYBACK_CONTROLLER, V1_PLAYBACK_DETAILED_VOLUME, volume.coerceIn(0, 255).toByte()),
+        )
+
     // ── Parse ──
 
     fun parse(raw: ByteArray): ParsedHeadphoneResponse {
@@ -192,6 +206,7 @@ object SonyTandemV1Table1Protocol {
                 isUnsolicited = true,
                 raw = raw,
             )
+            PLAY_RET_PARAM, PLAY_NTFY_PARAM -> parsePlayParam(payload, raw)
             else -> unknown(command, payload, raw)
         }
     }
@@ -268,6 +283,21 @@ object SonyTandemV1Table1Protocol {
             3 -> PlaybackStatus.STOPPED
             else -> PlaybackStatus.UNKNOWN
         }
+
+    private fun parsePlayParam(payload: ByteArray, raw: ByteArray): ParsedHeadphoneResponse {
+        val inquiredType = payload.getOrNull(0)
+        val detailedType = payload.getOrNull(1)
+        if (inquiredType == PLAYBACK_CONTROLLER && detailedType == V1_PLAYBACK_DETAILED_VOLUME) {
+            val volumeValue = payload.getOrNull(2)?.unsigned ?: 0
+            return ParsedHeadphoneResponse.SonyTandem.Volume(
+                type = PlayInquiredType.MUSIC_VOLUME,
+                value = volumeValue.coerceIn(0, 255),
+                values = payload.unsignedList(),
+                raw = raw,
+            )
+        }
+        return unknown(payload.getOrNull(0)?.let { PLAY_RET_PARAM }, payload, raw)
+    }
 
     private fun parseLengthPrefixedString(payload: ByteArray, offset: Int): String? {
         val length = payload.getOrNull(offset)?.unsigned ?: return fallbackDeviceInfoString(payload)

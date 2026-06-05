@@ -181,7 +181,10 @@ class MilinkBridgeService : Service() {
                 repository.setNoiseControlMode(action.mode)
                 MilinkBridgeCommandDecision.accepted(requestId, action)
             }
-            is MilinkBridgeCommandAction.SetVolume,
+            is MilinkBridgeCommandAction.SetVolume -> {
+                repository.setVolume(action.volume)
+                MilinkBridgeCommandDecision.accepted(requestId, action)
+            }
             is MilinkBridgeCommandAction.SetAudioEffect,
             MilinkBridgeCommandAction.StartRing,
             MilinkBridgeCommandAction.StopRing -> MilinkBridgeCommandDecision.rejected(

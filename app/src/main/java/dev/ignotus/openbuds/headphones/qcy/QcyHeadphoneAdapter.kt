@@ -121,6 +121,9 @@ object QcyHeadphoneAdapter : HeadphoneAdapter {
             if (profile.supports(HeadphoneFeature.EQ)) {
                 addAll(buildRefreshEqCommands(profile))
             }
+            if (profile.supports(HeadphoneFeature.VOLUME)) {
+                addAll(buildRefreshVolumeCommands(profile))
+            }
         }
 
     override fun buildRefreshBatteryCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> =
@@ -250,6 +253,25 @@ object QcyHeadphoneAdapter : HeadphoneAdapter {
             writeCommand(
                 "QCY PLAYBACK ${control.name}",
                 QcyProtocol.buildSingleValueCommand(QcyProtocol.CMDID_MUSIC_ACTION, action),
+            )
+        )
+    }
+
+    override fun buildRefreshVolumeCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> =
+        listOf(
+            writeCommand(
+                "QCY GET volume",
+                QcyProtocol.buildReadRequest(QcyProtocol.CMDID_VOLUME),
+            )
+        )
+
+    override fun buildSetVolumeCommands(profile: ConnectedHeadphoneProfile, volume: Int): List<HeadphoneCommand> {
+        val left = volume.coerceIn(0, 255).toByte()
+        val right = volume.coerceIn(0, 255).toByte()
+        return listOf(
+            writeCommand(
+                "QCY SET volume L=$volume R=$volume",
+                QcyProtocol.buildSimpleCommand(QcyProtocol.CMDID_VOLUME, byteArrayOf(left, right, 0)),
             )
         )
     }

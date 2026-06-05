@@ -272,6 +272,10 @@ interface HeadphoneAdapter {
     fun buildPlaybackCommands(profile: ConnectedHeadphoneProfile, control: PlaybackControl): List<HeadphoneCommand> =
         emptyList()
 
+    fun buildRefreshVolumeCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> = emptyList()
+
+    fun buildSetVolumeCommands(profile: ConnectedHeadphoneProfile, volume: Int): List<HeadphoneCommand> = emptyList()
+
     fun parse(profile: ConnectedHeadphoneProfile, message: IncomingHeadphoneMessage): ParsedHeadphoneResponse
 
     fun parse(profile: ConnectedHeadphoneProfile, raw: ByteArray): ParsedHeadphoneResponse =
@@ -341,6 +345,12 @@ object HeadphoneAdapterRegistry {
 
     fun buildPlaybackCommands(profile: ConnectedHeadphoneProfile, control: PlaybackControl): List<HeadphoneCommand> =
         adapterFor(profile).buildPlaybackCommands(profile, control)
+
+    fun buildRefreshVolumeCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> =
+        adapterFor(profile).buildRefreshVolumeCommands(profile)
+
+    fun buildSetVolumeCommands(profile: ConnectedHeadphoneProfile, volume: Int): List<HeadphoneCommand> =
+        adapterFor(profile).buildSetVolumeCommands(profile, volume)
 
     fun parse(profile: ConnectedHeadphoneProfile, message: IncomingHeadphoneMessage): ParsedHeadphoneResponse =
         adapterFor(profile).parse(profile, message)

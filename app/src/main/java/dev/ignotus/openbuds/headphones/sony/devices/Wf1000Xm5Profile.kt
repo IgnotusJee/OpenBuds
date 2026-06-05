@@ -20,6 +20,7 @@ object Wf1000Xm5Profile {
         HeadphoneFeature.AMBIENT_LEVEL,
         HeadphoneFeature.AMBIENT_VOICE_MODE,
         HeadphoneFeature.PLAYBACK_CONTROL,
+        HeadphoneFeature.VOLUME,
         HeadphoneFeature.EQ,
         HeadphoneFeature.CLEAR_BASS,
         HeadphoneFeature.LEA_STATUS,
