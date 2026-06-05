@@ -185,7 +185,10 @@ class MilinkBridgeService : Service() {
                 repository.setVolume(action.volume)
                 MilinkBridgeCommandDecision.accepted(requestId, action)
             }
-            is MilinkBridgeCommandAction.SetAudioEffect,
+            is MilinkBridgeCommandAction.SetAudioEffect -> {
+                repository.setAudioEffect(action.state != 0)
+                MilinkBridgeCommandDecision.accepted(requestId, action)
+            }
             MilinkBridgeCommandAction.StartRing,
             MilinkBridgeCommandAction.StopRing -> MilinkBridgeCommandDecision.rejected(
                 reason = MilinkBridgeContract.REASON_UNSUPPORTED_COMMAND,

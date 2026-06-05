@@ -110,6 +110,19 @@ object MiTwsControlMapper {
         }
     }
 
+    fun buildSetAudioEffectCommand(
+        enabled: Boolean,
+        snapshot: MilinkDeviceSnapshot,
+        requestId: String = newRequestId(),
+    ): Bundle? {
+        if (!snapshot.supportsAudioEffect) return null
+        return Bundle().apply {
+            putString(MilinkBridgeContract.KEY_COMMAND_TYPE, MilinkBridgeContract.COMMAND_SET_AUDIO_EFFECT)
+            putInt(MilinkBridgeContract.KEY_AUDIO_EFFECT_STATE, if (enabled) 1 else 0)
+            putString(MilinkBridgeContract.KEY_REQUEST_ID, requestId)
+        }
+    }
+
     fun parseResult(result: Bundle?): MiTwsBridgeCommandResult =
         if (result == null) {
             MiTwsBridgeCommandResult.failed(MilinkBridgeContract.REASON_BRIDGE_UNAVAILABLE)

@@ -21,6 +21,7 @@ object Wh1000Xm4Profile {
         HeadphoneFeature.AMBIENT_VOICE_MODE,
         HeadphoneFeature.PLAYBACK_CONTROL,
         HeadphoneFeature.VOLUME,
+        HeadphoneFeature.AUDIO_EFFECT,
         HeadphoneFeature.EQ,
         HeadphoneFeature.CLEAR_BASS,
     )

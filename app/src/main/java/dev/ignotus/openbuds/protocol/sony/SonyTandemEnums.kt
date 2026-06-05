@@ -152,3 +152,11 @@ enum class WearingDetectionResult(val code: Byte) {
     POOR(0x01),
     OUT_OF_RANGE(0xFF.toByte()),
 }
+
+enum class AudioInquiredType(val code: Byte) {
+    CONNECTION_MODE(0x00),
+    UPSCALING(0x01),
+    CONNECTION_MODE_WITH_LDAC_STATUS(0x02),
+    BGM_MODE(0x03),
+    UPMIX_CINEMA(0x04),
+}

@@ -25,6 +25,7 @@ object QcyResponseMapper {
         is ParsedHeadphoneResponse.Qcy.DeviceInfo -> applyDeviceInfo(state, response)
         is ParsedHeadphoneResponse.Qcy.Volume -> applyVolume(state, response)
         is ParsedHeadphoneResponse.Qcy.FunctionStatus -> applyFunctionStatus(state, response)
+        is ParsedHeadphoneResponse.Qcy.Generic -> state
     }
 
     fun applyBattery(

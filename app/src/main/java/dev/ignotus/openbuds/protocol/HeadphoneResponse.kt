@@ -15,6 +15,7 @@ import dev.ignotus.openbuds.protocol.sony.QuickAccessFunction
 import dev.ignotus.openbuds.protocol.sony.QuickAccessKey
 import dev.ignotus.openbuds.protocol.sony.WearingDetectionResult
 import dev.ignotus.openbuds.protocol.sony.WearingDetectionStatus
+import dev.ignotus.openbuds.protocol.sony.AudioInquiredType
 
 /**
  * Top-level sealed response type for all headphone brands.
@@ -122,6 +123,13 @@ sealed interface ParsedHeadphoneResponse {
             val type: PlayInquiredType?,
             val value: Int,
             val muted: Boolean = false,
+            val values: List<Int>,
+            override val raw: ByteArray,
+        ) : SonyTandem
+
+        data class AudioEffect(
+            val type: AudioInquiredType?,
+            val enabled: Boolean,
             val values: List<Int>,
             override val raw: ByteArray,
         ) : SonyTandem
@@ -235,6 +243,12 @@ sealed interface ParsedHeadphoneResponse {
         data class FunctionStatus(
             val inEarDetectionOn: Boolean,
             val transparencyOn: Boolean,
+            override val raw: ByteArray,
+        ) : Qcy
+
+        data class Generic(
+            val cmdId: Byte,
+            val values: List<Int>,
             override val raw: ByteArray,
         ) : Qcy
     }

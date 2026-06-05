@@ -151,6 +151,9 @@ object QcyProtocol {
     fun buildSingleValueCommand(cmdId: Byte, value: Byte): ByteArray =
         buildSimpleCommand(cmdId, byteArrayOf(value))
 
+    fun buildSpaceAudioToggle(enabled: Boolean): ByteArray =
+        buildSimpleCommand(CMDID_SPACE_AUDIO, byteArrayOf(1, if (enabled) 1 else 0))
+
     // ── Frame parser ─────────────────────────────────────────────
 
     /**

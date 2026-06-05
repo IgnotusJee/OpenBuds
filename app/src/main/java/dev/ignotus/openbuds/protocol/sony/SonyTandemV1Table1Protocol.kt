@@ -36,6 +36,11 @@ object SonyTandemV1Table1Protocol {
     private const val V1_PLAYBACK_DETAILED_VOLUME: Byte = 0x20
     private const val VALUE_ENABLE: Byte = 0x00
 
+    private const val AUDIO_GET_PARAM: Byte = 0xE6.toByte()
+    private const val AUDIO_RET_PARAM: Byte = 0xE7.toByte()
+    private const val AUDIO_SET_PARAM: Byte = 0xE8.toByte()
+    private const val AUDIO_NTFY_PARAM: Byte = 0xE9.toByte()
+
     // ── NC/ASM (V1 / shared) ──
     private const val NCASM_GET_PARAM: Byte = 0x66
     private const val NCASM_RET_PARAM: Byte = 0x67
@@ -173,6 +178,15 @@ object SonyTandemV1Table1Protocol {
             byteArrayOf(PLAYBACK_CONTROLLER, V1_PLAYBACK_DETAILED_VOLUME, volume.coerceIn(0, 255).toByte()),
         )
 
+    fun buildGetAudioEffect(): ByteArray =
+        SonyTandemFrame.message(AUDIO_GET_PARAM, byteArrayOf(AudioInquiredType.UPSCALING.code))
+
+    fun buildSetAudioEffect(enabled: Boolean): ByteArray =
+        SonyTandemFrame.message(
+            AUDIO_SET_PARAM,
+            byteArrayOf(AudioInquiredType.UPSCALING.code, 0x01, if (enabled) 1 else 0),
+        )
+
     // ── Parse ──
 
     fun parse(raw: ByteArray): ParsedHeadphoneResponse {
@@ -207,6 +221,7 @@ object SonyTandemV1Table1Protocol {
                 raw = raw,
             )
             PLAY_RET_PARAM, PLAY_NTFY_PARAM -> parsePlayParam(payload, raw)
+            AUDIO_RET_PARAM, AUDIO_NTFY_PARAM -> parseAudioParam(payload, raw)
             else -> unknown(command, payload, raw)
         }
     }
@@ -297,6 +312,22 @@ object SonyTandemV1Table1Protocol {
             )
         }
         return unknown(payload.getOrNull(0)?.let { PLAY_RET_PARAM }, payload, raw)
+    }
+
+    private fun parseAudioParam(payload: ByteArray, raw: ByteArray): ParsedHeadphoneResponse {
+        val inquiredType = payload.firstOrNull()?.let { code ->
+            AudioInquiredType.entries.firstOrNull { it.code == code }
+        }
+        return when (inquiredType) {
+            AudioInquiredType.UPSCALING -> {
+                val enabled = payload.getOrNull(2)?.let { it.toInt() != 0 } ?: false
+                ParsedHeadphoneResponse.SonyTandem.AudioEffect(
+                    type = inquiredType, enabled = enabled,
+                    values = payload.unsignedList(), raw = raw,
+                )
+            }
+            else -> ParsedHeadphoneResponse.SonyTandem.Unknown(null, AUDIO_RET_PARAM.unsigned, payload, raw)
+        }
     }
 
     private fun parseLengthPrefixedString(payload: ByteArray, offset: Int): String? {

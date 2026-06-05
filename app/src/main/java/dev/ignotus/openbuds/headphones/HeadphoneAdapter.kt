@@ -44,6 +44,21 @@ enum class HeadphoneFeature {
     QUICK_ACCESS,
     WEARING_STATUS,
     VOLUME,
+    AUDIO_EFFECT,
+    /**
+     * Ring/find earbud capability.
+     *
+     * FRAMEWORK STUB (2026-06-05): Neither Sony Tandem (v13.0.5) nor QCY protocol
+     * exposes a dedicated BLE command for ringing/finding earbuds. The Sony Alert
+     * family is for app-side dialog notifications; QCY CMDID_TONE_PLAY(61) is
+     * defined but never implemented. Both OEM "find earbuds" features are phone-side
+     * (GPS location + phone speaker alarm).
+     *
+     * This enum value + adapter interface stubs exist so the MiLink bridge layer
+     * can conditionally expose ring controls when/if protocol support is discovered.
+     * Currently no profile declares this feature; supportsRing remains false.
+     */
+    RING,
 }
 
 enum class HeadphoneTransport {
@@ -276,6 +291,16 @@ interface HeadphoneAdapter {
 
     fun buildSetVolumeCommands(profile: ConnectedHeadphoneProfile, volume: Int): List<HeadphoneCommand> = emptyList()
 
+    // FRAMEWORK STUBS — ring/find earbud protocol commands.
+    // No Sony Tandem or QCY protocol command exists for this. When protocol support is
+    // discovered, override these in the adapter implementations and wire into the MiLink
+    // bridge (MilinkBridgeService, MiTwsControlMapper, MilinkMiTwsFacadeEntry hooks).
+    fun buildRingStartCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> = emptyList()
+    fun buildRingStopCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> = emptyList()
+
+    fun buildRefreshAudioEffectCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> = emptyList()
+    fun buildSetAudioEffectCommands(profile: ConnectedHeadphoneProfile, enabled: Boolean): List<HeadphoneCommand> = emptyList()
+
     fun parse(profile: ConnectedHeadphoneProfile, message: IncomingHeadphoneMessage): ParsedHeadphoneResponse
 
     fun parse(profile: ConnectedHeadphoneProfile, raw: ByteArray): ParsedHeadphoneResponse =
@@ -351,6 +376,19 @@ object HeadphoneAdapterRegistry {
 
     fun buildSetVolumeCommands(profile: ConnectedHeadphoneProfile, volume: Int): List<HeadphoneCommand> =
         adapterFor(profile).buildSetVolumeCommands(profile, volume)
+
+    // FRAMEWORK STUBS — ring/find earbud (see HeadphoneFeature.RING docs)
+    fun buildRingStartCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> =
+        adapterFor(profile).buildRingStartCommands(profile)
+
+    fun buildRingStopCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> =
+        adapterFor(profile).buildRingStopCommands(profile)
+
+    fun buildRefreshAudioEffectCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> =
+        adapterFor(profile).buildRefreshAudioEffectCommands(profile)
+
+    fun buildSetAudioEffectCommands(profile: ConnectedHeadphoneProfile, enabled: Boolean): List<HeadphoneCommand> =
+        adapterFor(profile).buildSetAudioEffectCommands(profile, enabled)
 
     fun parse(profile: ConnectedHeadphoneProfile, message: IncomingHeadphoneMessage): ParsedHeadphoneResponse =
         adapterFor(profile).parse(profile, message)

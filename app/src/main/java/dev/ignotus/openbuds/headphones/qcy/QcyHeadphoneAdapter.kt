@@ -124,6 +124,9 @@ object QcyHeadphoneAdapter : HeadphoneAdapter {
             if (profile.supports(HeadphoneFeature.VOLUME)) {
                 addAll(buildRefreshVolumeCommands(profile))
             }
+            if (profile.supports(HeadphoneFeature.AUDIO_EFFECT)) {
+                addAll(buildRefreshAudioEffectCommands(profile))
+            }
         }
 
     override fun buildRefreshBatteryCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> =
@@ -275,6 +278,12 @@ object QcyHeadphoneAdapter : HeadphoneAdapter {
             )
         )
     }
+
+    override fun buildRefreshAudioEffectCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> =
+        listOf(writeCommand("QCY GET space audio", QcyProtocol.buildSimpleCommand(QcyProtocol.CMDID_SPACE_AUDIO, byteArrayOf(1, 0xFF.toByte()))))
+
+    override fun buildSetAudioEffectCommands(profile: ConnectedHeadphoneProfile, enabled: Boolean): List<HeadphoneCommand> =
+        listOf(writeCommand("QCY SET space audio $enabled", QcyProtocol.buildSpaceAudioToggle(enabled)))
 
     // ── Response parsing ─────────────────────────────────────────
 
@@ -438,6 +447,11 @@ object QcyHeadphoneAdapter : HeadphoneAdapter {
                     raw = entry.data,
                 )
             }
+            QcyProtocol.CMDID_SPACE_AUDIO -> ParsedHeadphoneResponse.Qcy.Generic(
+                cmdId = entry.cmdId,
+                values = entry.data.map { it.unsigned },
+                raw = entry.data,
+            )
             QcyProtocol.CMDID_MUSIC_ACTION -> null // ack, ignore
             else -> null // unknown CMD; quietly drop
         }

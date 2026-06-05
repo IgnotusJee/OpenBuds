@@ -64,6 +64,8 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
     private const val PLAY_NTFY_STATUS: Byte = 0xA5.toByte()
     private const val PLAY_RET_PARAM: Byte = 0xA7.toByte()
     private const val PLAY_NTFY_PARAM: Byte = 0xA9.toByte()
+    private const val AUDIO_RET_PARAM: Byte = 0xE7.toByte()
+    private const val AUDIO_NTFY_PARAM: Byte = 0xE9.toByte()
     override val id: String = "sony-tandem"
     override val brand: String = "Sony"
     override val protocolName: String = "Sony Tandem"
@@ -154,6 +156,9 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
             if (profile.supports(HeadphoneFeature.VOLUME)) {
                 addAll(buildRefreshVolumeCommands(profile))
             }
+            if (profile.supports(HeadphoneFeature.AUDIO_EFFECT)) {
+                addAll(buildRefreshAudioEffectCommands(profile))
+            }
             if (profile.supports(HeadphoneFeature.LEA_STATUS)) {
                 addAll(buildRefreshLeaCommands(profile))
             }
@@ -178,7 +183,8 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
             HeadphoneFeature.EQ,
             HeadphoneFeature.CLEAR_BASS,
             HeadphoneFeature.PLAYBACK_CONTROL,
-            HeadphoneFeature.VOLUME ->
+            HeadphoneFeature.VOLUME,
+            HeadphoneFeature.AUDIO_EFFECT ->
                 profile.supports(feature) && profile.protocolEvidence.any { it.startsWith("static-profile:") }
             else -> profile.supports(feature)
         }
@@ -418,6 +424,18 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
             ?.let { listOf(command(profile, HeadphoneFeature.VOLUME, "SET music volume $volume", it)) }
             .orEmpty()
 
+    override fun buildRefreshAudioEffectCommands(profile: ConnectedHeadphoneProfile): List<HeadphoneCommand> =
+        codecFor(profile, HeadphoneFeature.AUDIO_EFFECT)
+            .buildGetAudioEffect()
+            ?.let { listOf(command(profile, HeadphoneFeature.AUDIO_EFFECT, "GET audio effect", it)) }
+            .orEmpty()
+
+    override fun buildSetAudioEffectCommands(profile: ConnectedHeadphoneProfile, enabled: Boolean): List<HeadphoneCommand> =
+        codecFor(profile, HeadphoneFeature.AUDIO_EFFECT)
+            .buildSetAudioEffect(enabled)
+            ?.let { listOf(command(profile, HeadphoneFeature.AUDIO_EFFECT, "SET audio effect $enabled", it)) }
+            .orEmpty()
+
     override fun parse(
         profile: ConnectedHeadphoneProfile,
         message: IncomingHeadphoneMessage,
@@ -550,6 +568,7 @@ object SonyTandemHeadphoneAdapter : HeadphoneAdapter {
         NCASM_NTFY_PARAM -> HeadphoneFeature.NOISE_CONTROL
         PLAY_RET_STATUS, PLAY_NTFY_STATUS -> HeadphoneFeature.PLAYBACK_CONTROL
         PLAY_RET_PARAM, PLAY_NTFY_PARAM -> classifyPlayParam(payload)
+        AUDIO_RET_PARAM, AUDIO_NTFY_PARAM -> HeadphoneFeature.AUDIO_EFFECT
         else -> HeadphoneFeature.DEVICE_INFO
     }
 

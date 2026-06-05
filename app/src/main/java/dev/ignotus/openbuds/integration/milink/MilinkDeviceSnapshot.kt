@@ -155,15 +155,14 @@ object MilinkBridgeSnapshotMapper {
             },
             ringing = false,
             currentVolume = state.volumeState.musicVolume,
-            currentAudioEffectState = null,
+            currentAudioEffectState = if (state.audioEffectState.enabled) 1 else 0,
             supportsBattery = profile.supports(HeadphoneFeature.BATTERY),
             supportsNoiseControl = profile.supports(HeadphoneFeature.NOISE_CONTROL),
             supportsWearing = profile.supports(HeadphoneFeature.WEARING_STATUS),
             // OpenBuds does not yet expose a true find-earbud command/state to MiLink.
             supportsRing = false,
             supportsVolumeControl = profile.supports(HeadphoneFeature.VOLUME),
-            // Keep hidden until repository/adapter exposes a first-party audio effect model.
-            supportsAudioEffect = false,
+            supportsAudioEffect = profile.supports(HeadphoneFeature.AUDIO_EFFECT),
             revision = revision,
             updatedAt = updatedAt,
         )

@@ -44,6 +44,7 @@ class MilinkMiTwsFacadeEntry(
         }
         MilinkMiTwsFacadeHook(classLoader, BridgeClientHolder).installTraceHooks()
         installVolumeControlHook()
+        installAudioEffectControlHook()
     }
 
     private fun installVolumeControlHook() {
@@ -91,6 +92,53 @@ class MilinkMiTwsFacadeEntry(
                 }
             })
         Log.i(TAG, "hooked M3+ volume control: ProfileImpl.updateHeadsetVolume")
+    }
+
+    private fun installAudioEffectControlHook() {
+        val profileImpl = runCatching {
+            classLoader.loadClass(PROFILE_IMPL)
+        }.getOrNull() ?: run {
+            Log.w(TAG, "M3+ audio effect control: $PROFILE_IMPL not found")
+            return
+        }
+        val method = runCatching {
+            profileImpl.getDeclaredMethod(
+                "updateHeadsetAudioEffect",
+                String::class.java,
+                String::class.java,
+                String::class.java,
+                Int::class.javaPrimitiveType ?: Int::class.java,
+            )
+        }.getOrNull() ?: run {
+            Log.w(TAG, "M3+ audio effect control: ProfileImpl.updateHeadsetAudioEffect not found")
+            return
+        }
+        ModuleMain.instance.hook(method)
+            .setExceptionMode(XposedInterface.ExceptionMode.PROTECTIVE)
+            .intercept(object : XposedInterface.Hooker {
+                override fun intercept(chain: XposedInterface.Chain): Any? {
+                    val address = chain.args.getOrNull(1) as? String ?: ""
+                    val effectValue = (chain.args.getOrNull(3) as? Int) ?: -1
+                    val mac = address.normalizeMac() ?: ""
+                    val snapshot = BridgeClientHolder.snapshotFor(mac)
+                    if (snapshot == null || !snapshot.supportsAudioEffect) {
+                        return 201 // PROFILE_FAILURE_RESULT
+                    }
+                    val command = Bundle().apply {
+                        putString(MilinkBridgeContract.KEY_COMMAND_TYPE, MilinkBridgeContract.COMMAND_SET_AUDIO_EFFECT)
+                        putInt(MilinkBridgeContract.KEY_AUDIO_EFFECT_STATE, effectValue)
+                        putString(MilinkBridgeContract.KEY_REQUEST_ID, java.util.UUID.randomUUID().toString())
+                    }
+                    val result = BridgeClientHolder.executeCommand(mac, command, 50L)
+                    Log.i(
+                        TAG,
+                        "[MiLinkMiTWS] updateHeadsetAudioEffect mac=$mac value=$effectValue " +
+                            "accepted=${result.accepted} reason=${result.reason}"
+                    )
+                    return if (result.accepted) 1 else 201
+                }
+            })
+        Log.i(TAG, "hooked M3+ audio effect control: ProfileImpl.updateHeadsetAudioEffect")
     }
 
     private fun currentProcessName(): String = runCatching {

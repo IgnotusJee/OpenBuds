@@ -135,6 +135,11 @@ data class VolumeState(
     val raw: List<Int> = emptyList(),
 )
 
+data class AudioEffectState(
+    val enabled: Boolean = false,
+    val values: List<Int> = emptyList(),
+)
+
 data class EndpointDiagnosticState(
     val reason: String,
     val serviceLabels: List<String> = emptyList(),
@@ -177,6 +182,7 @@ data class HeadphoneUiState(
     val quickAccessState: QuickAccessState = QuickAccessState(),
     val wearingState: WearingState = WearingState(),
     val volumeState: VolumeState = VolumeState(),
+    val audioEffectState: AudioEffectState = AudioEffectState(),
     val playbackStatus: PlaybackStatus = PlaybackStatus.UNKNOWN,
     val endpointDiagnostic: EndpointDiagnosticState? = null,
     val table2Diagnostic: Table2DiagnosticState? = null,
@@ -362,6 +368,25 @@ class HeadphoneRepository private constructor(context: Context) : HeadphoneTrans
             return
         }
         _state.update { it.copy(volumeState = it.volumeState.copy(musicVolume = clamped)) }
+        commands.forEach(::sendCommand)
+    }
+
+    fun setAudioEffect(enabled: Boolean) {
+        if (!_state.value.deviceInfo.protocolReady) {
+            appendLog("Audio effect change ignored: protocol not ready")
+            return
+        }
+        if (!canWrite(HeadphoneFeature.AUDIO_EFFECT)) {
+            appendLog("Audio effect write is disabled for current profile")
+            return
+        }
+        val profile = ensureConnectedProfile()
+        val commands = HeadphoneAdapterRegistry.buildSetAudioEffectCommands(profile, enabled)
+        if (commands.isEmpty()) {
+            appendLog("Audio effect write not supported for adapter ${profile.adapterId}")
+            return
+        }
+        _state.update { it.copy(audioEffectState = it.audioEffectState.copy(enabled = enabled)) }
         commands.forEach(::sendCommand)
     }
 
@@ -658,6 +683,7 @@ class HeadphoneRepository private constructor(context: Context) : HeadphoneTrans
                 },
                 noiseControlState = if (connected) it.noiseControlState else NoiseControlState(),
                 volumeState = if (connected) it.volumeState else VolumeState(),
+                audioEffectState = if (connected) it.audioEffectState else AudioEffectState(),
                 eqState = if (connected) it.eqState else EqState(),
                 eqUiCapability = if (connected) profile?.eqUiCapability else null,
                 playbackStatus = if (connected) it.playbackStatus else PlaybackStatus.UNKNOWN,
@@ -711,6 +737,7 @@ class HeadphoneRepository private constructor(context: Context) : HeadphoneTrans
             is ParsedHeadphoneResponse.SonyTandem.QuickAccess -> applyQuickAccess(parsed)
             is ParsedHeadphoneResponse.SonyTandem.WearingStatus -> applyWearingStatus(parsed)
             is ParsedHeadphoneResponse.SonyTandem.Volume -> applySonyVolume(parsed)
+            is ParsedHeadphoneResponse.SonyTandem.AudioEffect -> applySonyAudioEffect(parsed)
             is ParsedHeadphoneResponse.SonyTandem.Unknown -> applyKnownOrUnknown(parsed)
             is ParsedHeadphoneResponse.SonyTandem.Table2Common -> applyTable2Diagnostic(sourceKey, parsed)
             is ParsedHeadphoneResponse.SonyTandem.Table2Generic -> applyTable2Diagnostic(sourceKey, parsed)
@@ -722,6 +749,12 @@ class HeadphoneRepository private constructor(context: Context) : HeadphoneTrans
             is ParsedHeadphoneResponse.Qcy.FunctionStatus -> {
                 appendLog("QCY ${parsed::class.simpleName}: ${parsed.raw.hexString()}")
                 _state.update { dev.ignotus.openbuds.data.qcy.QcyResponseMapper.apply(it, parsed) }
+            }
+            is ParsedHeadphoneResponse.Qcy.Generic -> {
+                appendLog("QCY ${parsed::class.simpleName}: ${parsed.raw.hexString()}")
+                when (parsed.cmdId) {
+                    QcyProtocol.CMDID_SPACE_AUDIO -> applyQcySpaceAudio(parsed)
+                }
             }
             is ParsedHeadphoneResponse.Batch -> parsed.items.forEach { dispatchParsed(sourceKey, it) }
         }
@@ -1093,6 +1126,16 @@ class HeadphoneRepository private constructor(context: Context) : HeadphoneTrans
         }
     }
 
+    private fun applySonyAudioEffect(response: ParsedHeadphoneResponse.SonyTandem.AudioEffect) {
+        appendLog("Audio effect type=${response.type} enabled=${response.enabled} values=${response.values}")
+        _state.update { it.copy(audioEffectState = AudioEffectState(enabled = response.enabled, values = response.values)) }
+    }
+
+    private fun applyQcySpaceAudio(response: ParsedHeadphoneResponse.Qcy.Generic) {
+        val enabled = response.values.getOrNull(1)?.let { it == 1 } ?: return
+        _state.update { it.copy(audioEffectState = AudioEffectState(enabled = enabled, values = response.values)) }
+    }
+
     private fun applyTable2Diagnostic(sourceKey: String, response: ParsedHeadphoneResponse) {
         appendLog("Table2 ${response::class.simpleName} source=$sourceKey raw=${response.raw.hexString()}")
         val diagnostic = table2DiagnosticStateFor(sourceKey, response) ?: return
@@ -1417,6 +1460,7 @@ fun featureStatusesFor(profile: ConnectedHeadphoneProfile?): List<FeatureStatus>
     FeatureStatus("Ambient Level", "ASM seamless level when confirmed writable", profile.supports(HeadphoneFeature.AMBIENT_LEVEL)),
     FeatureStatus("Playback Control", "Play, pause, previous, next", profile.supports(HeadphoneFeature.PLAYBACK_CONTROL)),
     FeatureStatus("Volume Control", "Music/call volume get/set via Tandem or QCY protocol", profile.supports(HeadphoneFeature.VOLUME)),
+    FeatureStatus("Audio Effect", "Spatial audio / DSEE upscaling on/off", profile.supports(HeadphoneFeature.AUDIO_EFFECT)),
     FeatureStatus("EQ / Clear Bass", "Preset EQ, custom EQ, and Clear Bass", profile.supports(HeadphoneFeature.EQ)),
     FeatureStatus("LE Audio", "Connection type, streaming status, paired history", profile.supports(HeadphoneFeature.LEA_STATUS)),
     FeatureStatus("Quick Access", "Customizable button actions L/R and NC/AMB keys", profile.supports(HeadphoneFeature.QUICK_ACCESS)),

@@ -58,6 +58,8 @@ interface TandemCodec {
     ): ByteArray? = null
     fun buildGetMusicVolume(): ByteArray? = null
     fun buildSetMusicVolume(volume: Int): ByteArray? = null
+    fun buildGetAudioEffect(): ByteArray? = null
+    fun buildSetAudioEffect(enabled: Boolean): ByteArray? = null
     fun buildGetLeaStatus(type: LeaInquiredType): ByteArray? = null
     fun buildGetLeaPairedHistory(type: LeaInquiredType): ByteArray? = null
     fun buildGetQuickAccess(): ByteArray? = null
@@ -167,6 +169,12 @@ object SonyTandemV1Table1Codec : TandemCodec {
 
     override fun buildSetMusicVolume(volume: Int): ByteArray =
         SonyTandemV1Table1Protocol.buildSetMusicVolume(volume)
+
+    override fun buildGetAudioEffect(): ByteArray =
+        SonyTandemV1Table1Protocol.buildGetAudioEffect()
+
+    override fun buildSetAudioEffect(enabled: Boolean): ByteArray =
+        SonyTandemV1Table1Protocol.buildSetAudioEffect(enabled)
 
     override fun parse(raw: ByteArray): ParsedHeadphoneResponse =
         SonyTandemV1Table1Protocol.parse(raw)
@@ -282,6 +290,12 @@ object SonyTandemV2Table1Codec : TandemCodec {
 
     override fun buildSetMusicVolume(volume: Int): ByteArray =
         SonyTandemV2Table1Protocol.buildSetMusicVolume(volume)
+
+    override fun buildGetAudioEffect(): ByteArray =
+        SonyTandemV2Table1Protocol.buildGetAudioEffect()
+
+    override fun buildSetAudioEffect(enabled: Boolean): ByteArray =
+        SonyTandemV2Table1Protocol.buildSetAudioEffect(enabled)
 
     override fun buildGetLeaStatus(type: LeaInquiredType): ByteArray =
         SonyTandemV2Table1Protocol.buildGetLeaStatus(type)

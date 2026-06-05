@@ -26,6 +26,7 @@ object QcyC30SProfile {
         HeadphoneFeature.EQ,
         HeadphoneFeature.PLAYBACK_CONTROL,
         HeadphoneFeature.VOLUME,
+        HeadphoneFeature.AUDIO_EFFECT,
     )
 
     val template = ProfileTemplate(

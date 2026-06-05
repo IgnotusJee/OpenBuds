@@ -55,6 +55,10 @@ object SonyTandemV2Table1Protocol {
     private const val PLAY_RET_PARAM: Byte = 0xA7.toByte()
     private const val PLAY_SET_PARAM: Byte = 0xA8.toByte()
     private const val PLAY_NTFY_PARAM: Byte = 0xA9.toByte()
+    private const val AUDIO_GET_PARAM: Byte = 0xE6.toByte()
+    private const val AUDIO_RET_PARAM: Byte = 0xE7.toByte()
+    private const val AUDIO_SET_PARAM: Byte = 0xE8.toByte()
+    private const val AUDIO_NTFY_PARAM: Byte = 0xE9.toByte()
     private const val VALUE_ENABLE: Byte = 0x00
     private const val VALUE_CHANGED: Byte = 0x01
     private const val NCASM_EFFECT_OFF: Byte = 0x00
@@ -189,6 +193,15 @@ object SonyTandemV2Table1Protocol {
             byteArrayOf(PlayInquiredType.MUSIC_VOLUME.code, volume.coerceIn(0, 255).toByte()),
         )
 
+    fun buildGetAudioEffect(): ByteArray =
+        SonyTandemFrame.message(AUDIO_GET_PARAM, byteArrayOf(AudioInquiredType.UPSCALING.code))
+
+    fun buildSetAudioEffect(enabled: Boolean): ByteArray =
+        SonyTandemFrame.message(
+            AUDIO_SET_PARAM,
+            byteArrayOf(AudioInquiredType.UPSCALING.code, VALUE_CHANGED, if (enabled) 1 else 0),
+        )
+
     fun buildGetLeaStatus(type: LeaInquiredType): ByteArray =
         SonyTandemFrame.message(LEA_GET_STATUS, byteArrayOf(type.code))
 
@@ -286,6 +299,7 @@ object SonyTandemV2Table1Protocol {
                 raw = raw,
             )
             PLAY_RET_PARAM, PLAY_NTFY_PARAM -> parsePlayParam(payload, raw, command == PLAY_NTFY_PARAM)
+            AUDIO_RET_PARAM, AUDIO_NTFY_PARAM -> parseAudioParam(payload, raw)
             LEA_RET_STATUS, LEA_NTFY_STATUS -> parseLeaStatus(payload, raw)
             LEA_RET_PARAM, LEA_NTFY_PARAM -> parseLeaParam(payload, raw)
             SYSTEM_RET_PARAM -> parseSystemRetParam(payload, raw)
@@ -564,6 +578,24 @@ object SonyTandemV2Table1Protocol {
                 )
             }
             else -> ParsedHeadphoneResponse.SonyTandem.Unknown(null, PLAY_RET_PARAM.unsigned, payload, raw)
+        }
+    }
+
+    private fun parseAudioParam(payload: ByteArray, raw: ByteArray): ParsedHeadphoneResponse {
+        val inquiredType = payload.firstOrNull()?.let { code ->
+            AudioInquiredType.entries.firstOrNull { it.code == code }
+        }
+        return when (inquiredType) {
+            AudioInquiredType.UPSCALING -> {
+                val enabled = payload.getOrNull(2)?.let { it.toInt() != 0 } ?: false
+                ParsedHeadphoneResponse.SonyTandem.AudioEffect(
+                    type = inquiredType,
+                    enabled = enabled,
+                    values = payload.unsignedList(),
+                    raw = raw,
+                )
+            }
+            else -> ParsedHeadphoneResponse.SonyTandem.Unknown(null, AUDIO_RET_PARAM.unsigned, payload, raw)
         }
     }
 
